@@ -1,1 +1,3 @@
+mod scanner;
 
+struct Lexer {}
