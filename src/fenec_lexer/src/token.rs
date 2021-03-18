@@ -24,7 +24,7 @@ impl Pos {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
     pub literal: String,
@@ -58,6 +58,24 @@ impl Token {
 pub enum TokenKind {
     Unknown,
     Eof,
-    Whitespace,
+    Space,
     Newline,
+    Semi,
+    Comma,
+    OpenParen,
+    CloseParen,
+    OpenBrace,
+    CloseBrace,
+    Colon,
+    Eq,
+    Not,
+    Lt,
+    Gt,
+    Minus,
+    And,
+    Or,
+    Plus,
+    Star,
+    Caret,
+    Percent,
 }
