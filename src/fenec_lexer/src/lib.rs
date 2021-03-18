@@ -1,3 +1,3 @@
+mod lexer;
 mod scanner;
-
-struct Lexer {}
+mod token;

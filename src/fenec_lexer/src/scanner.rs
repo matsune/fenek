@@ -1,16 +1,16 @@
 use std::str::Chars;
 
-const EOF: char = '\0';
+pub const EOF: char = '\0';
 
 #[derive(Debug)]
-struct Scanner<'a> {
+pub struct Scanner<'a> {
     source: &'a mut Chars<'a>,
     peek: char,
     utf8_offset: usize,
 }
 
 impl<'a> Scanner<'a> {
-    fn new(source: &'a mut Chars<'a>) -> Self {
+    pub fn new(source: &'a mut Chars<'a>) -> Self {
         let peek = source.next().unwrap_or(EOF);
         Scanner {
             source,
@@ -19,22 +19,22 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn peek(&mut self) -> char {
+    pub fn peek(&mut self) -> char {
         self.peek
     }
 
-    fn bump(&mut self) -> char {
+    pub fn bump(&mut self) -> char {
         let p = self.peek;
         self.utf8_offset += p.len_utf8();
         self.peek = self.source.next().unwrap_or(EOF);
         p
     }
 
-    fn is_eof(&self) -> bool {
+    pub fn is_eof(&self) -> bool {
         self.peek == EOF
     }
 
-    fn utf8_offset(&self) -> usize {
+    pub fn utf8_offset(&self) -> usize {
         self.utf8_offset
     }
 }
