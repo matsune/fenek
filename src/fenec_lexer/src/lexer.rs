@@ -1,6 +1,23 @@
 use super::scanner::{Scanner, EOF};
 use super::token::{Literal, Pos, Token, TokenKind};
 use std::str::Chars;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+enum LiteralError {
+    #[error("unterminated char literal: `{0}`")]
+    UnterminatedChar(String),
+    #[error("unterminated string literal: `{0}`")]
+    UnterminatedString(String),
+    #[error("unknown character escape: `\\{0}`")]
+    UnknownCharEscape(char),
+}
+
+#[derive(Error, Debug)]
+enum LexerError {
+    #[error(transparent)]
+    LiteralError(#[from] LiteralError),
+}
 
 /// '\n' | '\r'
 fn is_newline(c: char) -> bool {
@@ -31,9 +48,9 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn scan(&mut self) -> Token {
+    fn scan(&mut self) -> Result<Token, LexerError> {
         let c = self.scanner.bump();
-        match c {
+        let tok = match c {
             EOF => Token::new(TokenKind::Eof, EOF.into()),
             c if is_whitespace(c) => self.scan_while(TokenKind::Spaces, c.into(), is_whitespace),
             c if is_newline(c) => self.scan_while(TokenKind::Newlines, c.into(), is_newline),
@@ -62,10 +79,11 @@ impl<'a> Lexer<'a> {
             c if is_dec_digit(c) => {
                 self.scan_while(TokenKind::Literal(Literal::Number), c.into(), is_dec_digit)
             }
-            '"' => self.scan_string(),
-            '\'' => self.scan_char(),
+            '"' => self.scan_string()?,
+            '\'' => self.scan_char()?,
             _ => Token::new(TokenKind::Unknown, c.into()),
-        }
+        };
+        Result::Ok(tok)
     }
 
     fn scan_while<F>(&mut self, kind: TokenKind, mut literal: String, predicate: F) -> Token
@@ -78,13 +96,15 @@ impl<'a> Lexer<'a> {
         Token::new(kind, literal)
     }
 
-    fn scan_string(&mut self) -> Token {
+    fn scan_string(&mut self) -> Result<Token, LiteralError> {
         let mut literal = "\"".to_string();
+        let mut terminated = false;
         loop {
             let c = self.scanner.bump();
             match c {
                 '"' => {
                     literal.push(c);
+                    terminated = true;
                     break;
                 }
                 // '\' [ '\"' | common_escape ]
@@ -100,7 +120,7 @@ impl<'a> Lexer<'a> {
                         't' => '\t',
                         '0' => '\0',
                         'x' => unimplemented!("hex_digit"),
-                        c => unreachable!("error: {}", c),
+                        c => return Result::Err(LiteralError::UnknownCharEscape(c)),
                     };
                     literal.push(escaped_c);
                 }
@@ -108,16 +128,22 @@ impl<'a> Lexer<'a> {
                 _ => literal.push(c),
             }
         }
-        Token::new(TokenKind::Literal(Literal::String), literal)
+        if terminated {
+            Result::Ok(Token::new(TokenKind::Literal(Literal::String), literal))
+        } else {
+            Result::Err(LiteralError::UnterminatedString(literal))
+        }
     }
 
-    fn scan_char(&mut self) -> Token {
+    fn scan_char(&mut self) -> Result<Token, LiteralError> {
         let mut literal = "'".to_string();
+        let mut terminated = false;
         loop {
             let c = self.scanner.bump();
             match c {
                 '\'' => {
                     literal.push(c);
+                    terminated = true;
                     break;
                 }
                 // '\' [ '\'' | common_escape ]
@@ -133,7 +159,7 @@ impl<'a> Lexer<'a> {
                         't' => '\t',
                         '0' => '\0',
                         'x' => unimplemented!("hex_digit"),
-                        c => unreachable!("error: {}", c),
+                        c => return Result::Err(LiteralError::UnknownCharEscape(c)),
                     };
                     literal.push(escaped_c);
                 }
@@ -141,7 +167,11 @@ impl<'a> Lexer<'a> {
                 _ => literal.push(c),
             }
         }
-        Token::new(TokenKind::Literal(Literal::Char), literal)
+        if terminated {
+            Result::Ok(Token::new(TokenKind::Literal(Literal::Char), literal))
+        } else {
+            Result::Err(LiteralError::UnterminatedChar(literal))
+        }
     }
 }
 
@@ -149,13 +179,13 @@ impl<'a> Lexer<'a> {
 fn test_lexer() {
     macro_rules! test_token {
         ($s:expr, $kind:expr) => {
-            let tok = Lexer::new(&mut $s.chars()).scan();
+            let tok = Lexer::new(&mut $s.chars()).scan().unwrap();
             assert_eq!(tok, Token::new($kind, $s.into()));
         };
     }
     macro_rules! test_token_literal {
         ($s:expr, $kind:expr, $lit:expr) => {
-            let tok = Lexer::new(&mut $s.chars()).scan();
+            let tok = Lexer::new(&mut $s.chars()).scan().unwrap();
             assert_eq!(tok, Token::new($kind, $lit.into()));
         };
     }
@@ -168,11 +198,6 @@ fn test_lexer() {
         r#""terminated string literal""#,
         TokenKind::Literal(Literal::String),
         "\"terminated string literal\""
-    );
-    test_token_literal!(
-        r#""unterminated string literal"#,
-        TokenKind::Literal(Literal::String),
-        "\"unterminated string literal"
     );
     test_token_literal!(
         r#""string \"escaped\" literal""#,
@@ -205,4 +230,24 @@ fn test_lexer() {
     test_token!("*", TokenKind::Star);
     test_token!("^", TokenKind::Caret);
     test_token!("%", TokenKind::Percent);
+}
+
+#[test]
+fn test_lexer_error() {
+    macro_rules! test_literal_error {
+        ($s:expr, $error:expr) => {
+            let err = Lexer::new(&mut $s.chars()).scan().unwrap_err();
+            assert_eq!(err.to_string(), $error);
+        };
+    }
+
+    test_literal_error!(
+        r#""unterminated string"#,
+        "unterminated string literal: `\"unterminated string`"
+    );
+    test_literal_error!(
+        r#"'unterminated char"#,
+        "unterminated char literal: `'unterminated char`"
+    );
+    test_literal_error!(r#""\m"#, "unknown character escape: `\\m`");
 }
