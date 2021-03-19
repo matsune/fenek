@@ -11,6 +11,8 @@ pub enum LiteralError {
     UnterminatedString(String),
     #[error("unknown character escape: `\\{0}`")]
     UnknownCharEscape(char),
+    #[error("invalid binary literal")]
+    InvalidBinaryLiteral,
 }
 
 #[derive(Error, Debug)]
@@ -30,7 +32,7 @@ fn is_whitespace(c: char) -> bool {
 }
 
 /// '0' ~ '9'
-fn is_dec_digit(c: char) -> bool {
+fn is_num(c: char) -> bool {
     match c {
         '0'..='9' => true,
         _ => false,
@@ -45,7 +47,11 @@ fn is_alphabet(c: char) -> bool {
 }
 
 fn is_alphanumeric(c: char) -> bool {
-    is_alphabet(c) || is_dec_digit(c)
+    is_alphabet(c) || is_num(c)
+}
+
+fn is_binary_digit(c: char) -> bool {
+    c == '0' || c == '1'
 }
 
 pub struct Lexer<'a> {
@@ -60,12 +66,12 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn scan(&mut self) -> Result<Token, LexerError> {
-        let c = self.scanner.bump();
+        let c = self.bump();
         let tok = match c {
             EOF => Token::new(TokenKind::Eof, EOF.into()),
             c if is_whitespace(c) => self.scan_while(TokenKind::Spaces, c.into(), is_whitespace),
             c if is_newline(c) => self.scan_while(TokenKind::Newlines, c.into(), is_newline),
-            '/' => match self.scanner.peek() {
+            '/' => match self.peek() {
                 '/' => self.scan_while(TokenKind::LineComment, c.into(), |c| !is_newline(c)),
                 _ => Token::new(TokenKind::Slash, c.into()),
             },
@@ -87,9 +93,7 @@ impl<'a> Lexer<'a> {
             '*' => Token::new(TokenKind::Star, c.into()),
             '^' => Token::new(TokenKind::Caret, c.into()),
             '%' => Token::new(TokenKind::Percent, c.into()),
-            c if is_dec_digit(c) => {
-                self.scan_while(TokenKind::Literal(Literal::Number), c.into(), is_dec_digit)
-            }
+            c if is_num(c) => self.scan_number(c)?,
             '"' => self.scan_string()?,
             // '\'' => self.scan_char()?,
             c if is_alphabet(c) || c == '_' => {
@@ -112,17 +116,80 @@ impl<'a> Lexer<'a> {
     where
         F: Fn(char) -> bool,
     {
-        while self.scanner.peek() != EOF && predicate(self.scanner.peek()) {
-            literal.push(self.scanner.bump());
+        while self.peek() != EOF && predicate(self.peek()) {
+            literal.push(self.bump());
         }
         Token::new(kind, literal)
+    }
+
+    fn scan_number(&mut self, first: char) -> Result<Token, LiteralError> {
+        let mut literal = String::from(first);
+        if first == '0' {
+            match self.peek() {
+                'b' | 'B' => {
+                    literal.push(self.bump());
+                    return self.scan_binary_lit(literal);
+                }
+                'o' | 'O' => {
+                    literal.push(self.bump());
+                    return self.scan_octal_lit(literal);
+                }
+                'x' | 'X' => {
+                    literal.push(self.bump());
+                    return self.scan_hex_lit(literal);
+                }
+                _ => {}
+            }
+        }
+        while is_num(self.peek()) || self.peek() == '_' {
+            literal.push(self.bump());
+        }
+        // if self.peek() == EOF {
+        //     return Result::Ok(Token::new(TokenKind::Literal(Literal::Int), literal));
+        // }
+        unimplemented!();
+    }
+
+    fn peek(&mut self) -> char {
+        self.scanner.peek()
+    }
+    fn bump(&mut self) -> char {
+        self.scanner.bump()
+    }
+
+    // binary_lit       ::= "0" ("b" | "B") { "_" } binary_digits
+    // binary_digits    ::= binary_digit { { "_" } binary_digit }
+    // binary_digit     ::= "0" | "1"
+    fn scan_binary_lit(&mut self, mut literal: String) -> Result<Token, LiteralError> {
+        while self.peek() == '_' {
+            literal.push(self.bump());
+        }
+        // binary_digits
+        if !is_binary_digit(self.peek()) {
+            return Err(LiteralError::InvalidBinaryLiteral);
+        }
+        literal.push(self.bump());
+        while self.peek() == '_' || is_num(self.peek()) {
+            if self.peek() == '_' || is_binary_digit(self.peek()) {
+                literal.push(self.bump());
+            } else {
+                return Err(LiteralError::InvalidBinaryLiteral);
+            }
+        }
+        Ok(Token::new(TokenKind::Literal(Literal::Int), literal))
+    }
+    fn scan_octal_lit(&mut self, mut literal: String) -> Result<Token, LiteralError> {
+        unimplemented!();
+    }
+    fn scan_hex_lit(&mut self, mut literal: String) -> Result<Token, LiteralError> {
+        unimplemented!();
     }
 
     fn scan_string(&mut self) -> Result<Token, LiteralError> {
         let mut literal = "\"".to_string();
         let mut terminated = false;
         loop {
-            let c = self.scanner.bump();
+            let c = self.bump();
             match c {
                 '"' => {
                     literal.push(c);
@@ -134,7 +201,7 @@ impl<'a> Lexer<'a> {
                     // common_escape : '\'
                     //               | 'n' | 'r' | 't' | '0'
                     //               | 'x' hex_digit 2
-                    let escaped_c = match self.scanner.bump() {
+                    let escaped_c = match self.bump() {
                         '"' => '"',
                         '\\' => '\\',
                         'n' => '\n',
@@ -161,7 +228,7 @@ impl<'a> Lexer<'a> {
     //     let mut literal = "'".to_string();
     //     let mut terminated = false;
     //     loop {
-    //         let c = self.scanner.bump();
+    //         let c = self.bump();
     //         match c {
     //             '\'' => {
     //                 literal.push(c);
@@ -173,7 +240,7 @@ impl<'a> Lexer<'a> {
     //                 // common_escape : '\'
     //                 //               | 'n' | 'r' | 't' | '0'
     //                 //               | 'x' hex_digit 2
-    //                 let escaped_c = match self.scanner.bump() {
+    //                 let escaped_c = match self.bump() {
     //                     '\'' => '\'',
     //                     '\\' => '\\',
     //                     'n' => '\n',

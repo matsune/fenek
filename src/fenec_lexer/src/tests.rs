@@ -47,7 +47,8 @@ mod lexer_tests {
         test_token!(" \t", TokenKind::Spaces);
         test_token!("\n\n\n", TokenKind::Newlines);
         test_token!(r"// line comment", TokenKind::LineComment);
-        test_token!("123", TokenKind::Literal(Literal::Number));
+        // test_token!("12_3_", TokenKind::Literal(Literal::Int));
+        test_token!("0b0__101", TokenKind::Literal(Literal::Int));
         test_token_literal!(
             r#""terminated string literal""#,
             TokenKind::Literal(Literal::String),
@@ -107,5 +108,7 @@ mod lexer_tests {
         //     "unterminated char literal: `'unterminated char`"
         // );
         // test_literal_error!(r#""\m"#, "unknown character escape: `\\m`");
+        test_literal_error!("0b", "invalid binary literal");
+        test_literal_error!("0b012", "invalid binary literal");
     }
 }
