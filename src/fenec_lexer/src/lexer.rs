@@ -5,8 +5,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum LiteralError {
-    #[error("unterminated char literal: `{0}`")]
-    UnterminatedChar(String),
+    // #[error("unterminated char literal: `{0}`")]
+    // UnterminatedChar(String),
     #[error("unterminated string literal: `{0}`")]
     UnterminatedString(String),
     #[error("unknown character escape: `\\{0}`")]
@@ -91,7 +91,7 @@ impl<'a> Lexer<'a> {
                 self.scan_while(TokenKind::Literal(Literal::Number), c.into(), is_dec_digit)
             }
             '"' => self.scan_string()?,
-            '\'' => self.scan_char()?,
+            // '\'' => self.scan_char()?,
             c if is_alphabet(c) || c == '_' => {
                 let mut tok = self.scan_while(TokenKind::Ident, c.into(), |c| {
                     is_alphanumeric(c) || c == '_'
@@ -157,42 +157,42 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn scan_char(&mut self) -> Result<Token, LiteralError> {
-        let mut literal = "'".to_string();
-        let mut terminated = false;
-        loop {
-            let c = self.scanner.bump();
-            match c {
-                '\'' => {
-                    literal.push(c);
-                    terminated = true;
-                    break;
-                }
-                // '\' [ '\'' | common_escape ]
-                '\\' => {
-                    // common_escape : '\'
-                    //               | 'n' | 'r' | 't' | '0'
-                    //               | 'x' hex_digit 2
-                    let escaped_c = match self.scanner.bump() {
-                        '\'' => '\'',
-                        '\\' => '\\',
-                        'n' => '\n',
-                        'r' => '\r',
-                        't' => '\t',
-                        '0' => '\0',
-                        'x' => unimplemented!("hex_digit"),
-                        c => return Result::Err(LiteralError::UnknownCharEscape(c)),
-                    };
-                    literal.push(escaped_c);
-                }
-                EOF => break,
-                _ => literal.push(c),
-            }
-        }
-        if terminated {
-            Result::Ok(Token::new(TokenKind::Literal(Literal::Char), literal))
-        } else {
-            Result::Err(LiteralError::UnterminatedChar(literal))
-        }
-    }
+    // fn scan_char(&mut self) -> Result<Token, LiteralError> {
+    //     let mut literal = "'".to_string();
+    //     let mut terminated = false;
+    //     loop {
+    //         let c = self.scanner.bump();
+    //         match c {
+    //             '\'' => {
+    //                 literal.push(c);
+    //                 terminated = true;
+    //                 break;
+    //             }
+    //             // '\' [ '\'' | common_escape ]
+    //             '\\' => {
+    //                 // common_escape : '\'
+    //                 //               | 'n' | 'r' | 't' | '0'
+    //                 //               | 'x' hex_digit 2
+    //                 let escaped_c = match self.scanner.bump() {
+    //                     '\'' => '\'',
+    //                     '\\' => '\\',
+    //                     'n' => '\n',
+    //                     'r' => '\r',
+    //                     't' => '\t',
+    //                     '0' => '\0',
+    //                     'x' => unimplemented!("hex_digit"),
+    //                     c => return Result::Err(LiteralError::UnknownCharEscape(c)),
+    //                 };
+    //                 literal.push(escaped_c);
+    //             }
+    //             EOF => break,
+    //             _ => literal.push(c),
+    //         }
+    //     }
+    //     if terminated {
+    //         Result::Ok(Token::new(TokenKind::Literal(Literal::Char), literal))
+    //     } else {
+    //         Result::Err(LiteralError::UnterminatedChar(literal))
+    //     }
+    // }
 }

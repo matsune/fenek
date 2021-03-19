@@ -63,8 +63,8 @@ mod lexer_tests {
             TokenKind::Literal(Literal::String),
             "\"string with newline\nliteral\""
         );
-        test_token_literal!("'a'", TokenKind::Literal(Literal::Char), "'a'");
-        test_token_literal!("'\\n'", TokenKind::Literal(Literal::Char), "'\n'");
+        // test_token_literal!("'a'", TokenKind::Literal(Literal::Char), "'a'");
+        // test_token_literal!("'\\n'", TokenKind::Literal(Literal::Char), "'\n'");
         test_token!("true", TokenKind::Literal(Literal::Bool(true)));
         test_token!("false", TokenKind::Literal(Literal::Bool(false)));
         test_token!("ident", TokenKind::Ident);
@@ -102,10 +102,10 @@ mod lexer_tests {
             r#""unterminated string"#,
             "unterminated string literal: `\"unterminated string`"
         );
-        test_literal_error!(
-            r#"'unterminated char"#,
-            "unterminated char literal: `'unterminated char`"
-        );
-        test_literal_error!(r#""\m"#, "unknown character escape: `\\m`");
+        // test_literal_error!(
+        //     r#"'unterminated char"#,
+        //     "unterminated char literal: `'unterminated char`"
+        // );
+        // test_literal_error!(r#""\m"#, "unknown character escape: `\\m`");
     }
 }

@@ -40,7 +40,7 @@ impl Token {
 pub enum Literal {
     Number,
     Bool(bool),
-    Char,
+    // Char,
     String,
 }
 
