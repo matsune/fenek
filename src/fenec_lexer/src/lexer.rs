@@ -17,6 +17,8 @@ pub enum LiteralError {
     InvalidOctalLiteral,
     #[error("invalid hex literal")]
     InvalidHexLiteral,
+    #[error("invalid float literal")]
+    InvalidFloatLiteral,
 }
 
 #[derive(Error, Debug)]
@@ -162,10 +164,21 @@ impl<'a> Lexer<'a> {
         while is_num(self.peek()) || self.peek() == '_' {
             literal.push(self.bump());
         }
-        // if self.peek() == EOF {
-        //     return Result::Ok(Token::new(TokenKind::Literal(Literal::Int), literal));
-        // }
-        unimplemented!();
+        let tok = match self.peek() {
+            '.' => {
+                literal.push(self.bump());
+                if !is_num(self.peek()) {
+                    return Err(LiteralError::InvalidFloatLiteral);
+                }
+                literal.push(self.bump());
+                while is_num(self.peek()) || self.peek() == '_' {
+                    literal.push(self.bump());
+                }
+                Token::new(TokenKind::Literal(Literal::Float), literal)
+            }
+            _ => Token::new(TokenKind::Literal(Literal::Int), literal),
+        };
+        Result::Ok(tok)
     }
 
     fn peek(&mut self) -> char {

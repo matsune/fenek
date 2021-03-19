@@ -39,6 +39,7 @@ impl Token {
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Literal {
     Int,
+    Float,
     Bool(bool),
     // Char,
     String,

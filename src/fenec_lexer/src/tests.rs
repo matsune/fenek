@@ -26,7 +26,7 @@ mod scanner_tests {
 }
 
 mod lexer_tests {
-    use crate::lexer::Lexer;
+    use crate::lexer::{Lexer, LiteralError};
     use crate::token::{Literal, Token, TokenKind};
 
     #[test]
@@ -47,10 +47,12 @@ mod lexer_tests {
         test_token!(" \t", TokenKind::Spaces);
         test_token!("\n\n\n", TokenKind::Newlines);
         test_token!(r"// line comment", TokenKind::LineComment);
-        // test_token!("12_3_", TokenKind::Literal(Literal::Int));
+        test_token!("12_3_", TokenKind::Literal(Literal::Int));
         test_token!("0b0__101", TokenKind::Literal(Literal::Int));
         test_token!("0o0_17", TokenKind::Literal(Literal::Int));
         test_token!("0xa0f", TokenKind::Literal(Literal::Int));
+        test_token!("20.23", TokenKind::Literal(Literal::Float));
+        test_token!("0.2__3", TokenKind::Literal(Literal::Float));
         test_token_literal!(
             r#""terminated string literal""#,
             TokenKind::Literal(Literal::String),
@@ -94,10 +96,12 @@ mod lexer_tests {
 
     #[test]
     fn test_lexer_error() {
+        use LiteralError::*;
+
         macro_rules! test_literal_error {
             ($s:expr, $error:expr) => {
                 let err = Lexer::new(&mut $s.chars()).scan().unwrap_err();
-                assert_eq!(err.to_string(), $error);
+                assert_eq!(err.to_string(), $error.to_string());
             };
         }
 
@@ -110,11 +114,12 @@ mod lexer_tests {
         //     "unterminated char literal: `'unterminated char`"
         // );
         // test_literal_error!(r#""\m"#, "unknown character escape: `\\m`");
-        test_literal_error!("0b", "invalid binary literal");
-        test_literal_error!("0b012", "invalid binary literal");
-        test_literal_error!("0o", "invalid octal literal");
-        test_literal_error!("0o0129", "invalid octal literal");
-        test_literal_error!("0x", "invalid hex literal");
-        test_literal_error!("0xz", "invalid hex literal");
+        test_literal_error!("0b", InvalidBinaryLiteral);
+        test_literal_error!("0b012", InvalidBinaryLiteral);
+        test_literal_error!("0o", InvalidOctalLiteral);
+        test_literal_error!("0o0129", InvalidOctalLiteral);
+        test_literal_error!("0x", InvalidHexLiteral);
+        test_literal_error!("0xz", InvalidHexLiteral);
+        test_literal_error!("0.", InvalidFloatLiteral);
     }
 }
