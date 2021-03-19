@@ -65,6 +65,9 @@ mod lexer_tests {
         );
         test_token_literal!("'a'", TokenKind::Literal(Literal::Char), "'a'");
         test_token_literal!("'\\n'", TokenKind::Literal(Literal::Char), "'\n'");
+        test_token!("true", TokenKind::Literal(Literal::Bool(true)));
+        test_token!("false", TokenKind::Literal(Literal::Bool(false)));
+        test_token!("ident", TokenKind::Ident);
         test_token!("/", TokenKind::Slash);
         test_token!(";", TokenKind::Semi);
         test_token!(",", TokenKind::Comma);

@@ -37,6 +37,17 @@ fn is_dec_digit(c: char) -> bool {
     }
 }
 
+fn is_alphabet(c: char) -> bool {
+    match c {
+        'a'..='z' | 'A'..='Z' => true,
+        _ => false,
+    }
+}
+
+fn is_alphanumeric(c: char) -> bool {
+    is_alphabet(c) || is_dec_digit(c)
+}
+
 pub struct Lexer<'a> {
     scanner: Scanner<'a>,
 }
@@ -81,6 +92,17 @@ impl<'a> Lexer<'a> {
             }
             '"' => self.scan_string()?,
             '\'' => self.scan_char()?,
+            c if is_alphabet(c) || c == '_' => {
+                let mut tok = self.scan_while(TokenKind::Ident, c.into(), |c| {
+                    is_alphanumeric(c) || c == '_'
+                });
+                tok.kind = match tok.literal.as_str() {
+                    "true" => TokenKind::Literal(Literal::Bool(true)),
+                    "false" => TokenKind::Literal(Literal::Bool(false)),
+                    _ => TokenKind::Ident,
+                };
+                tok
+            }
             _ => Token::new(TokenKind::Unknown, c.into()),
         };
         Result::Ok(tok)
