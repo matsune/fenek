@@ -49,6 +49,8 @@ mod lexer_tests {
         test_token!(r"// line comment", TokenKind::LineComment);
         // test_token!("12_3_", TokenKind::Literal(Literal::Int));
         test_token!("0b0__101", TokenKind::Literal(Literal::Int));
+        test_token!("0o0_17", TokenKind::Literal(Literal::Int));
+        test_token!("0xa0f", TokenKind::Literal(Literal::Int));
         test_token_literal!(
             r#""terminated string literal""#,
             TokenKind::Literal(Literal::String),
@@ -110,5 +112,9 @@ mod lexer_tests {
         // test_literal_error!(r#""\m"#, "unknown character escape: `\\m`");
         test_literal_error!("0b", "invalid binary literal");
         test_literal_error!("0b012", "invalid binary literal");
+        test_literal_error!("0o", "invalid octal literal");
+        test_literal_error!("0o0129", "invalid octal literal");
+        test_literal_error!("0x", "invalid hex literal");
+        test_literal_error!("0xz", "invalid hex literal");
     }
 }

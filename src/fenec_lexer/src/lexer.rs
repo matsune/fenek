@@ -13,6 +13,10 @@ pub enum LiteralError {
     UnknownCharEscape(char),
     #[error("invalid binary literal")]
     InvalidBinaryLiteral,
+    #[error("invalid octal literal")]
+    InvalidOctalLiteral,
+    #[error("invalid hex literal")]
+    InvalidHexLiteral,
 }
 
 #[derive(Error, Debug)]
@@ -52,6 +56,20 @@ fn is_alphanumeric(c: char) -> bool {
 
 fn is_binary_digit(c: char) -> bool {
     c == '0' || c == '1'
+}
+
+fn is_octal_digit(c: char) -> bool {
+    match c {
+        '0'..='7' => true,
+        _ => false,
+    }
+}
+
+fn is_hex_digit(c: char) -> bool {
+    match c {
+        '0'..='9' | 'A'..='F' | 'a'..='f' => true,
+        _ => false,
+    }
 }
 
 pub struct Lexer<'a> {
@@ -164,7 +182,6 @@ impl<'a> Lexer<'a> {
         while self.peek() == '_' {
             literal.push(self.bump());
         }
-        // binary_digits
         if !is_binary_digit(self.peek()) {
             return Err(LiteralError::InvalidBinaryLiteral);
         }
@@ -178,11 +195,43 @@ impl<'a> Lexer<'a> {
         }
         Ok(Token::new(TokenKind::Literal(Literal::Int), literal))
     }
+
+    // octal_lit       ::= "0" ("o" | "O") { "_" } octal_digits
+    // octal_digits    ::= octal_digit { { "_" } octal_digit }
+    // octal_digit     ::= "0" ... "7"
     fn scan_octal_lit(&mut self, mut literal: String) -> Result<Token, LiteralError> {
-        unimplemented!();
+        while self.peek() == '_' {
+            literal.push(self.bump());
+        }
+        if !is_octal_digit(self.peek()) {
+            return Err(LiteralError::InvalidOctalLiteral);
+        }
+        literal.push(self.bump());
+        while self.peek() == '_' || is_num(self.peek()) {
+            if self.peek() == '_' || is_octal_digit(self.peek()) {
+                literal.push(self.bump());
+            } else {
+                return Err(LiteralError::InvalidOctalLiteral);
+            }
+        }
+        Ok(Token::new(TokenKind::Literal(Literal::Int), literal))
     }
+
+    // hex_lit       ::= "0" ("x" | "X") { "_" } hex_digits
+    // hex_digits    ::= hex_digit { { "_" } hex_digit }
+    // hex_digit     ::= "0" ... "9" | "A" ... "F" | "a" ... "f"
     fn scan_hex_lit(&mut self, mut literal: String) -> Result<Token, LiteralError> {
-        unimplemented!();
+        while self.peek() == '_' {
+            literal.push(self.bump());
+        }
+        if !is_hex_digit(self.peek()) {
+            return Err(LiteralError::InvalidHexLiteral);
+        }
+        literal.push(self.bump());
+        while self.peek() == '_' || is_hex_digit(self.peek()) {
+            literal.push(self.bump());
+        }
+        Ok(Token::new(TokenKind::Literal(Literal::Int), literal))
     }
 
     fn scan_string(&mut self) -> Result<Token, LiteralError> {
