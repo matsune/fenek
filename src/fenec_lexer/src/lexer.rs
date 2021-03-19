@@ -1,10 +1,10 @@
 use super::scanner::{Scanner, EOF};
-use super::token::{Literal, Pos, Token, TokenKind};
+use super::token::{Literal, Token, TokenKind};
 use std::str::Chars;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-enum LiteralError {
+pub enum LiteralError {
     #[error("unterminated char literal: `{0}`")]
     UnterminatedChar(String),
     #[error("unterminated string literal: `{0}`")]
@@ -14,7 +14,7 @@ enum LiteralError {
 }
 
 #[derive(Error, Debug)]
-enum LexerError {
+pub enum LexerError {
     #[error(transparent)]
     LiteralError(#[from] LiteralError),
 }
@@ -37,18 +37,18 @@ fn is_dec_digit(c: char) -> bool {
     }
 }
 
-struct Lexer<'a> {
+pub struct Lexer<'a> {
     scanner: Scanner<'a>,
 }
 
 impl<'a> Lexer<'a> {
-    fn new(source: &'a mut Chars<'a>) -> Self {
+    pub fn new(source: &'a mut Chars<'a>) -> Self {
         Lexer {
             scanner: Scanner::new(source),
         }
     }
 
-    fn scan(&mut self) -> Result<Token, LexerError> {
+    pub fn scan(&mut self) -> Result<Token, LexerError> {
         let c = self.scanner.bump();
         let tok = match c {
             EOF => Token::new(TokenKind::Eof, EOF.into()),
@@ -173,81 +173,4 @@ impl<'a> Lexer<'a> {
             Result::Err(LiteralError::UnterminatedChar(literal))
         }
     }
-}
-
-#[test]
-fn test_lexer() {
-    macro_rules! test_token {
-        ($s:expr, $kind:expr) => {
-            let tok = Lexer::new(&mut $s.chars()).scan().unwrap();
-            assert_eq!(tok, Token::new($kind, $s.into()));
-        };
-    }
-    macro_rules! test_token_literal {
-        ($s:expr, $kind:expr, $lit:expr) => {
-            let tok = Lexer::new(&mut $s.chars()).scan().unwrap();
-            assert_eq!(tok, Token::new($kind, $lit.into()));
-        };
-    }
-
-    test_token!(" \t", TokenKind::Spaces);
-    test_token!("\n\n\n", TokenKind::Newlines);
-    test_token!(r"// line comment", TokenKind::LineComment);
-    test_token!("123", TokenKind::Literal(Literal::Number));
-    test_token_literal!(
-        r#""terminated string literal""#,
-        TokenKind::Literal(Literal::String),
-        "\"terminated string literal\""
-    );
-    test_token_literal!(
-        r#""string \"escaped\" literal""#,
-        TokenKind::Literal(Literal::String),
-        "\"string \"escaped\" literal\""
-    );
-    test_token_literal!(
-        r#""string with newline\nliteral""#,
-        TokenKind::Literal(Literal::String),
-        "\"string with newline\nliteral\""
-    );
-    test_token_literal!("'a'", TokenKind::Literal(Literal::Char), "'a'");
-    test_token_literal!("'\\n'", TokenKind::Literal(Literal::Char), "'\n'");
-    test_token!("/", TokenKind::Slash);
-    test_token!(";", TokenKind::Semi);
-    test_token!(",", TokenKind::Comma);
-    test_token!("(", TokenKind::OpenParen);
-    test_token!(")", TokenKind::CloseParen);
-    test_token!("{", TokenKind::OpenBrace);
-    test_token!("}", TokenKind::CloseBrace);
-    test_token!(":", TokenKind::Colon);
-    test_token!("=", TokenKind::Eq);
-    test_token!("!", TokenKind::Not);
-    test_token!("<", TokenKind::Lt);
-    test_token!(">", TokenKind::Gt);
-    test_token!("-", TokenKind::Minus);
-    test_token!("&", TokenKind::And);
-    test_token!("|", TokenKind::Or);
-    test_token!("+", TokenKind::Plus);
-    test_token!("*", TokenKind::Star);
-    test_token!("^", TokenKind::Caret);
-    test_token!("%", TokenKind::Percent);
-}
-
-#[test]
-fn test_lexer_error() {
-    macro_rules! test_literal_error {
-        ($s:expr, $error:expr) => {
-            let err = Lexer::new(&mut $s.chars()).scan().unwrap_err();
-            assert_eq!(err.to_string(), $error);
-        };
-    }
-
-    test_literal_error!(
-        r#""unterminated string"#,
-        "unterminated string literal: `\"unterminated string`"
-    );
-    test_literal_error!(
-        r#"'unterminated char"#,
-        "unterminated char literal: `'unterminated char`"
-    );
-    test_literal_error!(r#""\m"#, "unknown character escape: `\\m`");
 }
