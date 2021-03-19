@@ -30,19 +30,18 @@ pub struct Token {
     pub literal: String,
 }
 
-impl Default for Token {
-    fn default() -> Self {
-        Token {
-            kind: TokenKind::Unknown,
-            literal: String::default(),
-        }
-    }
-}
-
 impl Token {
     pub fn new(kind: TokenKind, literal: String) -> Self {
         Token { kind, literal }
     }
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Literal {
+    Number,
+    Bool(bool),
+    Char,
+    String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -52,6 +51,8 @@ pub enum TokenKind {
     Spaces,
     Newlines,
     LineComment,
+    Ident,
+    Literal(Literal),
     Slash,
     Semi,
     Comma,

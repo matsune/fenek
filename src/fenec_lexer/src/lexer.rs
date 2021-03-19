@@ -1,5 +1,5 @@
 use super::scanner::{Scanner, EOF};
-use super::token::{Pos, Token, TokenKind};
+use super::token::{Literal, Pos, Token, TokenKind};
 use std::str::Chars;
 
 /// '\n' | '\r'
@@ -32,46 +32,40 @@ impl<'a> Lexer<'a> {
     }
 
     fn scan(&mut self) -> Token {
-        let c = self.scanner.peek();
+        let c = self.scanner.bump();
         match c {
-            EOF => {
-                let mut tok = Token::default();
-                tok.kind = TokenKind::Eof;
-                tok
+            EOF => Token::new(TokenKind::Eof, EOF.into()),
+            c if is_whitespace(c) => self.scan_while(TokenKind::Spaces, c.into(), is_whitespace),
+            c if is_newline(c) => self.scan_while(TokenKind::Newlines, c.into(), is_newline),
+            '/' => match self.scanner.peek() {
+                '/' => self.scan_while(TokenKind::LineComment, c.into(), |c| !is_newline(c)),
+                _ => Token::new(TokenKind::Slash, c.into()),
+            },
+            ';' => Token::new(TokenKind::Semi, c.into()),
+            ',' => Token::new(TokenKind::Comma, c.into()),
+            '(' => Token::new(TokenKind::OpenParen, c.into()),
+            ')' => Token::new(TokenKind::CloseParen, c.into()),
+            '{' => Token::new(TokenKind::OpenBrace, c.into()),
+            '}' => Token::new(TokenKind::CloseBrace, c.into()),
+            ':' => Token::new(TokenKind::Colon, c.into()),
+            '=' => Token::new(TokenKind::Eq, c.into()),
+            '!' => Token::new(TokenKind::Not, c.into()),
+            '<' => Token::new(TokenKind::Lt, c.into()),
+            '>' => Token::new(TokenKind::Gt, c.into()),
+            '-' => Token::new(TokenKind::Minus, c.into()),
+            '&' => Token::new(TokenKind::And, c.into()),
+            '|' => Token::new(TokenKind::Or, c.into()),
+            '+' => Token::new(TokenKind::Plus, c.into()),
+            '*' => Token::new(TokenKind::Star, c.into()),
+            '^' => Token::new(TokenKind::Caret, c.into()),
+            '%' => Token::new(TokenKind::Percent, c.into()),
+            c if is_dec_digit(c) => {
+                self.scan_while(TokenKind::Literal(Literal::Number), c.into(), is_dec_digit)
             }
-            c if is_whitespace(c) => self.scan_while(TokenKind::Spaces, "".into(), is_whitespace),
-            c if is_newline(c) => self.scan_while(TokenKind::Newlines, "".into(), is_newline),
-            '/' => {
-                let mut literal = String::from(self.scanner.bump());
-                match self.scanner.peek() {
-                    '/' => self.scan_while(TokenKind::LineComment, "/".into(), |c| !is_newline(c)),
-                    _ => Token::new(TokenKind::Slash, "/".into()),
-                }
-            }
-            ';' => self.scan_single(TokenKind::Semi),
-            ',' => self.scan_single(TokenKind::Comma),
-            '(' => self.scan_single(TokenKind::OpenParen),
-            ')' => self.scan_single(TokenKind::CloseParen),
-            '{' => self.scan_single(TokenKind::OpenBrace),
-            '}' => self.scan_single(TokenKind::CloseBrace),
-            ':' => self.scan_single(TokenKind::Colon),
-            '=' => self.scan_single(TokenKind::Eq),
-            '!' => self.scan_single(TokenKind::Not),
-            '<' => self.scan_single(TokenKind::Lt),
-            '>' => self.scan_single(TokenKind::Gt),
-            '-' => self.scan_single(TokenKind::Minus),
-            '&' => self.scan_single(TokenKind::And),
-            '|' => self.scan_single(TokenKind::Or),
-            '+' => self.scan_single(TokenKind::Plus),
-            '*' => self.scan_single(TokenKind::Star),
-            '^' => self.scan_single(TokenKind::Caret),
-            '%' => self.scan_single(TokenKind::Percent),
-            _ => Token::new(TokenKind::Unknown, String::from(c)),
+            '"' => self.scan_string(),
+            '\'' => self.scan_char(),
+            _ => Token::new(TokenKind::Unknown, c.into()),
         }
-    }
-
-    fn scan_single(&mut self, kind: TokenKind) -> Token {
-        Token::new(kind, self.scanner.bump().into())
     }
 
     fn scan_while<F>(&mut self, kind: TokenKind, mut literal: String, predicate: F) -> Token
@@ -83,37 +77,132 @@ impl<'a> Lexer<'a> {
         }
         Token::new(kind, literal)
     }
+
+    fn scan_string(&mut self) -> Token {
+        let mut literal = "\"".to_string();
+        loop {
+            let c = self.scanner.bump();
+            match c {
+                '"' => {
+                    literal.push(c);
+                    break;
+                }
+                // '\' [ '\"' | common_escape ]
+                '\\' => {
+                    // common_escape : '\'
+                    //               | 'n' | 'r' | 't' | '0'
+                    //               | 'x' hex_digit 2
+                    let escaped_c = match self.scanner.bump() {
+                        '"' => '"',
+                        '\\' => '\\',
+                        'n' => '\n',
+                        'r' => '\r',
+                        't' => '\t',
+                        '0' => '\0',
+                        'x' => unimplemented!("hex_digit"),
+                        c => unreachable!("error: {}", c),
+                    };
+                    literal.push(escaped_c);
+                }
+                EOF => break,
+                _ => literal.push(c),
+            }
+        }
+        Token::new(TokenKind::Literal(Literal::String), literal)
+    }
+
+    fn scan_char(&mut self) -> Token {
+        let mut literal = "'".to_string();
+        loop {
+            let c = self.scanner.bump();
+            match c {
+                '\'' => {
+                    literal.push(c);
+                    break;
+                }
+                // '\' [ '\'' | common_escape ]
+                '\\' => {
+                    // common_escape : '\'
+                    //               | 'n' | 'r' | 't' | '0'
+                    //               | 'x' hex_digit 2
+                    let escaped_c = match self.scanner.bump() {
+                        '\'' => '\'',
+                        '\\' => '\\',
+                        'n' => '\n',
+                        'r' => '\r',
+                        't' => '\t',
+                        '0' => '\0',
+                        'x' => unimplemented!("hex_digit"),
+                        c => unreachable!("error: {}", c),
+                    };
+                    literal.push(escaped_c);
+                }
+                EOF => break,
+                _ => literal.push(c),
+            }
+        }
+        Token::new(TokenKind::Literal(Literal::Char), literal)
+    }
 }
 
 #[test]
 fn test_lexer() {
     macro_rules! test_token {
-        ($s:expr, $kind:ident) => {
+        ($s:expr, $kind:expr) => {
             let tok = Lexer::new(&mut $s.chars()).scan();
-            assert_eq!(tok, Token::new(TokenKind::$kind, $s.into()));
+            assert_eq!(tok, Token::new($kind, $s.into()));
+        };
+    }
+    macro_rules! test_token_literal {
+        ($s:expr, $kind:expr, $lit:expr) => {
+            let tok = Lexer::new(&mut $s.chars()).scan();
+            assert_eq!(tok, Token::new($kind, $lit.into()));
         };
     }
 
-    test_token!(" \t", Spaces);
-    test_token!("\n\n\n", Newlines);
-    test_token!(r"// line comment", LineComment);
-    test_token!("/", Slash);
-    test_token!(";", Semi);
-    test_token!(",", Comma);
-    test_token!("(", OpenParen);
-    test_token!(")", CloseParen);
-    test_token!("{", OpenBrace);
-    test_token!("}", CloseBrace);
-    test_token!(":", Colon);
-    test_token!("=", Eq);
-    test_token!("!", Not);
-    test_token!("<", Lt);
-    test_token!(">", Gt);
-    test_token!("-", Minus);
-    test_token!("&", And);
-    test_token!("|", Or);
-    test_token!("+", Plus);
-    test_token!("*", Star);
-    test_token!("^", Caret);
-    test_token!("%", Percent);
+    test_token!(" \t", TokenKind::Spaces);
+    test_token!("\n\n\n", TokenKind::Newlines);
+    test_token!(r"// line comment", TokenKind::LineComment);
+    test_token!("123", TokenKind::Literal(Literal::Number));
+    test_token_literal!(
+        r#""terminated string literal""#,
+        TokenKind::Literal(Literal::String),
+        "\"terminated string literal\""
+    );
+    test_token_literal!(
+        r#""unterminated string literal"#,
+        TokenKind::Literal(Literal::String),
+        "\"unterminated string literal"
+    );
+    test_token_literal!(
+        r#""string \"escaped\" literal""#,
+        TokenKind::Literal(Literal::String),
+        "\"string \"escaped\" literal\""
+    );
+    test_token_literal!(
+        r#""string with newline\nliteral""#,
+        TokenKind::Literal(Literal::String),
+        "\"string with newline\nliteral\""
+    );
+    test_token_literal!("'a'", TokenKind::Literal(Literal::Char), "'a'");
+    test_token_literal!("'\\n'", TokenKind::Literal(Literal::Char), "'\n'");
+    test_token!("/", TokenKind::Slash);
+    test_token!(";", TokenKind::Semi);
+    test_token!(",", TokenKind::Comma);
+    test_token!("(", TokenKind::OpenParen);
+    test_token!(")", TokenKind::CloseParen);
+    test_token!("{", TokenKind::OpenBrace);
+    test_token!("}", TokenKind::CloseBrace);
+    test_token!(":", TokenKind::Colon);
+    test_token!("=", TokenKind::Eq);
+    test_token!("!", TokenKind::Not);
+    test_token!("<", TokenKind::Lt);
+    test_token!(">", TokenKind::Gt);
+    test_token!("-", TokenKind::Minus);
+    test_token!("&", TokenKind::And);
+    test_token!("|", TokenKind::Or);
+    test_token!("+", TokenKind::Plus);
+    test_token!("*", TokenKind::Star);
+    test_token!("^", TokenKind::Caret);
+    test_token!("%", TokenKind::Percent);
 }
