@@ -28,8 +28,6 @@ impl Pos {
 pub struct Token {
     pub kind: TokenKind,
     pub literal: String,
-    pub begin: Pos,
-    pub end: Pos,
 }
 
 impl Default for Token {
@@ -37,20 +35,13 @@ impl Default for Token {
         Token {
             kind: TokenKind::Unknown,
             literal: String::default(),
-            begin: Pos::default(),
-            end: Pos::default(),
         }
     }
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, literal: String, begin: Pos, end: Pos) -> Self {
-        Token {
-            kind,
-            literal,
-            begin,
-            end,
-        }
+    pub fn new(kind: TokenKind, literal: String) -> Self {
+        Token { kind, literal }
     }
 }
 
@@ -58,8 +49,10 @@ impl Token {
 pub enum TokenKind {
     Unknown,
     Eof,
-    Space,
-    Newline,
+    Spaces,
+    Newlines,
+    LineComment,
+    Slash,
     Semi,
     Comma,
     OpenParen,
