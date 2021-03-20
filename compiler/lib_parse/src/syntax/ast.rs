@@ -9,6 +9,18 @@ impl Expr {
     pub fn new(kind: ExprKind) -> Self {
         Expr { kind }
     }
+
+    pub fn new_lit(kind: LitKind, raw: String) -> Self {
+        Expr {
+            kind: ExprKind::Lit(Lit::new(kind, raw)),
+        }
+    }
+
+    pub fn new_ident(raw: String) -> Self {
+        Expr {
+            kind: ExprKind::Ident(Ident::new(raw)),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -20,7 +32,13 @@ pub enum ExprKind {
 
 #[derive(Debug, PartialEq)]
 pub struct Ident {
-    literal: String,
+    raw: String,
+}
+
+impl Ident {
+    fn new(raw: String) -> Self {
+        Ident { raw }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -44,13 +62,13 @@ impl std::convert::From<lexer::LitKind> for LitKind {
 
 #[derive(Debug, PartialEq)]
 pub struct Lit {
-    kind: LitKind,
-    literal: String,
+    pub kind: LitKind,
+    pub raw: String,
 }
 
 impl Lit {
-    pub fn new(kind: LitKind, literal: String) -> Self {
-        Lit { kind, literal }
+    pub fn new(kind: LitKind, raw: String) -> Self {
+        Lit { kind, raw }
     }
 }
 

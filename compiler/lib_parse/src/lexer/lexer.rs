@@ -26,6 +26,8 @@ pub enum LitError {
 
 #[derive(Error, Debug)]
 pub enum LexerError {
+    #[error("unknown token `{0}`")]
+    UnknwonToken(char),
     #[error(transparent)]
     LitError(#[from] LitError),
 }
@@ -88,7 +90,19 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn scan(&mut self) -> Result<Token, LexerError> {
+    pub fn lex(&mut self) -> Result<Vec<Token>, LexerError> {
+        let mut vec = Vec::new();
+        loop {
+            let tok = self.scan()?;
+            if tok.kind == TokenKind::Eof {
+                break;
+            }
+            vec.push(tok);
+        }
+        Ok(vec)
+    }
+
+    fn scan(&mut self) -> Result<Token, LexerError> {
         let c = self.bump();
         let tok = match c {
             EOF => Token::new(TokenKind::Eof, EOF.into()),
@@ -130,7 +144,7 @@ impl<'a> Lexer<'a> {
                 };
                 tok
             }
-            _ => Token::new(TokenKind::Unknown, c.into()),
+            _ => return Err(LexerError::UnknwonToken(c)),
         };
         Result::Ok(tok)
     }

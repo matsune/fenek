@@ -1,5 +1,6 @@
 use super::ast::*;
-use crate::lexer::{Lexer, LexerError, TokenKind};
+use crate::lexer::{Lexer, LexerError, Token, TokenKind};
+use std::collections::VecDeque;
 use std::str::Chars;
 use thiserror::Error;
 
@@ -14,25 +15,37 @@ pub enum ParseError {
     InvalidExpr,
 }
 
-pub struct Parser<'a> {
-    lexer: Lexer<'a>,
+pub struct Parser {
+    tokens: VecDeque<Token>,
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(source: &'a mut Chars<'a>) -> Self {
-        Parser {
-            lexer: Lexer::new(source),
-        }
+impl Parser {
+    pub fn new(tokens: VecDeque<Token>) -> Self {
+        Parser { tokens }
+    }
+
+    fn peek(&self) -> Option<&Token> {
+        self.tokens.front()
+    }
+
+    fn peek_mut(&mut self) -> Option<&mut Token> {
+        self.tokens.front_mut()
+    }
+
+    fn bump(&mut self) -> Option<Token> {
+        self.tokens.pop_front()
     }
 
     pub fn parse_expr(&mut self) -> Result<Expr, ParseError> {
-        let tok = self.lexer.scan()?;
-        match tok.kind {
+        let tok = self.peek().ok_or(ParseError::InvalidExpr)?;
+        let expr1 = match tok.kind {
             TokenKind::Lit(kind) => {
                 let kind = LitKind::from(kind);
-                Ok(Expr::new(ExprKind::Lit(Lit::new(kind, tok.raw))))
+                Expr::new_lit(kind, tok.raw.clone())
             }
+            TokenKind::Ident => Expr::new_ident(tok.raw.clone()),
             _ => unimplemented!(),
-        }
+        };
+        Ok(expr1)
     }
 }

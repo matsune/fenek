@@ -47,7 +47,6 @@ pub enum LitKind {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenKind {
-    Unknown,
     Eof,
     Spaces,
     Newlines,
