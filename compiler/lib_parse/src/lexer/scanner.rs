@@ -1,5 +1,8 @@
 use std::str::Chars;
 
+#[cfg(test)]
+mod tests;
+
 pub const EOF: char = '\0';
 
 #[derive(Debug)]

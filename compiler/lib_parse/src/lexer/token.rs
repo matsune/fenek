@@ -27,17 +27,17 @@ impl Pos {
 #[derive(Debug, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
-    pub literal: String,
+    pub raw: String,
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, literal: String) -> Self {
-        Token { kind, literal }
+    pub fn new(kind: TokenKind, raw: String) -> Self {
+        Token { kind, raw }
     }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Literal {
+pub enum LitKind {
     Int,
     Float,
     Bool(bool),
@@ -53,7 +53,7 @@ pub enum TokenKind {
     Newlines,
     LineComment,
     Ident,
-    Literal(Literal),
+    Lit(LitKind),
     Slash,
     Semi,
     Comma,

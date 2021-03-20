@@ -1,10 +1,13 @@
-use super::scanner::{Scanner, EOF};
-use super::token::{Literal, Token, TokenKind};
+use super::scanner::*;
+use super::token::*;
 use std::str::Chars;
 use thiserror::Error;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Error, Debug)]
-pub enum LiteralError {
+pub enum LitError {
     // #[error("unterminated char literal: `{0}`")]
     // UnterminatedChar(String),
     #[error("unterminated string literal: `{0}`")]
@@ -12,19 +15,19 @@ pub enum LiteralError {
     #[error("unknown character escape: `\\{0}`")]
     UnknownCharEscape(char),
     #[error("invalid binary literal")]
-    InvalidBinaryLiteral,
+    InvalidBinaryLit,
     #[error("invalid octal literal")]
-    InvalidOctalLiteral,
+    InvalidOctalLit,
     #[error("invalid hex literal")]
-    InvalidHexLiteral,
+    InvalidHexLit,
     #[error("invalid float literal")]
-    InvalidFloatLiteral,
+    InvalidFloatLit,
 }
 
 #[derive(Error, Debug)]
 pub enum LexerError {
     #[error(transparent)]
-    LiteralError(#[from] LiteralError),
+    LitError(#[from] LitError),
 }
 
 /// '\n' | '\r'
@@ -120,9 +123,9 @@ impl<'a> Lexer<'a> {
                 let mut tok = self.scan_while(TokenKind::Ident, c.into(), |c| {
                     is_alphanumeric(c) || c == '_'
                 });
-                tok.kind = match tok.literal.as_str() {
-                    "true" => TokenKind::Literal(Literal::Bool(true)),
-                    "false" => TokenKind::Literal(Literal::Bool(false)),
+                tok.kind = match tok.raw.as_str() {
+                    "true" => TokenKind::Lit(LitKind::Bool(true)),
+                    "false" => TokenKind::Lit(LitKind::Bool(false)),
                     _ => TokenKind::Ident,
                 };
                 tok
@@ -132,51 +135,51 @@ impl<'a> Lexer<'a> {
         Result::Ok(tok)
     }
 
-    fn scan_while<F>(&mut self, kind: TokenKind, mut literal: String, predicate: F) -> Token
+    fn scan_while<F>(&mut self, kind: TokenKind, mut raw: String, predicate: F) -> Token
     where
         F: Fn(char) -> bool,
     {
         while self.peek() != EOF && predicate(self.peek()) {
-            literal.push(self.bump());
+            raw.push(self.bump());
         }
-        Token::new(kind, literal)
+        Token::new(kind, raw)
     }
 
-    fn scan_number(&mut self, first: char) -> Result<Token, LiteralError> {
-        let mut literal = String::from(first);
+    fn scan_number(&mut self, first: char) -> Result<Token, LitError> {
+        let mut raw = String::from(first);
         if first == '0' {
             match self.peek() {
                 'b' | 'B' => {
-                    literal.push(self.bump());
-                    return self.scan_binary_lit(literal);
+                    raw.push(self.bump());
+                    return self.scan_binary_lit(raw);
                 }
                 'o' | 'O' => {
-                    literal.push(self.bump());
-                    return self.scan_octal_lit(literal);
+                    raw.push(self.bump());
+                    return self.scan_octal_lit(raw);
                 }
                 'x' | 'X' => {
-                    literal.push(self.bump());
-                    return self.scan_hex_lit(literal);
+                    raw.push(self.bump());
+                    return self.scan_hex_lit(raw);
                 }
                 _ => {}
             }
         }
         while is_num(self.peek()) || self.peek() == '_' {
-            literal.push(self.bump());
+            raw.push(self.bump());
         }
         let tok = match self.peek() {
             '.' => {
-                literal.push(self.bump());
+                raw.push(self.bump());
                 if !is_num(self.peek()) {
-                    return Err(LiteralError::InvalidFloatLiteral);
+                    return Err(LitError::InvalidFloatLit);
                 }
-                literal.push(self.bump());
+                raw.push(self.bump());
                 while is_num(self.peek()) || self.peek() == '_' {
-                    literal.push(self.bump());
+                    raw.push(self.bump());
                 }
-                Token::new(TokenKind::Literal(Literal::Float), literal)
+                Token::new(TokenKind::Lit(LitKind::Float), raw)
             }
-            _ => Token::new(TokenKind::Literal(Literal::Int), literal),
+            _ => Token::new(TokenKind::Lit(LitKind::Int), raw),
         };
         Result::Ok(tok)
     }
@@ -191,70 +194,70 @@ impl<'a> Lexer<'a> {
     // binary_lit       ::= "0" ("b" | "B") { "_" } binary_digits
     // binary_digits    ::= binary_digit { { "_" } binary_digit }
     // binary_digit     ::= "0" | "1"
-    fn scan_binary_lit(&mut self, mut literal: String) -> Result<Token, LiteralError> {
+    fn scan_binary_lit(&mut self, mut raw: String) -> Result<Token, LitError> {
         while self.peek() == '_' {
-            literal.push(self.bump());
+            raw.push(self.bump());
         }
         if !is_binary_digit(self.peek()) {
-            return Err(LiteralError::InvalidBinaryLiteral);
+            return Err(LitError::InvalidBinaryLit);
         }
-        literal.push(self.bump());
+        raw.push(self.bump());
         while self.peek() == '_' || is_num(self.peek()) {
             if self.peek() == '_' || is_binary_digit(self.peek()) {
-                literal.push(self.bump());
+                raw.push(self.bump());
             } else {
-                return Err(LiteralError::InvalidBinaryLiteral);
+                return Err(LitError::InvalidBinaryLit);
             }
         }
-        Ok(Token::new(TokenKind::Literal(Literal::Int), literal))
+        Ok(Token::new(TokenKind::Lit(LitKind::Int), raw))
     }
 
     // octal_lit       ::= "0" ("o" | "O") { "_" } octal_digits
     // octal_digits    ::= octal_digit { { "_" } octal_digit }
     // octal_digit     ::= "0" ... "7"
-    fn scan_octal_lit(&mut self, mut literal: String) -> Result<Token, LiteralError> {
+    fn scan_octal_lit(&mut self, mut raw: String) -> Result<Token, LitError> {
         while self.peek() == '_' {
-            literal.push(self.bump());
+            raw.push(self.bump());
         }
         if !is_octal_digit(self.peek()) {
-            return Err(LiteralError::InvalidOctalLiteral);
+            return Err(LitError::InvalidOctalLit);
         }
-        literal.push(self.bump());
+        raw.push(self.bump());
         while self.peek() == '_' || is_num(self.peek()) {
             if self.peek() == '_' || is_octal_digit(self.peek()) {
-                literal.push(self.bump());
+                raw.push(self.bump());
             } else {
-                return Err(LiteralError::InvalidOctalLiteral);
+                return Err(LitError::InvalidOctalLit);
             }
         }
-        Ok(Token::new(TokenKind::Literal(Literal::Int), literal))
+        Ok(Token::new(TokenKind::Lit(LitKind::Int), raw))
     }
 
     // hex_lit       ::= "0" ("x" | "X") { "_" } hex_digits
     // hex_digits    ::= hex_digit { { "_" } hex_digit }
     // hex_digit     ::= "0" ... "9" | "A" ... "F" | "a" ... "f"
-    fn scan_hex_lit(&mut self, mut literal: String) -> Result<Token, LiteralError> {
+    fn scan_hex_lit(&mut self, mut raw: String) -> Result<Token, LitError> {
         while self.peek() == '_' {
-            literal.push(self.bump());
+            raw.push(self.bump());
         }
         if !is_hex_digit(self.peek()) {
-            return Err(LiteralError::InvalidHexLiteral);
+            return Err(LitError::InvalidHexLit);
         }
-        literal.push(self.bump());
+        raw.push(self.bump());
         while self.peek() == '_' || is_hex_digit(self.peek()) {
-            literal.push(self.bump());
+            raw.push(self.bump());
         }
-        Ok(Token::new(TokenKind::Literal(Literal::Int), literal))
+        Ok(Token::new(TokenKind::Lit(LitKind::Int), raw))
     }
 
-    fn scan_string(&mut self) -> Result<Token, LiteralError> {
-        let mut literal = "\"".to_string();
+    fn scan_string(&mut self) -> Result<Token, LitError> {
+        let mut raw = "\"".to_string();
         let mut terminated = false;
         loop {
             let c = self.bump();
             match c {
                 '"' => {
-                    literal.push(c);
+                    raw.push(c);
                     terminated = true;
                     break;
                 }
@@ -271,29 +274,29 @@ impl<'a> Lexer<'a> {
                         't' => '\t',
                         '0' => '\0',
                         'x' => unimplemented!("hex_digit"),
-                        c => return Result::Err(LiteralError::UnknownCharEscape(c)),
+                        c => return Result::Err(LitError::UnknownCharEscape(c)),
                     };
-                    literal.push(escaped_c);
+                    raw.push(escaped_c);
                 }
                 EOF => break,
-                _ => literal.push(c),
+                _ => raw.push(c),
             }
         }
         if terminated {
-            Result::Ok(Token::new(TokenKind::Literal(Literal::String), literal))
+            Result::Ok(Token::new(TokenKind::Lit(LitKind::String), raw))
         } else {
-            Result::Err(LiteralError::UnterminatedString(literal))
+            Result::Err(LitError::UnterminatedString(raw))
         }
     }
 
-    // fn scan_char(&mut self) -> Result<Token, LiteralError> {
-    //     let mut literal = "'".to_string();
+    // fn scan_char(&mut self) -> Result<Token, LitError> {
+    //     let mut raw = "'".to_string();
     //     let mut terminated = false;
     //     loop {
     //         let c = self.bump();
     //         match c {
     //             '\'' => {
-    //                 literal.push(c);
+    //                 raw.push(c);
     //                 terminated = true;
     //                 break;
     //             }
@@ -310,18 +313,18 @@ impl<'a> Lexer<'a> {
     //                     't' => '\t',
     //                     '0' => '\0',
     //                     'x' => unimplemented!("hex_digit"),
-    //                     c => return Result::Err(LiteralError::UnknownCharEscape(c)),
+    //                     c => return Result::Err(LitError::UnknownCharEscape(c)),
     //                 };
-    //                 literal.push(escaped_c);
+    //                 raw.push(escaped_c);
     //             }
     //             EOF => break,
-    //             _ => literal.push(c),
+    //             _ => raw.push(c),
     //         }
     //     }
     //     if terminated {
-    //         Result::Ok(Token::new(TokenKind::Literal(Literal::Char), literal))
+    //         Result::Ok(Token::new(TokenKind::Lit(LitKind::Char), raw))
     //     } else {
-    //         Result::Err(LiteralError::UnterminatedChar(literal))
+    //         Result::Err(LitError::UnterminatedChar(raw))
     //     }
     // }
 }
