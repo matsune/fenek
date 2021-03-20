@@ -4,11 +4,11 @@
 name = "fenec"
 version = "0.1.0"
 dependencies = [
- "fenec_lexer",
+ "lib_parse",
 ]
 
 [[package]]
-name = "fenec_lexer"
+name = "lib_parse"
 version = "0.1.0"
 dependencies = [
  "thiserror",

@@ -1,5 +1,5 @@
 mod scanner_tests {
-    use crate::scanner::{Scanner, EOF};
+    use crate::scanner::Scanner;
 
     #[test]
     fn test_scanner_eof() {

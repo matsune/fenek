@@ -1,8 +1,0 @@
-[package]
-name = "fenec"
-version = "0.1.0"
-authors = ["Yuma Matsune <yuma.matsune@gmail.com>"]
-edition = "2018"
-
-[dependencies]
-fenec_lexer = { path = "../fenec_lexer" }
