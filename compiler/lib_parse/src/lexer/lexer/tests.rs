@@ -47,10 +47,10 @@ fn test_lexer() {
     test_token!("/", TokenKind::Slash);
     test_token!(";", TokenKind::Semi);
     test_token!(",", TokenKind::Comma);
-    test_token!("(", TokenKind::OpenParen);
-    test_token!(")", TokenKind::CloseParen);
-    test_token!("{", TokenKind::OpenBrace);
-    test_token!("}", TokenKind::CloseBrace);
+    test_token!("(", TokenKind::LParen);
+    test_token!(")", TokenKind::RParen);
+    test_token!("{", TokenKind::LBrace);
+    test_token!("}", TokenKind::RBrace);
     test_token!(":", TokenKind::Colon);
     test_token!("=", TokenKind::Eq);
     test_token!("!", TokenKind::Not);

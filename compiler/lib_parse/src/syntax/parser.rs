@@ -42,7 +42,7 @@ impl Parser {
 
     fn parse_primary_expr(&mut self) -> Result<Expr, ParseError> {
         let tok = self.peek().ok_or(ParseError::InvalidExpr)?;
-        if !tok.is_ident() && !tok.is_lit() {
+        if !tok.is_ident() && !tok.is_lit() && tok.kind != TokenKind::LParen {
             return Err(ParseError::InvalidExpr);
         }
         let tok = self.bump().unwrap();
@@ -52,7 +52,15 @@ impl Parser {
                 Expr::new_lit(kind, tok.raw.clone())
             }
             TokenKind::Ident => Expr::new_ident(tok.raw.clone()),
-            _ => unimplemented!(),
+            TokenKind::LParen => {
+                let expr = self.parse_expr()?;
+                if self.peek().ok_or(ParseError::InvalidExpr)?.kind != TokenKind::RParen {
+                    return Err(ParseError::InvalidExpr);
+                }
+                self.bump();
+                expr
+            }
+            _ => unreachable!(),
         };
         Ok(expr)
     }
