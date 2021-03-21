@@ -34,6 +34,27 @@ impl Token {
     pub fn new(kind: TokenKind, raw: String) -> Self {
         Token { kind, raw }
     }
+
+    pub fn is_lit(&self) -> bool {
+        match self.kind {
+            TokenKind::Lit(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_ident(&self) -> bool {
+        match self.kind {
+            TokenKind::Ident => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_spaces(&self) -> bool {
+        match self.kind {
+            TokenKind::Spaces => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

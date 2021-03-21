@@ -21,6 +21,12 @@ impl Expr {
             kind: ExprKind::Ident(Ident::new(raw)),
         }
     }
+
+    pub fn new_binary(op: BinOpKind, lhs: Expr, rhs: Expr) -> Self {
+        Expr {
+            kind: ExprKind::Binary(op, Box::new(lhs), Box::new(rhs)),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -89,7 +95,7 @@ impl BinOpKind {
         use BinOpKind::*;
         match self {
             Add | Sub => 10,
-            Mul | Div => 11,
+            Mul | Div => 20,
         }
     }
 }
