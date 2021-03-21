@@ -11,6 +11,9 @@ mod tests;
 pub enum ParseError {
     #[error(transparent)]
     LexerError(#[from] LexerError),
+
+    #[error("invalid statement")]
+    InvalidStmt,
     #[error("expected {0}")]
     Expected(&'static str),
     #[error("invalid var decl")]
@@ -68,6 +71,17 @@ impl Parser {
             }
         }
         None
+    }
+
+    pub fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let tok = self.peek().ok_or(ParseError::InvalidStmt)?;
+        let kind = match tok.kind {
+            TokenKind::KwVar => StmtKind::VarDecl(self.parse_var_decl()?),
+            _ => StmtKind::Expr(self.parse_expr()?),
+        };
+        self.bump_if(|tok| tok.kind == TokenKind::Semi)
+            .ok_or(ParseError::InvalidStmt)?;
+        Ok(Stmt::new(kind))
     }
 
     pub fn parse_expr(&mut self) -> Result<Expr, ParseError> {

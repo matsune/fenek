@@ -15,18 +15,6 @@ impl Stmt {
     pub fn new(kind: StmtKind) -> Self {
         Stmt { kind }
     }
-
-    pub fn new_expr(expr: Expr) -> Self {
-        Stmt {
-            kind: StmtKind::Expr(expr),
-        }
-    }
-
-    pub fn new_var_decl(name: Ident, expr: Expr) -> Self {
-        Stmt {
-            kind: StmtKind::VarDecl(VarDecl::new(name, expr)),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -63,28 +51,28 @@ impl Expr {
         }
     }
 
-    pub fn unwrap_lit(self) -> Lit {
+    pub fn as_lit(self) -> Lit {
         match self.kind {
             ExprKind::Lit(lit) => lit,
             _ => panic!("failed to unwrap as lit"),
         }
     }
 
-    pub fn unwrap_ident(self) -> Ident {
+    pub fn as_ident(self) -> Ident {
         match self.kind {
             ExprKind::Ident(ident) => ident,
             _ => panic!("failed to unwrap as ident"),
         }
     }
 
-    pub fn unwrap_binary(self) -> Binary {
+    pub fn as_binary(self) -> Binary {
         match self.kind {
             ExprKind::Binary(binary) => binary,
             _ => panic!("failed to unwrap as binary"),
         }
     }
 
-    pub fn unwrap_unary(self) -> Unary {
+    pub fn as_unary(self) -> Unary {
         match self.kind {
             ExprKind::Unary(unary) => unary,
             _ => panic!("failed to unwrap as unary"),
