@@ -22,9 +22,15 @@ impl Expr {
         }
     }
 
-    pub fn new_binary(op: BinOpKind, lhs: Expr, rhs: Expr) -> Self {
+    pub fn new_binary(op: BinOp, lhs: Expr, rhs: Expr) -> Self {
         Expr {
             kind: ExprKind::Binary(Binary::new(op, lhs, rhs)),
+        }
+    }
+
+    pub fn new_unary(op: UnaryOp, expr: Expr) -> Self {
+        Expr {
+            kind: ExprKind::Unary(Unary::new(op, expr)),
         }
     }
 
@@ -48,6 +54,13 @@ impl Expr {
             _ => panic!("failed to unwrap as binary"),
         }
     }
+
+    pub fn unwrap_unary(self) -> Unary {
+        match self.kind {
+            ExprKind::Unary(unary) => unary,
+            _ => panic!("failed to unwrap as unary"),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -55,6 +68,7 @@ pub enum ExprKind {
     Lit(Lit),
     Ident(Ident),
     Binary(Binary),
+    Unary(Unary),
 }
 
 #[derive(Debug, PartialEq)]
@@ -101,13 +115,13 @@ impl Lit {
 
 #[derive(Debug)]
 pub struct Binary {
-    pub op: BinOpKind,
+    pub op: BinOp,
     pub lhs: Box<Expr>,
     pub rhs: Box<Expr>,
 }
 
 impl Binary {
-    pub fn new(op: BinOpKind, lhs: Expr, rhs: Expr) -> Self {
+    pub fn new(op: BinOp, lhs: Expr, rhs: Expr) -> Self {
         Binary {
             op,
             lhs: Box::new(lhs),
@@ -117,7 +131,7 @@ impl Binary {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum BinOpKind {
+pub enum BinOp {
     /// +
     Add,
     /// -
@@ -128,12 +142,37 @@ pub enum BinOpKind {
     Div,
 }
 
-impl BinOpKind {
+impl BinOp {
     pub fn precedence(&self) -> u8 {
-        use BinOpKind::*;
+        use BinOp::*;
         match self {
             Add | Sub => 10,
             Mul | Div => 20,
         }
     }
+}
+
+#[derive(Debug)]
+pub struct Unary {
+    pub op: UnaryOp,
+    pub expr: Box<Expr>,
+}
+
+impl Unary {
+    pub fn new(op: UnaryOp, expr: Expr) -> Self {
+        Unary {
+            op,
+            expr: Box::new(expr),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum UnaryOp {
+    /// +
+    Add,
+    /// -
+    Sub,
+    /// !
+    Not,
 }

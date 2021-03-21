@@ -68,7 +68,20 @@ impl Parser {
     }
 
     fn parse_expr_prec(&mut self, last_prec: u8) -> Result<Expr, ParseError> {
-        let lhs = self.parse_primary_expr()?;
+        let tok = self.peek().ok_or(ParseError::InvalidExpr)?;
+        let lhs = match tok.kind {
+            TokenKind::Not | TokenKind::Plus | TokenKind::Minus => {
+                let unary_op = match self.bump().unwrap().kind {
+                    TokenKind::Not => UnaryOp::Not,
+                    TokenKind::Plus => UnaryOp::Add,
+                    TokenKind::Minus => UnaryOp::Sub,
+                    _ => unreachable!(),
+                };
+                let expr = self.parse_primary_expr()?;
+                Expr::new_unary(unary_op, expr)
+            }
+            _ => self.parse_primary_expr()?,
+        };
         self.skip_spaces();
         let bin_op_kind = match self.peek() {
             Some(tok)
@@ -78,10 +91,10 @@ impl Parser {
                     || tok.kind == TokenKind::Slash =>
             {
                 match tok.kind {
-                    TokenKind::Plus => BinOpKind::Add,
-                    TokenKind::Minus => BinOpKind::Sub,
-                    TokenKind::Star => BinOpKind::Mul,
-                    TokenKind::Slash => BinOpKind::Div,
+                    TokenKind::Plus => BinOp::Add,
+                    TokenKind::Minus => BinOp::Sub,
+                    TokenKind::Star => BinOp::Mul,
+                    TokenKind::Slash => BinOp::Div,
                     _ => return Ok(lhs),
                 }
             }
@@ -105,10 +118,10 @@ impl Parser {
                         || tok.kind == TokenKind::Slash =>
                 {
                     match tok.kind {
-                        TokenKind::Plus => BinOpKind::Add,
-                        TokenKind::Minus => BinOpKind::Sub,
-                        TokenKind::Star => BinOpKind::Mul,
-                        TokenKind::Slash => BinOpKind::Div,
+                        TokenKind::Plus => BinOp::Add,
+                        TokenKind::Minus => BinOp::Sub,
+                        TokenKind::Star => BinOp::Mul,
+                        TokenKind::Slash => BinOp::Div,
                         _ => return Ok(lhs),
                     }
                 }
