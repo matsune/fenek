@@ -24,7 +24,28 @@ impl Expr {
 
     pub fn new_binary(op: BinOpKind, lhs: Expr, rhs: Expr) -> Self {
         Expr {
-            kind: ExprKind::Binary(op, Box::new(lhs), Box::new(rhs)),
+            kind: ExprKind::Binary(Binary::new(op, lhs, rhs)),
+        }
+    }
+
+    pub fn unwrap_lit(self) -> Lit {
+        match self.kind {
+            ExprKind::Lit(lit) => lit,
+            _ => panic!("failed to unwrap as lit"),
+        }
+    }
+
+    pub fn unwrap_ident(self) -> Ident {
+        match self.kind {
+            ExprKind::Ident(ident) => ident,
+            _ => panic!("failed to unwrap as ident"),
+        }
+    }
+
+    pub fn unwrap_binary(self) -> Binary {
+        match self.kind {
+            ExprKind::Binary(binary) => binary,
+            _ => panic!("failed to unwrap as binary"),
         }
     }
 }
@@ -33,12 +54,12 @@ impl Expr {
 pub enum ExprKind {
     Lit(Lit),
     Ident(Ident),
-    Binary(BinOpKind, Box<Expr>, Box<Expr>),
+    Binary(Binary),
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Ident {
-    raw: String,
+    pub raw: String,
 }
 
 impl Ident {
@@ -75,6 +96,23 @@ pub struct Lit {
 impl Lit {
     pub fn new(kind: LitKind, raw: String) -> Self {
         Lit { kind, raw }
+    }
+}
+
+#[derive(Debug)]
+pub struct Binary {
+    pub op: BinOpKind,
+    pub lhs: Box<Expr>,
+    pub rhs: Box<Expr>,
+}
+
+impl Binary {
+    pub fn new(op: BinOpKind, lhs: Expr, rhs: Expr) -> Self {
+        Binary {
+            op,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs),
+        }
     }
 }
 

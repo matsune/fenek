@@ -83,7 +83,35 @@ impl Parser {
         self.bump();
         self.skip_spaces();
         let rhs = self.parse_expr_prec(bin_op_kind.precedence())?;
-        Ok(Expr::new_binary(bin_op_kind, lhs, rhs))
+        let mut lhs = Expr::new_binary(bin_op_kind, lhs, rhs);
+
+        loop {
+            self.skip_spaces();
+            let bin_op_kind = match self.peek() {
+                Some(tok)
+                    if tok.kind == TokenKind::Plus
+                        || tok.kind == TokenKind::Minus
+                        || tok.kind == TokenKind::Star
+                        || tok.kind == TokenKind::Slash =>
+                {
+                    match tok.kind {
+                        TokenKind::Plus => BinOpKind::Add,
+                        TokenKind::Minus => BinOpKind::Sub,
+                        TokenKind::Star => BinOpKind::Mul,
+                        TokenKind::Slash => BinOpKind::Div,
+                        _ => return Ok(lhs),
+                    }
+                }
+                _ => return Ok(lhs),
+            };
+            if bin_op_kind.precedence() < last_prec {
+                return Ok(lhs);
+            }
+            self.bump();
+            self.skip_spaces();
+            let rhs = self.parse_expr_prec(bin_op_kind.precedence())?;
+            lhs = Expr::new_binary(bin_op_kind, lhs, rhs);
+        }
     }
 
     fn skip_spaces(&mut self) {
