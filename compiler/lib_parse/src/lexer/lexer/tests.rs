@@ -44,6 +44,7 @@ fn test_lexer() {
     test_token!("true", TokenKind::Lit(LitKind::Bool(true)));
     test_token!("false", TokenKind::Lit(LitKind::Bool(false)));
     test_token!("ident", TokenKind::Ident);
+    test_token!("var", TokenKind::KwVar);
     test_token!("/", TokenKind::Slash);
     test_token!(";", TokenKind::Semi);
     test_token!(",", TokenKind::Comma);

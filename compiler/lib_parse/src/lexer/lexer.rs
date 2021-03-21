@@ -140,6 +140,7 @@ impl<'a> Lexer<'a> {
                 tok.kind = match tok.raw.as_str() {
                     "true" => TokenKind::Lit(LitKind::Bool(true)),
                     "false" => TokenKind::Lit(LitKind::Bool(false)),
+                    "var" => TokenKind::KwVar,
                     _ => TokenKind::Ident,
                 };
                 tok

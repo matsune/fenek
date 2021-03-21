@@ -11,6 +11,10 @@ mod tests;
 pub enum ParseError {
     #[error(transparent)]
     LexerError(#[from] LexerError),
+    #[error("expected {0}")]
+    Expected(&'static str),
+    #[error("invalid var decl")]
+    InvalidVarDecl,
     #[error("invalid expr")]
     InvalidExpr,
     #[error("unclosed expr")]
@@ -38,16 +42,42 @@ impl Parser {
         self.tokens.pop_front()
     }
 
+    pub fn parse_var_decl(&mut self) -> Result<VarDecl, ParseError> {
+        self.bump_if(|tok| tok.kind == TokenKind::KwVar)
+            .ok_or(ParseError::Expected("`var`"))?;
+        self.bump_if(|tok| tok.is_spaces())
+            .ok_or(ParseError::Expected("spaces"))?;
+        let name = self
+            .bump_if(|tok| tok.is_ident())
+            .ok_or(ParseError::Expected("ident"))?;
+        self.skip_spaces();
+        self.bump_if(|tok| tok.kind == TokenKind::Eq)
+            .ok_or(ParseError::Expected("`=`"))?;
+        self.skip_spaces();
+        let expr = self.parse_expr()?;
+        Ok(VarDecl::new(Ident::new(name.raw), expr))
+    }
+
+    fn bump_if<Fn>(&mut self, pred: Fn) -> Option<Token>
+    where
+        Fn: FnOnce(&Token) -> bool,
+    {
+        if let Some(tok) = self.peek() {
+            if pred(tok) {
+                return self.bump();
+            }
+        }
+        None
+    }
+
     pub fn parse_expr(&mut self) -> Result<Expr, ParseError> {
         self.parse_expr_prec(0)
     }
 
     fn parse_primary_expr(&mut self) -> Result<Expr, ParseError> {
-        let tok = self.peek().ok_or(ParseError::InvalidExpr)?;
-        if !tok.is_ident() && !tok.is_lit() && tok.kind != TokenKind::LParen {
-            return Err(ParseError::InvalidExpr);
-        }
-        let tok = self.bump().unwrap();
+        let tok = self
+            .bump_if(|tok| tok.is_ident() || tok.is_lit() || tok.kind == TokenKind::LParen)
+            .ok_or(ParseError::InvalidExpr)?;
         let expr = match tok.kind {
             TokenKind::Lit(kind) => {
                 let kind = LitKind::from(kind);

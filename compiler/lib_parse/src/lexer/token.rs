@@ -74,6 +74,7 @@ pub enum TokenKind {
     LineComment,
     Ident,
     Lit(LitKind),
+    KwVar,
     Slash,
     Semi,
     Comma,

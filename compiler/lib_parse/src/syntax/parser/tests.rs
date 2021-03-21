@@ -8,6 +8,13 @@ macro_rules! make_parser {
 }
 
 #[test]
+fn test_parse_expr() {
+    let mut parser = make_parser!("a");
+    let ident = parser.parse_expr().unwrap().unwrap_ident();
+    assert_eq!(ident.raw, "a");
+}
+
+#[test]
 fn test_parse_expr1() {
     let mut parser = make_parser!("1 + a * 2");
     let binary = parser.parse_expr().unwrap().unwrap_binary();
@@ -87,4 +94,33 @@ fn test_parse_expr_error() {
     }
     parse_error!("(4 - 3", "unclosed expr");
     parse_error!("4 - ", "invalid expr");
+}
+
+#[test]
+fn test_parse_var_decl() {
+    let mut parser = make_parser!("var a = 3");
+    let var_decl = parser.parse_var_decl().unwrap();
+    assert_eq!(var_decl.name.raw, "a");
+    assert_eq!(var_decl.init.unwrap_lit().raw, "3");
+}
+
+#[test]
+fn test_parse_var_decl_error() {
+    let mut parser = make_parser!("var= 3");
+    assert_eq!(
+        parser.parse_var_decl().unwrap_err().to_string(),
+        "expected spaces"
+    );
+
+    let mut parser = make_parser!("var = 3");
+    assert_eq!(
+        parser.parse_var_decl().unwrap_err().to_string(),
+        "expected ident"
+    );
+
+    let mut parser = make_parser!("var a");
+    assert_eq!(
+        parser.parse_var_decl().unwrap_err().to_string(),
+        "expected `=`"
+    );
 }

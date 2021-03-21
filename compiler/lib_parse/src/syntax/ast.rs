@@ -1,6 +1,35 @@
 use crate::lexer;
 
 #[derive(Debug)]
+pub struct Stmt {
+    pub kind: StmtKind,
+}
+
+#[derive(Debug)]
+pub enum StmtKind {
+    Expr(Expr),
+    VarDecl(VarDecl),
+}
+
+impl Stmt {
+    pub fn new(kind: StmtKind) -> Self {
+        Stmt { kind }
+    }
+
+    pub fn new_expr(expr: Expr) -> Self {
+        Stmt {
+            kind: StmtKind::Expr(expr),
+        }
+    }
+
+    pub fn new_var_decl(name: Ident, expr: Expr) -> Self {
+        Stmt {
+            kind: StmtKind::VarDecl(VarDecl::new(name, expr)),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Expr {
     pub kind: ExprKind,
 }
@@ -77,7 +106,7 @@ pub struct Ident {
 }
 
 impl Ident {
-    fn new(raw: String) -> Self {
+    pub fn new(raw: String) -> Self {
         Ident { raw }
     }
 }
@@ -175,4 +204,20 @@ pub enum UnaryOp {
     Sub,
     /// !
     Not,
+}
+
+/// let <name> = <expr>;
+#[derive(Debug)]
+pub struct VarDecl {
+    pub name: Ident,
+    pub init: Box<Expr>,
+}
+
+impl VarDecl {
+    pub fn new(name: Ident, init: Expr) -> Self {
+        VarDecl {
+            name,
+            init: Box::new(init),
+        }
+    }
 }
