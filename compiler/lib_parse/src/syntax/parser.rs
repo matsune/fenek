@@ -13,6 +13,8 @@ pub enum ParseError {
     LexerError(#[from] LexerError),
     #[error("invalid expr")]
     InvalidExpr,
+    #[error("unclosed expr")]
+    UnclosedParenExpr,
 }
 
 pub struct Parser {
@@ -54,8 +56,8 @@ impl Parser {
             TokenKind::Ident => Expr::new_ident(tok.raw.clone()),
             TokenKind::LParen => {
                 let expr = self.parse_expr()?;
-                if self.peek().ok_or(ParseError::InvalidExpr)?.kind != TokenKind::RParen {
-                    return Err(ParseError::InvalidExpr);
+                if self.peek().ok_or(ParseError::UnclosedParenExpr)?.kind != TokenKind::RParen {
+                    return Err(ParseError::UnclosedParenExpr);
                 }
                 self.bump();
                 expr
