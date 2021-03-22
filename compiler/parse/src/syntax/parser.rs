@@ -1,5 +1,5 @@
 use super::ast::*;
-use crate::lexer::{Lexer, LexerError, Token, TokenKind};
+use crate::lexer::*;
 use std::collections::VecDeque;
 use std::str::Chars;
 use thiserror::Error;
@@ -94,10 +94,40 @@ impl Parser {
             .ok_or(ParseError::InvalidExpr)?;
         let expr = match tok.kind {
             TokenKind::Lit(kind) => {
-                let kind = LitKind::from(kind);
-                Expr::new_lit(kind, tok.raw.clone())
+                let lit = match kind {
+                    LitKind::Int { base } => match base {
+                        IntBase::Binary => {
+                            let n = u64::from_str_radix(&tok.raw.replace("_", "")[2..], 2)
+                                .map_err(|_err| ParseError::InvalidExpr)?;
+                            Lit::Int(n)
+                        }
+                        IntBase::Octal => {
+                            let n = u64::from_str_radix(&tok.raw.replace("_", "")[2..], 8)
+                                .map_err(|_err| ParseError::InvalidExpr)?;
+                            Lit::Int(n)
+                        }
+                        IntBase::Decimal => {
+                            let n = tok
+                                .raw
+                                .replace("_", "")
+                                .parse::<u64>()
+                                .map_err(|_err| ParseError::InvalidExpr)?;
+                            Lit::Int(n)
+                        }
+                        IntBase::Hex => {
+                            let n = u64::from_str_radix(&tok.raw.replace("_", "")[2..], 16)
+                                .map_err(|_err| ParseError::InvalidExpr)?;
+                            Lit::Int(n)
+                        }
+                    },
+                    // TODO:
+                    LitKind::Float => unimplemented!(),
+                    LitKind::Bool(b) => Lit::Bool(b),
+                    LitKind::String => Lit::String(tok.raw),
+                };
+                Expr::new_lit(lit)
             }
-            TokenKind::Ident => Expr::new_ident(tok.raw.clone()),
+            TokenKind::Ident => Expr::new_ident(tok.raw),
             TokenKind::LParen => {
                 let expr = self.parse_expr()?;
                 if self.peek().ok_or(ParseError::UnclosedParenExpr)?.kind != TokenKind::RParen {

@@ -27,9 +27,9 @@ impl Expr {
         Expr { kind }
     }
 
-    pub fn new_lit(kind: LitKind, raw: String) -> Self {
+    pub fn new_lit(lit: Lit) -> Self {
         Expr {
-            kind: ExprKind::Lit(Lit::new(kind, raw)),
+            kind: ExprKind::Lit(lit),
         }
     }
 
@@ -51,28 +51,35 @@ impl Expr {
         }
     }
 
-    pub fn as_lit(self) -> Lit {
-        match self.kind {
-            ExprKind::Lit(lit) => lit,
-            _ => panic!("failed to unwrap as lit"),
+    pub fn into_lit_int(self) -> u64 {
+        if let ExprKind::Lit(Lit::Int(n)) = self.kind {
+            return n;
         }
+        panic!("failed to unwrap as lit int")
     }
 
-    pub fn as_ident(self) -> Ident {
+    pub fn into_lit_bool(self) -> bool {
+        if let ExprKind::Lit(Lit::Bool(b)) = self.kind {
+            return b;
+        }
+        panic!("failed to unwrap as lit bool")
+    }
+
+    pub fn into_ident(self) -> Ident {
         match self.kind {
             ExprKind::Ident(ident) => ident,
             _ => panic!("failed to unwrap as ident"),
         }
     }
 
-    pub fn as_binary(self) -> Binary {
+    pub fn into_binary(self) -> Binary {
         match self.kind {
             ExprKind::Binary(binary) => binary,
             _ => panic!("failed to unwrap as binary"),
         }
     }
 
-    pub fn as_unary(self) -> Unary {
+    pub fn into_unary(self) -> Unary {
         match self.kind {
             ExprKind::Unary(unary) => unary,
             _ => panic!("failed to unwrap as unary"),
@@ -99,36 +106,36 @@ impl Ident {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum LitKind {
-    Int,
-    Float,
-    Bool(bool),
-    String,
-}
-
-impl std::convert::From<lexer::LitKind> for LitKind {
-    fn from(kind: lexer::LitKind) -> LitKind {
-        match kind {
-            lexer::LitKind::Int => LitKind::Int,
-            lexer::LitKind::Float => LitKind::Float,
-            lexer::LitKind::Bool(b) => LitKind::Bool(b),
-            lexer::LitKind::String => LitKind::String,
-        }
-    }
-}
-
 #[derive(Debug, PartialEq)]
-pub struct Lit {
-    pub kind: LitKind,
-    pub raw: String,
+pub enum Lit {
+    Int(u64),
+    Float(f64),
+    Bool(bool),
+    String(String),
 }
 
-impl Lit {
-    pub fn new(kind: LitKind, raw: String) -> Self {
-        Lit { kind, raw }
-    }
-}
+// impl std::convert::From<lexer::LitKind> for LitKind {
+//     fn from(kind: lexer::LitKind) -> LitKind {
+//         match kind {
+//             lexer::LitKind::Int => LitKind::Int,
+//             lexer::LitKind::Float => LitKind::Float,
+//             lexer::LitKind::Bool(b) => LitKind::Bool(b),
+//             lexer::LitKind::String => LitKind::String,
+//         }
+//     }
+// }
+
+// #[derive(Debug, PartialEq)]
+// pub struct Lit {
+//     pub kind: LitKind,
+//     pub raw: String,
+// }
+
+// impl Lit {
+//     pub fn new(kind: LitKind, raw: String) -> Self {
+//         Lit { kind, raw }
+//     }
+// }
 
 #[derive(Debug)]
 pub struct Binary {

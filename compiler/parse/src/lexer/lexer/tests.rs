@@ -18,10 +18,25 @@ fn test_lexer() {
     test_token!(" \t", TokenKind::Spaces);
     test_token!("\n\n\n", TokenKind::Newlines);
     test_token!(r"// line comment", TokenKind::LineComment);
-    test_token!("12_3_", TokenKind::Lit(LitKind::Int));
-    test_token!("0b0__101", TokenKind::Lit(LitKind::Int));
-    test_token!("0o0_17", TokenKind::Lit(LitKind::Int));
-    test_token!("0xa0f", TokenKind::Lit(LitKind::Int));
+    test_token!(
+        "12_3___",
+        TokenKind::Lit(LitKind::Int {
+            base: IntBase::Decimal
+        })
+    );
+    test_token!(
+        "0b0__101",
+        TokenKind::Lit(LitKind::Int {
+            base: IntBase::Binary
+        })
+    );
+    test_token!(
+        "0o0_17",
+        TokenKind::Lit(LitKind::Int {
+            base: IntBase::Octal
+        })
+    );
+    test_token!("0xa0f", TokenKind::Lit(LitKind::Int { base: IntBase::Hex }));
     test_token!("20.23", TokenKind::Lit(LitKind::Float));
     test_token!("0.2__3", TokenKind::Lit(LitKind::Float));
     test_token_literal!(

@@ -36,34 +36,33 @@ impl Token {
     }
 
     pub fn is_lit(&self) -> bool {
-        match self.kind {
-            TokenKind::Lit(_) => true,
-            _ => false,
-        }
+        matches!(self.kind, TokenKind::Lit(_))
     }
 
     pub fn is_ident(&self) -> bool {
-        match self.kind {
-            TokenKind::Ident => true,
-            _ => false,
-        }
+        matches!(self.kind, TokenKind::Ident)
     }
 
     pub fn is_spaces(&self) -> bool {
-        match self.kind {
-            TokenKind::Spaces => true,
-            _ => false,
-        }
+        matches!(self.kind, TokenKind::Spaces)
     }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum LitKind {
-    Int,
+    Int { base: IntBase },
     Float,
     Bool(bool),
     // Char,
     String,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum IntBase {
+    Binary,
+    Octal,
+    Decimal,
+    Hex,
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -194,7 +194,12 @@ impl<'a> Lexer<'a> {
                 }
                 Token::new(TokenKind::Lit(LitKind::Float), raw)
             }
-            _ => Token::new(TokenKind::Lit(LitKind::Int), raw),
+            _ => Token::new(
+                TokenKind::Lit(LitKind::Int {
+                    base: IntBase::Decimal,
+                }),
+                raw,
+            ),
         };
         Result::Ok(tok)
     }
@@ -224,7 +229,12 @@ impl<'a> Lexer<'a> {
                 return Err(LitError::InvalidBinaryLit);
             }
         }
-        Ok(Token::new(TokenKind::Lit(LitKind::Int), raw))
+        Ok(Token::new(
+            TokenKind::Lit(LitKind::Int {
+                base: IntBase::Binary,
+            }),
+            raw,
+        ))
     }
 
     // octal_lit       ::= "0" ("o" | "O") { "_" } octal_digits
@@ -245,7 +255,12 @@ impl<'a> Lexer<'a> {
                 return Err(LitError::InvalidOctalLit);
             }
         }
-        Ok(Token::new(TokenKind::Lit(LitKind::Int), raw))
+        Ok(Token::new(
+            TokenKind::Lit(LitKind::Int {
+                base: IntBase::Octal,
+            }),
+            raw,
+        ))
     }
 
     // hex_lit       ::= "0" ("x" | "X") { "_" } hex_digits
@@ -262,7 +277,10 @@ impl<'a> Lexer<'a> {
         while self.peek() == '_' || is_hex_digit(self.peek()) {
             raw.push(self.bump());
         }
-        Ok(Token::new(TokenKind::Lit(LitKind::Int), raw))
+        Ok(Token::new(
+            TokenKind::Lit(LitKind::Int { base: IntBase::Hex }),
+            raw,
+        ))
     }
 
     fn scan_string(&mut self) -> Result<Token, LitError> {
