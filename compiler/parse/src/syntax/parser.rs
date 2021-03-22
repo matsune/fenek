@@ -1,7 +1,6 @@
 use super::ast::*;
 use crate::lexer::*;
 use std::collections::VecDeque;
-use std::str::Chars;
 use thiserror::Error;
 
 #[cfg(test)]
@@ -20,12 +19,24 @@ pub enum ParseError {
     InvalidVarDecl,
     #[error("invalid expr")]
     InvalidExpr,
+    #[error("constant {0} overflows int")]
+    OverflowInt(String),
+    #[error("invalid int literal {0}")]
+    InvalidInt(String),
+    #[error("invalid float literal {0}")]
+    InvalidFloat(String),
     #[error("unclosed expr")]
     UnclosedParenExpr,
 }
 
 pub struct Parser {
     tokens: VecDeque<Token>,
+}
+
+// https://github.com/rust-lang/rust/issues/22639
+fn is_parse_int_overflow_error(e: std::num::ParseIntError) -> bool {
+    let overflow_err = "4294967295000".parse::<u32>().err().unwrap();
+    e == overflow_err
 }
 
 impl Parser {
@@ -95,37 +106,59 @@ impl Parser {
         let expr = match tok.kind {
             TokenKind::Lit(kind) => {
                 let lit = match kind {
-                    LitKind::Int { base } => match base {
-                        IntBase::Binary => {
-                            let n = u64::from_str_radix(&tok.raw.replace("_", "")[2..], 2)
-                                .map_err(|_err| ParseError::InvalidExpr)?;
-                            Lit::Int(n)
+                    LitKind::Int { base } => {
+                        let n = match base {
+                            IntBase::Binary => {
+                                u64::from_str_radix(&tok.raw.replace("_", "")[2..], 2).map_err(
+                                    |err| {
+                                        if is_parse_int_overflow_error(err) {
+                                            ParseError::OverflowInt(tok.raw.clone())
+                                        } else {
+                                            ParseError::InvalidInt(tok.raw.clone())
+                                        }
+                                    },
+                                )?
+                            }
+                            IntBase::Octal => {
+                                u64::from_str_radix(&tok.raw.replace("_", "")[2..], 8).map_err(
+                                    |err| {
+                                        if is_parse_int_overflow_error(err) {
+                                            ParseError::OverflowInt(tok.raw.clone())
+                                        } else {
+                                            ParseError::InvalidInt(tok.raw.clone())
+                                        }
+                                    },
+                                )?
+                            }
+                            IntBase::Decimal => {
+                                tok.raw.replace("_", "").parse::<u64>().map_err(|err| {
+                                    if is_parse_int_overflow_error(err) {
+                                        ParseError::OverflowInt(tok.raw.clone())
+                                    } else {
+                                        ParseError::InvalidInt(tok.raw.clone())
+                                    }
+                                })?
+                            }
+                            IntBase::Hex => u64::from_str_radix(&tok.raw.replace("_", "")[2..], 16)
+                                .map_err(|err| {
+                                    if is_parse_int_overflow_error(err) {
+                                        ParseError::OverflowInt(tok.raw.clone())
+                                    } else {
+                                        ParseError::InvalidInt(tok.raw.clone())
+                                    }
+                                })?,
+                        };
+                        if n > i64::MAX as u64 {
+                            return Err(ParseError::OverflowInt(tok.raw));
                         }
-                        IntBase::Octal => {
-                            let n = u64::from_str_radix(&tok.raw.replace("_", "")[2..], 8)
-                                .map_err(|_err| ParseError::InvalidExpr)?;
-                            Lit::Int(n)
-                        }
-                        IntBase::Decimal => {
-                            let n = tok
-                                .raw
-                                .replace("_", "")
-                                .parse::<u64>()
-                                .map_err(|_err| ParseError::InvalidExpr)?;
-                            Lit::Int(n)
-                        }
-                        IntBase::Hex => {
-                            let n = u64::from_str_radix(&tok.raw.replace("_", "")[2..], 16)
-                                .map_err(|_err| ParseError::InvalidExpr)?;
-                            Lit::Int(n)
-                        }
-                    },
+                        Lit::Int(n)
+                    }
                     LitKind::Float => {
                         let f = tok
                             .raw
                             .replace("_", "")
                             .parse::<f64>()
-                            .map_err(|_err| ParseError::InvalidExpr)?;
+                            .map_err(|_err| ParseError::InvalidFloat(tok.raw.clone()))?;
                         Lit::Float(f)
                     }
                     LitKind::Bool(b) => Lit::Bool(b),

@@ -19,6 +19,7 @@ fn test_parse_expr_lit_int() {
     test!("12", 12);
     test!("123_456_789", 123456789);
     test!("100___", 100);
+    test!("9223372036854775807", 9223372036854775807);
 
     test!("0b0", 0);
     test!("0b_1_1", 0b11);
@@ -31,6 +32,24 @@ fn test_parse_expr_lit_int() {
     test!("0x0", 0);
     test!("0x4F", 0x4F);
     test!("0x2d_aa", 0x2daa);
+}
+
+#[test]
+fn test_parse_expr_lit_int_error() {
+    macro_rules! test {
+        ($s:expr, $err:expr) => {
+            let mut parser = make_parser!($s);
+            assert_eq!($err, parser.parse_expr().unwrap_err().to_string());
+        };
+    }
+    test!(
+        "9223372036854775808",
+        "constant 9223372036854775808 overflows int"
+    );
+    test!(
+        "0b11111111111111111111111111111111111111111111111111111111111111111111111111",
+        "constant 0b11111111111111111111111111111111111111111111111111111111111111111111111111 overflows int"
+    );
 }
 
 #[test]
