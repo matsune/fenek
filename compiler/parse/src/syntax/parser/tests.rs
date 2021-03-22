@@ -34,6 +34,19 @@ fn test_parse_expr_lit_int() {
 }
 
 #[test]
+fn test_parse_expr_lit_float() {
+    macro_rules! test {
+        ($s:expr, $num:expr) => {
+            let mut parser = make_parser!($s);
+            assert_eq!($num, parser.parse_expr().unwrap().into_lit_float());
+        };
+    }
+
+    test!("1.2", 1.2);
+    test!("1_.2_3_", 1.23);
+}
+
+#[test]
 fn test_parse_expr1() {
     let mut parser = make_parser!("1 + a * 2");
     let binary = parser.parse_expr().unwrap().into_binary();

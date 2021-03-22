@@ -120,8 +120,14 @@ impl Parser {
                             Lit::Int(n)
                         }
                     },
-                    // TODO:
-                    LitKind::Float => unimplemented!(),
+                    LitKind::Float => {
+                        let f = tok
+                            .raw
+                            .replace("_", "")
+                            .parse::<f64>()
+                            .map_err(|_err| ParseError::InvalidExpr)?;
+                        Lit::Float(f)
+                    }
                     LitKind::Bool(b) => Lit::Bool(b),
                     LitKind::String => Lit::String(tok.raw),
                 };

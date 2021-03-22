@@ -58,6 +58,13 @@ impl Expr {
         panic!("failed to unwrap as lit int")
     }
 
+    pub fn into_lit_float(self) -> f64 {
+        if let ExprKind::Lit(Lit::Float(f)) = self.kind {
+            return f;
+        }
+        panic!("failed to unwrap as lit int")
+    }
+
     pub fn into_lit_bool(self) -> bool {
         if let ExprKind::Lit(Lit::Bool(b)) = self.kind {
             return b;
