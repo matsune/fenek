@@ -56,6 +56,10 @@ impl Parser {
         self.tokens.pop_front()
     }
 
+    fn gen_id(&mut self) -> NodeId {
+        0
+    }
+
     pub fn parse_var_decl(&mut self) -> Result<VarDecl, ParseError> {
         self.bump_if(|tok| tok.kind == TokenKind::KwVar)
             .ok_or(ParseError::Expected("`var`"))?;
@@ -69,7 +73,11 @@ impl Parser {
             .ok_or(ParseError::Expected("`=`"))?;
         self.skip_spaces();
         let expr = self.parse_expr()?;
-        Ok(VarDecl::new(Ident::new(name.raw), expr))
+        Ok(VarDecl::new(
+            self.gen_id(),
+            Ident::new(self.gen_id(), name.raw),
+            expr,
+        ))
     }
 
     fn bump_if<Fn>(&mut self, pred: Fn) -> Option<Token>
@@ -86,13 +94,13 @@ impl Parser {
 
     pub fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
         let tok = self.peek().ok_or(ParseError::InvalidStmt)?;
-        let kind = match tok.kind {
-            TokenKind::KwVar => StmtKind::VarDecl(self.parse_var_decl()?),
-            _ => StmtKind::Expr(self.parse_expr()?),
+        let stmt = match tok.kind {
+            TokenKind::KwVar => self.parse_var_decl()?.into(),
+            _ => self.parse_expr()?.into(),
         };
         self.bump_if(|tok| tok.kind == TokenKind::Semi)
             .ok_or(ParseError::InvalidStmt)?;
-        Ok(Stmt::new(kind))
+        Ok(stmt)
     }
 
     pub fn parse_expr(&mut self) -> Result<Expr, ParseError> {
@@ -164,9 +172,9 @@ impl Parser {
                     LitKind::Bool(b) => Lit::Bool(b),
                     LitKind::String => Lit::String(tok.raw),
                 };
-                Expr::new_lit(lit)
+                Expr::Lit(lit)
             }
-            TokenKind::Ident => Expr::new_ident(tok.raw),
+            TokenKind::Ident => Ident::new(self.gen_id(), tok.raw).into(),
             TokenKind::LParen => {
                 let expr = self.parse_expr()?;
                 if self.peek().ok_or(ParseError::UnclosedParenExpr)?.kind != TokenKind::RParen {
@@ -191,7 +199,7 @@ impl Parser {
                     _ => unreachable!(),
                 };
                 let expr = self.parse_primary_expr()?;
-                Expr::new_unary(unary_op, expr)
+                Unary::new(self.gen_id(), unary_op, expr).into()
             }
             _ => self.parse_primary_expr()?,
         };
@@ -219,7 +227,7 @@ impl Parser {
         self.bump();
         self.skip_spaces();
         let rhs = self.parse_expr_prec(bin_op_kind.precedence())?;
-        let mut lhs = Expr::new_binary(bin_op_kind, lhs, rhs);
+        let mut lhs = Binary::new(self.gen_id(), bin_op_kind, lhs, rhs).into();
 
         loop {
             self.skip_spaces();
@@ -246,7 +254,7 @@ impl Parser {
             self.bump();
             self.skip_spaces();
             let rhs = self.parse_expr_prec(bin_op_kind.precedence())?;
-            lhs = Expr::new_binary(bin_op_kind, lhs, rhs);
+            lhs = Binary::new(self.gen_id(), bin_op_kind, lhs, rhs).into();
         }
     }
 
