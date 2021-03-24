@@ -2,6 +2,23 @@ use crate::lexer;
 
 pub type NodeId = u32;
 
+pub trait Node {
+    fn id(&self) -> NodeId;
+}
+
+macro_rules! implement_node {
+    ($($name:ident),*) => {
+        $(
+            impl Node for $name {
+                fn id(&self) -> NodeId {
+                    self.id
+                }
+            }
+        )*
+    }
+}
+implement_node!(VarDecl, Lit, Ident, Binary, Unary);
+
 macro_rules! Enum {
     ($name:ident [$({$Var:ident, $var:ident}),*]) => {
         #[derive(Debug)]
@@ -9,6 +26,16 @@ macro_rules! Enum {
             $(
                 $Var($Var),
             )*
+        }
+
+        impl Node for $name {
+            fn id(&self) -> NodeId {
+                match self {
+                    $(
+                        $name::$Var(v) => v.id(),
+                    )*
+                }
+            }
         }
 
         $(
