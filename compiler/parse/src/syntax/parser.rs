@@ -1,5 +1,5 @@
 use super::ast::*;
-use crate::lexer::*;
+use crate::lexer::{IntBase, LexerError, Token, TokenKind};
 use std::collections::VecDeque;
 use thiserror::Error;
 
@@ -31,6 +31,7 @@ pub enum ParseError {
 
 pub struct Parser {
     tokens: VecDeque<Token>,
+    id: NodeId,
 }
 
 // https://github.com/rust-lang/rust/issues/22639
@@ -41,7 +42,7 @@ fn is_parse_int_overflow_error(e: std::num::ParseIntError) -> bool {
 
 impl Parser {
     pub fn new(tokens: VecDeque<Token>) -> Self {
-        Parser { tokens }
+        Parser { tokens, id: 0 }
     }
 
     fn peek(&self) -> Option<&Token> {
@@ -57,7 +58,8 @@ impl Parser {
     }
 
     fn gen_id(&mut self) -> NodeId {
-        0
+        self.id += 1;
+        self.id
     }
 
     pub fn parse_var_decl(&mut self) -> Result<VarDecl, ParseError> {
@@ -113,8 +115,8 @@ impl Parser {
             .ok_or(ParseError::InvalidExpr)?;
         let expr = match tok.kind {
             TokenKind::Lit(kind) => {
-                let lit = match kind {
-                    LitKind::Int { base } => {
+                let kind = match kind {
+                    crate::lexer::LitKind::Int { base } => {
                         let n = match base {
                             IntBase::Binary => {
                                 u64::from_str_radix(&tok.raw.replace("_", "")[2..], 2).map_err(
@@ -159,20 +161,20 @@ impl Parser {
                         if n > i64::MAX as u64 {
                             return Err(ParseError::OverflowInt(tok.raw));
                         }
-                        Lit::Int(n)
+                        LitKind::Int(n)
                     }
-                    LitKind::Float => {
+                    crate::lexer::LitKind::Float => {
                         let f = tok
                             .raw
                             .replace("_", "")
                             .parse::<f64>()
                             .map_err(|_err| ParseError::InvalidFloat(tok.raw.clone()))?;
-                        Lit::Float(f)
+                        LitKind::Float(f)
                     }
-                    LitKind::Bool(b) => Lit::Bool(b),
-                    LitKind::String => Lit::String(tok.raw),
+                    crate::lexer::LitKind::Bool(b) => LitKind::Bool(b),
+                    crate::lexer::LitKind::String => LitKind::String(tok.raw),
                 };
-                Expr::Lit(lit)
+                Expr::Lit(Lit::new(self.gen_id(), kind))
             }
             TokenKind::Ident => Ident::new(self.gen_id(), tok.raw).into(),
             TokenKind::LParen => {

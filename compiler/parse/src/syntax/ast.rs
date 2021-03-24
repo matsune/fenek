@@ -53,8 +53,14 @@ impl Ident {
     }
 }
 
+#[derive(Debug)]
+pub struct Lit {
+    pub id: NodeId,
+    pub kind: LitKind,
+}
+
 #[derive(Debug, PartialEq)]
-pub enum Lit {
+pub enum LitKind {
     Int(u64),
     Float(f64),
     Bool(bool),
@@ -62,29 +68,33 @@ pub enum Lit {
 }
 
 impl Lit {
+    pub fn new(id: NodeId, kind: LitKind) -> Self {
+        Lit { id, kind }
+    }
+
     pub fn into_int(self) -> u64 {
-        if let Lit::Int(v) = self {
+        if let LitKind::Int(v) = self.kind {
             return v;
         }
         panic!()
     }
 
     pub fn into_float(self) -> f64 {
-        if let Lit::Float(v) = self {
+        if let LitKind::Float(v) = self.kind {
             return v;
         }
         panic!()
     }
 
     pub fn into_bool(self) -> bool {
-        if let Lit::Bool(v) = self {
+        if let LitKind::Bool(v) = self.kind {
             return v;
         }
         panic!()
     }
 
     pub fn into_string(self) -> String {
-        if let Lit::String(v) = self {
+        if let LitKind::String(v) = self.kind {
             return v;
         }
         panic!()
