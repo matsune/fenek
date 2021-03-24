@@ -28,11 +28,20 @@ impl TypeCk {
         self.ty_map.insert(id, ty);
     }
 
-    pub fn typecheck(&mut self, expr: &Expr) -> Result<()> {
+    pub fn typecheck_stmt(&mut self, stmt: &Stmt) -> Result<()> {
+        match stmt {
+            Stmt::Expr(expr) => self.typecheck_expr(expr),
+            Stmt::VarDecl(var_decl) => unimplemented!(),
+        }
+    }
+
+    pub fn typecheck_expr(&mut self, expr: &Expr) -> Result<()> {
         let ty = match expr {
             Expr::Lit(lit) => match lit.kind {
                 LitKind::Int(_) => Type::Int(IntTy::ISize),
-                _ => unimplemented!(),
+                LitKind::Float(_) => Type::Float(FloatTy::F64),
+                LitKind::Bool(_) => Type::Bool,
+                LitKind::String(_) => Type::String,
             },
             _ => unimplemented!(),
         };
