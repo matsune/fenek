@@ -29,7 +29,11 @@ pub enum ParseError {
     UnclosedParenExpr,
 }
 
-pub struct Parser {
+pub fn parse(tokens: VecDeque<Token>) -> Result<Stmt, ParseError> {
+    Parser::new(tokens).parse_stmt()
+}
+
+struct Parser {
     tokens: VecDeque<Token>,
     id: NodeId,
 }

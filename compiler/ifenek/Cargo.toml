@@ -1,5 +1,5 @@
 [package]
-name = "fenec"
+name = "ifenek"
 version = "0.1.0"
 authors = ["Yuma Matsune <yuma.matsune@gmail.com>"]
 edition = "2018"
@@ -7,6 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm11-0"] }
 parse = { path = "../parse" }
 typeck = { path = "../typeck" }
-codegen = { path = "../codegen" }
+

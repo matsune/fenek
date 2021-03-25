@@ -7,6 +7,15 @@ pub enum Type {
     String,
 }
 
+impl Type {
+    pub fn into_int_ty(self) -> IntTy {
+        match self {
+            Self::Int(v) => v,
+            _ => panic!(),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum IntTy {
     I8,

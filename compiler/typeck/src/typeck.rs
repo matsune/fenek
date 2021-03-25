@@ -11,11 +11,13 @@ mod tests;
 pub enum TypeCkError {
     #[error("already declared variable `{0}`")]
     AlreadyDeclaredVariable(String),
+    #[error("invalid binary types")]
+    InvalidBinaryTypes,
 }
 
 type Result<T> = std::result::Result<T, TypeCkError>;
 
-struct TypeCk {
+pub struct TypeCk {
     ty_map: HashMap<NodeId, Type>,
     scope_tree: ArenaTree<Scope>,
     scope_id: TreeNodeIdx,
@@ -73,9 +75,25 @@ impl TypeCk {
                 Some(Def::Var(var_def)) => var_def.ty,
                 None => unimplemented!(),
             },
+            Expr::Binary(binary) => self.typecheck_binary(binary)?,
             _ => unimplemented!(),
         };
         self.add_type(expr.id(), ty);
+        Ok(ty)
+    }
+
+    pub fn typecheck_binary(&mut self, binary: &Binary) -> Result<Type> {
+        let ty = match binary.op {
+            BinOp::Add => {
+                let lhs_ty = self.typecheck_expr(&binary.lhs)?;
+                let rhs_ty = self.typecheck_expr(&binary.rhs)?;
+                if lhs_ty != rhs_ty {
+                    return Err(TypeCkError::InvalidBinaryTypes);
+                }
+                lhs_ty
+            }
+            _ => unimplemented!("binary op"),
+        };
         Ok(ty)
     }
 

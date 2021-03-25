@@ -79,18 +79,23 @@ fn is_hex_digit(c: char) -> bool {
     }
 }
 
-pub struct Lexer<'a> {
+pub fn lex(source: &str) -> Result<Vec<Token>, LexerError> {
+    let mut chars = source.chars();
+    Lexer::new(&mut chars).lex()
+}
+
+struct Lexer<'a> {
     scanner: Scanner<'a>,
 }
 
 impl<'a> Lexer<'a> {
-    pub fn new(source: &'a mut Chars<'a>) -> Self {
+    fn new(source: &'a mut Chars<'a>) -> Self {
         Lexer {
             scanner: Scanner::new(source),
         }
     }
 
-    pub fn lex(&mut self) -> Result<Vec<Token>, LexerError> {
+    fn lex(&mut self) -> Result<Vec<Token>, LexerError> {
         let mut vec = Vec::new();
         loop {
             let tok = self.scan()?;
