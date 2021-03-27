@@ -54,11 +54,12 @@ impl<'ctx> CodeGen<'ctx> {
         self.typeck.typecheck_stmt(&stmt)?;
         match stmt {
             ast::Stmt::VarDecl(var_decl) => {
-                let val = self.jit_compile_var_decl(var_decl)?;
+                let val = self.jit_compile_var_decl(var_decl);
                 self.print_val(val);
             }
             ast::Stmt::Expr(expr) => {
-                unimplemented!()
+                let val = self.jit_compile_expr(&expr);
+                self.print_val(val);
             }
         }
         Ok(())
@@ -72,28 +73,16 @@ impl<'ctx> CodeGen<'ctx> {
         println!();
     }
 
-    fn jit_compile_var_decl(
-        &mut self,
-        var_decl: ast::VarDecl,
-    ) -> Result<BasicValueEnum<'ctx>, Box<dyn Error>> {
-        let expr_val = self.jit_compile_expr(&var_decl.init)?;
-        let def = self
-            .typeck
-            .current_scope()
-            .lookup(&var_decl.name.raw)
-            .unwrap()
-            .into_var_def();
+    fn jit_compile_var_decl(&mut self, var_decl: ast::VarDecl) -> BasicValueEnum<'ctx> {
+        let expr_val = self.jit_compile_expr(&var_decl.init);
         let ptr_value = self
             .builder
             .build_alloca(expr_val.get_type(), &var_decl.name.raw);
         self.builder.build_store(ptr_value, expr_val);
-        Ok(expr_val)
+        expr_val
     }
 
-    fn jit_compile_expr(
-        &mut self,
-        expr: &ast::Expr,
-    ) -> Result<BasicValueEnum<'ctx>, Box<dyn Error>> {
+    fn jit_compile_expr(&mut self, expr: &ast::Expr) -> BasicValueEnum<'ctx> {
         let value = match expr {
             ast::Expr::Lit(lit) => match lit.kind {
                 ast::LitKind::Int(v) => {
@@ -110,7 +99,7 @@ impl<'ctx> CodeGen<'ctx> {
                 unimplemented!()
             }
         };
-        Ok(value)
+        value
     }
 
     fn get_llvm_ty(&self, ty: &ty::Type) -> AnyTypeEnum<'ctx> {
