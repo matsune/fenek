@@ -1,5 +1,5 @@
 use super::ast::*;
-use crate::lexer::{IntBase, LexerError, Token, TokenKind};
+use crate::lex::{IntBase, LexerError, Token, TokenKind};
 use std::collections::VecDeque;
 use thiserror::Error;
 
@@ -120,7 +120,7 @@ impl Parser {
         let expr = match tok.kind {
             TokenKind::Lit(kind) => {
                 let kind = match kind {
-                    crate::lexer::LitKind::Int { base } => {
+                    crate::lex::LitKind::Int { base } => {
                         let n = match base {
                             IntBase::Binary => {
                                 u64::from_str_radix(&tok.raw.replace("_", "")[2..], 2).map_err(
@@ -167,7 +167,7 @@ impl Parser {
                         }
                         LitKind::Int(n)
                     }
-                    crate::lexer::LitKind::Float => {
+                    crate::lex::LitKind::Float => {
                         let f = tok
                             .raw
                             .replace("_", "")
@@ -175,8 +175,8 @@ impl Parser {
                             .map_err(|_err| ParseError::InvalidFloat(tok.raw.clone()))?;
                         LitKind::Float(f)
                     }
-                    crate::lexer::LitKind::Bool(b) => LitKind::Bool(b),
-                    crate::lexer::LitKind::String => LitKind::String(tok.raw),
+                    crate::lex::LitKind::Bool(b) => LitKind::Bool(b),
+                    crate::lex::LitKind::String => LitKind::String(tok.raw),
                 };
                 Expr::Lit(Lit::new(self.gen_id(), kind))
             }

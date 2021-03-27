@@ -44,17 +44,11 @@ fn is_whitespace(c: char) -> bool {
 
 /// '0' ~ '9'
 fn is_num(c: char) -> bool {
-    match c {
-        '0'..='9' => true,
-        _ => false,
-    }
+    matches!(c, '0'..='9')
 }
 
 fn is_alphabet(c: char) -> bool {
-    match c {
-        'a'..='z' | 'A'..='Z' => true,
-        _ => false,
-    }
+    matches!(c, 'a'..='z' | 'A'..='Z')
 }
 
 fn is_alphanumeric(c: char) -> bool {
@@ -66,17 +60,11 @@ fn is_binary_digit(c: char) -> bool {
 }
 
 fn is_octal_digit(c: char) -> bool {
-    match c {
-        '0'..='7' => true,
-        _ => false,
-    }
+    matches!(c, '0'..='7')
 }
 
 fn is_hex_digit(c: char) -> bool {
-    match c {
-        '0'..='9' | 'A'..='F' | 'a'..='f' => true,
-        _ => false,
-    }
+    matches!(c, '0'..='9' | 'A'..='F' | 'a'..='f' )
 }
 
 pub fn lex(source: &str) -> Result<Vec<Token>, LexerError> {

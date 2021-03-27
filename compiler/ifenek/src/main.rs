@@ -40,7 +40,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn compile(&mut self, input: &str) -> Result<(), Box<dyn Error>> {
-        let tokens = parse::lexer::lex(&input)?;
+        let tokens = parse::lex::lex(&input)?;
         let stmt = parse::syntax::parser::parse(tokens.into())?;
         self.typeck.typecheck_stmt(&stmt)?;
         match stmt {

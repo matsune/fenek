@@ -4,14 +4,12 @@ use super::*;
 fn test_lexer() {
     macro_rules! test_token {
         ($s:expr, $kind:expr) => {
-            let tok = Lexer::new(&mut $s.chars()).scan().unwrap();
-            assert_eq!(tok, Token::new($kind, $s.into()));
+            assert_eq!(lex(&$s).unwrap()[0], Token::new($kind, $s.into()));
         };
     }
     macro_rules! test_token_literal {
         ($s:expr, $kind:expr, $lit:expr) => {
-            let tok = Lexer::new(&mut $s.chars()).scan().unwrap();
-            assert_eq!(tok, Token::new($kind, $lit.into()));
+            assert_eq!(lex(&$s).unwrap()[0], Token::new($kind, $lit.into()));
         };
     }
 
@@ -87,7 +85,7 @@ fn test_lexer_error() {
 
     macro_rules! test_literal_error {
         ($s:expr, $error:expr) => {
-            let err = Lexer::new(&mut $s.chars()).scan().unwrap_err();
+            let err = lex(&$s).unwrap_err();
             assert_eq!(err.to_string(), $error.to_string());
         };
     }

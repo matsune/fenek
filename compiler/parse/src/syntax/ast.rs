@@ -1,5 +1,3 @@
-use crate::lexer;
-
 pub type NodeId = u32;
 
 pub trait Node {

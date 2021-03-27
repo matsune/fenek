@@ -43,4 +43,25 @@ fn test_typeck() {
             .ty,
         Type::Int(IntTy::ISize)
     );
+
+    let mut typeck = TypeCk::new();
+    let lhs = Lit::new(1, LitKind::Int(1)).into();
+    let rhs = Lit::new(2, LitKind::Int(2)).into();
+    let expr = Expr::Binary(Binary::new(0, BinOp::Add, lhs, rhs));
+    assert_eq!(
+        typeck.typecheck_expr(&expr).unwrap(),
+        Type::Int(IntTy::ISize)
+    );
+}
+
+#[test]
+fn test_typeck_error() {
+    let mut typeck = TypeCk::new();
+    let lhs = Lit::new(1, LitKind::Int(1)).into();
+    let rhs = Lit::new(2, LitKind::Bool(true)).into();
+    let expr = Expr::Binary(Binary::new(0, BinOp::Add, lhs, rhs));
+    assert_eq!(
+        typeck.typecheck_expr(&expr).unwrap_err().to_string(),
+        "invalid binary types"
+    );
 }

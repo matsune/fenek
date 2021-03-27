@@ -1,9 +1,8 @@
 use super::*;
-use crate::lexer::Lexer;
 
 macro_rules! make_parser {
     ($s:expr) => {
-        Parser::new(Lexer::new(&mut $s.chars()).lex().unwrap().into())
+        Parser::new(crate::lex::lex(&$s).unwrap().into())
     };
 }
 
@@ -123,7 +122,7 @@ fn test_parse_expr_error() {
     macro_rules! parse_error {
         ($s:expr,$e:expr) => {
             assert_eq!(
-                Parser::new(Lexer::new(&mut $s.chars()).lex().unwrap().into())
+                Parser::new(crate::lex::lex(&$s).unwrap().into())
                     .parse_expr()
                     .unwrap_err()
                     .to_string(),

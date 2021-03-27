@@ -76,7 +76,7 @@ impl TypeCk {
                 None => unimplemented!(),
             },
             Expr::Binary(binary) => self.typecheck_binary(binary)?,
-            _ => unimplemented!(),
+            Expr::Unary(unary) => self.typecheck_unary(unary)?,
         };
         self.add_type(expr.id(), ty);
         Ok(ty)
@@ -95,6 +95,22 @@ impl TypeCk {
             _ => unimplemented!("binary op"),
         };
         Ok(ty)
+    }
+
+    pub fn typecheck_unary(&mut self, unary: &Unary) -> Result<Type> {
+        unimplemented!()
+        // let ty = match binary.op {
+        //     BinOp::Add => {
+        //         let lhs_ty = self.typecheck_expr(&binary.lhs)?;
+        //         let rhs_ty = self.typecheck_expr(&binary.rhs)?;
+        //         if lhs_ty != rhs_ty {
+        //             return Err(TypeCkError::InvalidBinaryTypes);
+        //         }
+        //         lhs_ty
+        //     }
+        //     _ => unimplemented!("binary op"),
+        // };
+        // Ok(ty)
     }
 
     pub fn get_type(&mut self, id: NodeId) -> Option<&Type> {
