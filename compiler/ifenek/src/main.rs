@@ -8,6 +8,8 @@ use inkwell::types::{AnyTypeEnum, BasicType, BasicTypeEnum};
 use inkwell::values::{AnyValueEnum, BasicValueEnum};
 use inkwell::OptimizationLevel;
 use parse::syntax::ast;
+use rustyline::error::ReadlineError;
+use rustyline::Editor;
 use std::error::Error;
 use std::io::{self, Write};
 use typeck::ty;
@@ -49,7 +51,7 @@ impl<'ctx> CodeGen<'ctx> {
     fn jit_compile(&mut self, input: &str) -> Result<(), Box<dyn Error>> {
         let tokens = parse::lexer::lex(&input)?;
         let stmt = parse::syntax::parser::parse(tokens.into())?;
-        self.typeck.typecheck_stmt(&stmt).unwrap();
+        self.typeck.typecheck_stmt(&stmt)?;
         match stmt {
             ast::Stmt::VarDecl(var_decl) => {
                 let val = self.jit_compile_var_decl(var_decl)?;
@@ -134,38 +136,48 @@ impl<'ctx> CodeGen<'ctx> {
 }
 
 struct Repl<'ctx> {
+    rl: Editor<()>,
+    history_file: String,
     codegen: CodeGen<'ctx>,
 }
 
 impl<'ctx> Repl<'ctx> {
-    fn new(codegen: CodeGen<'ctx>) -> Self {
-        Self { codegen }
-    }
-
-    fn read_line(&self) -> std::io::Result<String> {
-        print!("> ");
-        io::stdout().flush().unwrap();
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-        Ok(input)
+    fn new(history_file: String, codegen: CodeGen<'ctx>) -> Self {
+        Self {
+            rl: Editor::new(),
+            history_file,
+            codegen,
+        }
     }
 
     fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        self.rl.load_history(&self.history_file);
+
         self.codegen.add_entry();
         loop {
-            let input = self.read_line()?;
-            match self.codegen.jit_compile(&input) {
-                Ok(()) => {}
-                Err(err) => println!("error: {}", err),
+            let readline = self.rl.readline(">> ");
+            match readline {
+                Ok(line) => {
+                    self.rl.add_history_entry(line.as_str());
+                    if let Err(err) = self.codegen.jit_compile(&line) {
+                        println!("error: {}", err);
+                    }
+                }
+                Err(ReadlineError::Eof) | Err(ReadlineError::Interrupted) => {
+                    break;
+                }
+                Err(err) => return Err(Box::new(err)),
             }
         }
+        self.rl.save_history(&self.history_file);
+        println!("End");
+        Ok(())
     }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let context = Context::create();
     let codegen = CodeGen::create(&context, "ifenek")?;
-    Repl::new(codegen).run()?;
+    Repl::new(".ifenek.history".to_string(), codegen).run()?;
     Ok(())
 }
