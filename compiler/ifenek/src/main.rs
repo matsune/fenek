@@ -2,16 +2,12 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
-use inkwell::support::LLVMString;
-use inkwell::targets::{InitializationConfig, Target};
 use inkwell::types::{AnyTypeEnum, BasicType, BasicTypeEnum};
 use inkwell::values::{AnyValueEnum, BasicValueEnum};
-use inkwell::OptimizationLevel;
 use parse::syntax::ast;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use std::error::Error;
-use std::io::{self, Write};
 use typeck::ty;
 use typeck::typeck::TypeCk;
 
@@ -19,25 +15,20 @@ struct CodeGen<'ctx> {
     context: &'ctx Context,
     module: Module<'ctx>,
     builder: Builder<'ctx>,
-    engine: ExecutionEngine<'ctx>,
     typeck: TypeCk,
 }
 
-type MainFunc = unsafe extern "C" fn() -> i64;
-
 impl<'ctx> CodeGen<'ctx> {
-    fn create(context: &'ctx Context, module: &str) -> Result<Self, LLVMString> {
+    fn create(context: &'ctx Context, module: &str) -> Self {
         let module = context.create_module(module);
         let builder = context.create_builder();
-        let engine = module.create_jit_execution_engine(OptimizationLevel::None)?;
         let typeck = TypeCk::new();
-        Ok(Self {
+        Self {
             context,
             module,
             builder,
-            engine,
             typeck,
-        })
+        }
     }
 
     fn add_entry(&mut self) {
@@ -48,17 +39,17 @@ impl<'ctx> CodeGen<'ctx> {
         self.builder.position_at_end(basic_block);
     }
 
-    fn jit_compile(&mut self, input: &str) -> Result<(), Box<dyn Error>> {
+    fn compile(&mut self, input: &str) -> Result<(), Box<dyn Error>> {
         let tokens = parse::lexer::lex(&input)?;
         let stmt = parse::syntax::parser::parse(tokens.into())?;
         self.typeck.typecheck_stmt(&stmt)?;
         match stmt {
             ast::Stmt::VarDecl(var_decl) => {
-                let val = self.jit_compile_var_decl(var_decl);
+                let val = self.compile_var_decl(var_decl);
                 self.print_val(val);
             }
             ast::Stmt::Expr(expr) => {
-                let val = self.jit_compile_expr(&expr);
+                let val = self.compile_expr(&expr);
                 self.print_val(val);
             }
         }
@@ -73,8 +64,8 @@ impl<'ctx> CodeGen<'ctx> {
         println!();
     }
 
-    fn jit_compile_var_decl(&mut self, var_decl: ast::VarDecl) -> BasicValueEnum<'ctx> {
-        let expr_val = self.jit_compile_expr(&var_decl.init);
+    fn compile_var_decl(&mut self, var_decl: ast::VarDecl) -> BasicValueEnum<'ctx> {
+        let expr_val = self.compile_expr(&var_decl.init);
         let ptr_value = self
             .builder
             .build_alloca(expr_val.get_type(), &var_decl.name.raw);
@@ -82,7 +73,7 @@ impl<'ctx> CodeGen<'ctx> {
         expr_val
     }
 
-    fn jit_compile_expr(&mut self, expr: &ast::Expr) -> BasicValueEnum<'ctx> {
+    fn compile_expr(&mut self, expr: &ast::Expr) -> BasicValueEnum<'ctx> {
         let value = match expr {
             ast::Expr::Lit(lit) => match lit.kind {
                 ast::LitKind::Int(v) => {
@@ -102,71 +93,53 @@ impl<'ctx> CodeGen<'ctx> {
         value
     }
 
-    fn get_llvm_ty(&self, ty: &ty::Type) -> AnyTypeEnum<'ctx> {
-        match ty {
-            ty::Type::Void => self.context.void_type().into(),
-            ty::Type::Int(int_ty) => match int_ty {
-                ty::IntTy::ISize => self.context.i64_type().into(),
-                _ => unimplemented!(),
-            },
-            _ => unimplemented!(),
-        }
-    }
+    // fn get_llvm_ty(&self, ty: &ty::Type) -> AnyTypeEnum<'ctx> {
+    //     match ty {
+    //         ty::Type::Void => self.context.void_type().into(),
+    //         ty::Type::Int(int_ty) => match int_ty {
+    //             ty::IntTy::ISize => self.context.i64_type().into(),
+    //             _ => unimplemented!(),
+    //         },
+    //         _ => unimplemented!(),
+    //     }
+    // }
 
-    fn get_llvm_basic_ty(&self, ty: &ty::Type) -> Box<dyn BasicType<'ctx> + 'ctx> {
-        match ty {
-            ty::Type::Int(int_ty) => match int_ty {
-                ty::IntTy::ISize => Box::new(self.context.i64_type()),
-                _ => unimplemented!(),
-            },
-            _ => unimplemented!(),
-        }
-    }
-}
-
-struct Repl<'ctx> {
-    rl: Editor<()>,
-    history_file: String,
-    codegen: CodeGen<'ctx>,
-}
-
-impl<'ctx> Repl<'ctx> {
-    fn new(history_file: String, codegen: CodeGen<'ctx>) -> Self {
-        Self {
-            rl: Editor::new(),
-            history_file,
-            codegen,
-        }
-    }
-
-    fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        self.rl.load_history(&self.history_file);
-
-        self.codegen.add_entry();
-        loop {
-            let readline = self.rl.readline(">> ");
-            match readline {
-                Ok(line) => {
-                    self.rl.add_history_entry(line.as_str());
-                    if let Err(err) = self.codegen.jit_compile(&line) {
-                        println!("error: {}", err);
-                    }
-                }
-                Err(ReadlineError::Eof) | Err(ReadlineError::Interrupted) => {
-                    break;
-                }
-                Err(err) => return Err(Box::new(err)),
-            }
-        }
-        self.rl.save_history(&self.history_file);
-        println!("End");
-        Ok(())
-    }
+    // fn get_llvm_basic_ty(&self, ty: &ty::Type) -> Box<dyn BasicType<'ctx> + 'ctx> {
+    //     match ty {
+    //         ty::Type::Int(int_ty) => match int_ty {
+    //             ty::IntTy::ISize => Box::new(self.context.i64_type()),
+    //             _ => unimplemented!(),
+    //         },
+    //         _ => unimplemented!(),
+    //     }
+    // }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let history_file = ".ifenek.history";
     let context = Context::create();
-    let codegen = CodeGen::create(&context, "ifenek")?;
-    Repl::new(".ifenek.history".to_string(), codegen).run()?;
+    let mut codegen = CodeGen::create(&context, "ifenek");
+    let mut rl: Editor<()> = Editor::new();
+    if rl.load_history(&history_file).is_err() {}
+
+    codegen.add_entry();
+    loop {
+        let readline = rl.readline(">> ");
+        match readline {
+            Ok(line) => {
+                rl.add_history_entry(line.as_str());
+                if let Err(err) = codegen.compile(&line) {
+                    println!("error: {}", err);
+                }
+            }
+            Err(ReadlineError::Eof) | Err(ReadlineError::Interrupted) => {
+                break;
+            }
+            Err(err) => return Err(Box::new(err)),
+        }
+    }
+
+    if rl.save_history(&history_file).is_err() {}
+    println!("End");
     Ok(())
 }
