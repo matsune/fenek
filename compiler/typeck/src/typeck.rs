@@ -1,7 +1,7 @@
 use crate::scope::*;
 use crate::tree::{ArenaTree, TreeNode, TreeNodeIdx};
 use crate::ty::*;
-use parse::syntax::ast::*;
+use parse::ast::*;
 use std::collections::HashMap;
 use thiserror::Error;
 #[cfg(test)]

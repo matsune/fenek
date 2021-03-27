@@ -4,7 +4,8 @@ use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
 use inkwell::types::{AnyTypeEnum, BasicType, BasicTypeEnum};
 use inkwell::values::{AnyValueEnum, BasicValueEnum};
-use parse::syntax::ast;
+use parse::ast;
+use printer;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use std::error::Error;
@@ -40,17 +41,21 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn compile(&mut self, input: &str) -> Result<(), Box<dyn Error>> {
-        let tokens = parse::lex::lex(&input)?;
-        let stmt = parse::syntax::parser::parse(tokens.into())?;
+        let stmt = parse::parse(&input)?;
         self.typeck.typecheck_stmt(&stmt)?;
-        match stmt {
-            ast::Stmt::VarDecl(var_decl) => {
-                let val = self.compile_var_decl(var_decl);
-                self.print_val(val);
-            }
-            ast::Stmt::Expr(expr) => {
-                let val = self.compile_expr(&expr);
-                self.print_val(val);
+
+        if cfg!(feature = "print") {
+            printer::print(&stmt)?;
+        } else {
+            match stmt {
+                ast::Stmt::VarDecl(var_decl) => {
+                    let val = self.compile_var_decl(var_decl);
+                    self.print_val(val);
+                }
+                ast::Stmt::Expr(expr) => {
+                    let val = self.compile_expr(&expr);
+                    self.print_val(val);
+                }
             }
         }
         Ok(())

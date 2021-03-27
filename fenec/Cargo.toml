@@ -1,0 +1,12 @@
+[package]
+name = "fenec"
+version = "0.1.0"
+authors = ["Yuma Matsune <yuma.matsune@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+parse = { path = "../compiler/parse" }
+typeck = { path = "../compiler/typeck" }
+codegen = { path = "../compiler/codegen" }

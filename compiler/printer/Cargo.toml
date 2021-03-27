@@ -1,5 +1,5 @@
 [package]
-name = "fenec"
+name = "printer"
 version = "0.1.0"
 authors = ["Yuma Matsune <yuma.matsune@gmail.com>"]
 edition = "2018"
@@ -7,6 +7,5 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ptree = "0.3.2"
 parse = { path = "../parse" }
-typeck = { path = "../typeck" }
-codegen = { path = "../codegen" }

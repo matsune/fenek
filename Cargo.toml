@@ -1,5 +1,5 @@
 [workspace]
 members = [
-  "compiler/fenec",
-  "compiler/ifenek"
+  "fenec",
+  "ifenek"
 ]
