@@ -68,43 +68,43 @@ fn test_parse_expr_lit_float() {
 fn test_parse_expr1() {
     let mut parser = make_parser!("1 + a * 2");
     let binary = parser.parse_expr().unwrap().into_binary();
-    assert_eq!(binary.op, BinOp::Add);
+    assert_eq!(binary.op.symbol, "+");
     assert_eq!(binary.lhs.into_lit().into_int(), 1);
     let rhs = binary.rhs.into_binary();
-    assert_eq!(rhs.op, BinOp::Mul);
+    assert_eq!(rhs.op.symbol, "*");
     assert_eq!(rhs.lhs.into_ident().raw, "a");
     assert_eq!(rhs.rhs.into_lit().into_int(), 2);
 
     let mut parser = make_parser!("1 * a - 2");
     let binary = parser.parse_expr().unwrap().into_binary();
-    assert_eq!(binary.op, BinOp::Sub);
+    assert_eq!(binary.op.symbol, "-");
     let lhs = binary.lhs.into_binary();
-    assert_eq!(lhs.op, BinOp::Mul);
+    assert_eq!(lhs.op.symbol, "*");
     assert_eq!(lhs.lhs.into_lit().into_int(), 1);
     assert_eq!(lhs.rhs.into_ident().raw, "a");
     assert_eq!(binary.rhs.into_lit().into_int(), 2);
 
     let mut parser = make_parser!("b - 3 * a / 2");
     let binary = parser.parse_expr().unwrap().into_binary();
-    assert_eq!(binary.op, BinOp::Sub);
+    assert_eq!(binary.op.symbol, "-");
     assert_eq!(binary.lhs.into_ident().raw, "b");
     let rhs_binary = binary.rhs.into_binary();
-    assert_eq!(rhs_binary.op, BinOp::Mul);
+    assert_eq!(rhs_binary.op.symbol, "*");
     assert_eq!(rhs_binary.lhs.into_lit().into_int(), 3);
     let rhs_lhs_binary = rhs_binary.rhs.into_binary();
-    assert_eq!(rhs_lhs_binary.op, BinOp::Div);
+    assert_eq!(rhs_lhs_binary.op.symbol, "/");
     assert_eq!(rhs_lhs_binary.lhs.into_ident().raw, "a");
     assert_eq!(rhs_lhs_binary.rhs.into_lit().into_int(), 2);
 
     let mut parser = make_parser!("((4 - 3) * 1) + 2");
     let binary = parser.parse_expr().unwrap().into_binary();
-    assert_eq!(binary.op, BinOp::Add);
+    assert_eq!(binary.op.symbol, "+");
     assert_eq!(binary.rhs.into_lit().into_int(), 2);
     let lhs_binary = binary.lhs.into_binary();
-    assert_eq!(lhs_binary.op, BinOp::Mul);
+    assert_eq!(lhs_binary.op.symbol, "*");
     assert_eq!(lhs_binary.rhs.into_lit().into_int(), 1);
     let lhs_lhs_binary = lhs_binary.lhs.into_binary();
-    assert_eq!(lhs_lhs_binary.op, BinOp::Sub);
+    assert_eq!(lhs_lhs_binary.op.symbol, "-");
     assert_eq!(lhs_lhs_binary.lhs.into_lit().into_int(), 4);
     assert_eq!(lhs_lhs_binary.rhs.into_lit().into_int(), 3);
 
@@ -112,7 +112,7 @@ fn test_parse_expr1() {
     let unary = parser.parse_expr().unwrap().into_unary();
     assert_eq!(unary.op, UnaryOp::Not);
     let binary = unary.expr.into_binary();
-    assert_eq!(binary.op, BinOp::Sub);
+    assert_eq!(binary.op.symbol, "-");
     assert_eq!(binary.lhs.into_lit().into_int(), 4);
     assert_eq!(binary.rhs.into_lit().into_int(), 3);
 }

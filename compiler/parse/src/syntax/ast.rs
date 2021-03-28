@@ -145,25 +145,15 @@ impl Binary {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum BinOp {
-    /// +
-    Add,
-    /// -
-    Sub,
-    /// *
-    Mul,
-    /// /
-    Div,
+#[derive(Debug, Clone)]
+pub struct BinOp {
+    pub symbol: String,
+    pub precedence: u8,
 }
 
 impl BinOp {
-    pub fn precedence(&self) -> u8 {
-        use BinOp::*;
-        match self {
-            Add | Sub => 10,
-            Mul | Div => 20,
-        }
+    pub fn new(symbol: String, precedence: u8) -> Self {
+        Self { symbol, precedence }
     }
 }
 

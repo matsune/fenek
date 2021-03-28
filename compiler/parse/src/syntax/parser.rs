@@ -1,6 +1,6 @@
 use super::ast::*;
 use crate::lex::{IntBase, LexerError, Token, TokenKind};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use thiserror::Error;
 
 #[cfg(test)]
@@ -27,6 +27,8 @@ pub enum ParseError {
     InvalidFloat(String),
     #[error("unclosed expr")]
     UnclosedParenExpr,
+    #[error("invalid binary op {0}")]
+    InvalidBinOp(String),
 }
 
 pub fn parse(tokens: VecDeque<Token>) -> Result<Stmt, ParseError> {
@@ -35,6 +37,7 @@ pub fn parse(tokens: VecDeque<Token>) -> Result<Stmt, ParseError> {
 
 struct Parser {
     tokens: VecDeque<Token>,
+    binop_map: HashMap<String, BinOp>,
     id: NodeId,
 }
 
@@ -46,7 +49,16 @@ fn is_parse_int_overflow_error(e: std::num::ParseIntError) -> bool {
 
 impl Parser {
     pub fn new(tokens: VecDeque<Token>) -> Self {
-        Parser { tokens, id: 0 }
+        let mut binop_map = HashMap::new();
+        binop_map.insert("+".to_string(), BinOp::new("+".to_string(), 10));
+        binop_map.insert("-".to_string(), BinOp::new("-".to_string(), 10));
+        binop_map.insert("*".to_string(), BinOp::new("*".to_string(), 20));
+        binop_map.insert("/".to_string(), BinOp::new("/".to_string(), 20));
+        Parser {
+            tokens,
+            binop_map,
+            id: 0,
+        }
     }
 
     fn peek(&self) -> Option<&Token> {
@@ -194,6 +206,39 @@ impl Parser {
         Ok(expr)
     }
 
+    fn peek_binop(&mut self) -> Option<&BinOp> {
+        let mut idx = 0;
+        let mut symbol = String::new();
+        loop {
+            match self.tokens.get(idx) {
+                Some(tok)
+                    if matches!(
+                        tok.kind,
+                        TokenKind::Plus | TokenKind::Minus | TokenKind::Star | TokenKind::Slash
+                    ) =>
+                {
+                    symbol.push_str(&tok.raw);
+                    idx += 1;
+                }
+                _ => break,
+            }
+        }
+        self.binop_map.get(&symbol)
+    }
+
+    fn parse_binop(&mut self) -> Option<&BinOp> {
+        let mut symbol = String::new();
+        while let Some(tok) = self.bump_if(|tok| {
+            matches!(
+                tok.kind,
+                TokenKind::Plus | TokenKind::Minus | TokenKind::Star | TokenKind::Slash
+            )
+        }) {
+            symbol.push_str(&tok.raw);
+        }
+        self.binop_map.get(&symbol)
+    }
+
     fn parse_expr_prec(&mut self, last_prec: u8) -> Result<Expr, ParseError> {
         let tok = self.peek().ok_or(ParseError::InvalidExpr)?;
         let lhs = match tok.kind {
@@ -210,57 +255,23 @@ impl Parser {
             _ => self.parse_primary_expr()?,
         };
         self.skip_spaces();
-        let bin_op_kind = match self.peek() {
-            Some(tok)
-                if tok.kind == TokenKind::Plus
-                    || tok.kind == TokenKind::Minus
-                    || tok.kind == TokenKind::Star
-                    || tok.kind == TokenKind::Slash =>
-            {
-                match tok.kind {
-                    TokenKind::Plus => BinOp::Add,
-                    TokenKind::Minus => BinOp::Sub,
-                    TokenKind::Star => BinOp::Mul,
-                    TokenKind::Slash => BinOp::Div,
-                    _ => return Ok(lhs),
-                }
-            }
+        let bin_op = match self.peek_binop() {
+            Some(op) if op.precedence >= last_prec => self.parse_binop().unwrap().clone(),
             _ => return Ok(lhs),
         };
-        if bin_op_kind.precedence() < last_prec {
-            return Ok(lhs);
-        }
-        self.bump();
         self.skip_spaces();
-        let rhs = self.parse_expr_prec(bin_op_kind.precedence())?;
-        let mut lhs = Binary::new(self.gen_id(), bin_op_kind, lhs, rhs).into();
+        let rhs = self.parse_expr_prec(bin_op.precedence)?;
+        let mut lhs = Binary::new(self.gen_id(), bin_op, lhs, rhs).into();
 
         loop {
             self.skip_spaces();
-            let bin_op_kind = match self.peek() {
-                Some(tok)
-                    if tok.kind == TokenKind::Plus
-                        || tok.kind == TokenKind::Minus
-                        || tok.kind == TokenKind::Star
-                        || tok.kind == TokenKind::Slash =>
-                {
-                    match tok.kind {
-                        TokenKind::Plus => BinOp::Add,
-                        TokenKind::Minus => BinOp::Sub,
-                        TokenKind::Star => BinOp::Mul,
-                        TokenKind::Slash => BinOp::Div,
-                        _ => return Ok(lhs),
-                    }
-                }
+            let bin_op = match self.peek_binop() {
+                Some(op) if op.precedence >= last_prec => self.parse_binop().unwrap().clone(),
                 _ => return Ok(lhs),
             };
-            if bin_op_kind.precedence() < last_prec {
-                return Ok(lhs);
-            }
-            self.bump();
             self.skip_spaces();
-            let rhs = self.parse_expr_prec(bin_op_kind.precedence())?;
-            lhs = Binary::new(self.gen_id(), bin_op_kind, lhs, rhs).into();
+            let rhs = self.parse_expr_prec(bin_op.precedence)?;
+            lhs = Binary::new(self.gen_id(), bin_op, lhs, rhs).into();
         }
     }
 

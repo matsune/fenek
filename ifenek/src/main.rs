@@ -5,7 +5,6 @@ use inkwell::module::Module;
 use inkwell::types::{AnyTypeEnum, BasicType, BasicTypeEnum};
 use inkwell::values::{AnyValueEnum, BasicValueEnum};
 use parse::ast;
-use printer;
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use std::error::Error;

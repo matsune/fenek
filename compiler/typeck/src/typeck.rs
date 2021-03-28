@@ -83,18 +83,17 @@ impl TypeCk {
     }
 
     pub fn typecheck_binary(&mut self, binary: &Binary) -> Result<Type> {
-        let ty = match binary.op {
-            BinOp::Add => {
-                let lhs_ty = self.typecheck_expr(&binary.lhs)?;
-                let rhs_ty = self.typecheck_expr(&binary.rhs)?;
-                if lhs_ty != rhs_ty {
-                    return Err(TypeCkError::InvalidBinaryTypes);
-                }
-                lhs_ty
-            }
+        let lhs_ty = self.typecheck_expr(&binary.lhs)?;
+        let rhs_ty = self.typecheck_expr(&binary.rhs)?;
+        match binary.op.symbol.as_str() {
+            "+" => self
+                .binary_add_type(lhs_ty, rhs_ty)
+                .ok_or(TypeCkError::InvalidBinaryTypes),
+            "-" => self
+                .binary_sub_type(lhs_ty, rhs_ty)
+                .ok_or(TypeCkError::InvalidBinaryTypes),
             _ => unimplemented!("binary op"),
-        };
-        Ok(ty)
+        }
     }
 
     pub fn typecheck_unary(&mut self, unary: &Unary) -> Result<Type> {
@@ -115,5 +114,21 @@ impl TypeCk {
 
     pub fn get_type(&mut self, id: NodeId) -> Option<&Type> {
         self.ty_map.get(&id)
+    }
+
+    fn binary_add_type(&self, lhs: Type, rhs: Type) -> Option<Type> {
+        match (lhs, rhs) {
+            (Type::Int(lty), Type::Int(rty)) if lty == rty => Some(lhs),
+            (Type::Float(lty), Type::Float(rty)) if lty == rty => Some(lhs),
+            _ => None,
+        }
+    }
+
+    fn binary_sub_type(&self, lhs: Type, rhs: Type) -> Option<Type> {
+        match (lhs, rhs) {
+            (Type::Int(lty), Type::Int(rty)) if lty == rty => Some(lhs),
+            (Type::Float(lty), Type::Float(rty)) if lty == rty => Some(lhs),
+            _ => None,
+        }
     }
 }
