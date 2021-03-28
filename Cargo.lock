@@ -87,6 +87,9 @@ name = "codegen"
 version = "0.1.0"
 dependencies = [
  "inkwell",
+ "parse",
+ "printer",
+ "typeck",
 ]
 
 [[package]]
@@ -241,11 +244,10 @@ dependencies = [
 name = "ifenek"
 version = "0.1.0"
 dependencies = [
+ "codegen",
  "inkwell",
- "parse",
  "printer",
  "rustyline",
- "typeck",
 ]
 
 [[package]]
