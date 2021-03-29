@@ -6,7 +6,7 @@ fn test_typeck() {
     let node_id: NodeId = 0;
     let expr = Lit::new(node_id, LitKind::Int(1)).into();
     typeck.typecheck_expr(&expr).unwrap();
-    assert_eq!(*typeck.get_type(node_id).unwrap(), Type::Int(IntTy::ISize));
+    assert_eq!(*typeck.get_type(node_id).unwrap(), Type::Int(IntTy::I64));
 
     let mut typeck = TypeCk::new();
     let node_id: NodeId = 0;
@@ -33,7 +33,7 @@ fn test_typeck() {
     let expr = Lit::new(2, LitKind::Int(1)).into();
     let stmt = VarDecl::new(0, Ident::new(1, "a".to_string()), expr).into();
     assert_eq!(typeck.typecheck_stmt(&stmt).unwrap(), Type::Void);
-    assert_eq!(*typeck.get_type(2).unwrap(), Type::Int(IntTy::ISize));
+    assert_eq!(*typeck.get_type(2).unwrap(), Type::Int(IntTy::I64));
     assert_eq!(
         typeck
             .current_scope()
@@ -41,17 +41,14 @@ fn test_typeck() {
             .unwrap()
             .into_var_def()
             .ty,
-        Type::Int(IntTy::ISize)
+        Type::Int(IntTy::I64)
     );
 
     let mut typeck = TypeCk::new();
     let lhs = Lit::new(1, LitKind::Int(1)).into();
     let rhs = Lit::new(2, LitKind::Int(2)).into();
     let expr = Expr::Binary(Binary::new(0, BinOp::new("+".to_string(), 10), lhs, rhs));
-    assert_eq!(
-        typeck.typecheck_expr(&expr).unwrap(),
-        Type::Int(IntTy::ISize)
-    );
+    assert_eq!(typeck.typecheck_expr(&expr).unwrap(), Type::Int(IntTy::I64));
 }
 
 #[test]

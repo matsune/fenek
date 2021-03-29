@@ -1,8 +1,15 @@
 use parse::ast;
+use parse::ast::Node;
 use ptree::TreeBuilder;
+use typeck::mir;
+use typeck::mir::Typed;
 
 #[cfg(test)]
 mod tests;
+
+pub fn print(stmt: &mir::Stmt) -> std::io::Result<()> {
+    Printer::new().build_stmt(stmt).print_tree()
+}
 
 struct Printer {
     builder: TreeBuilder,
@@ -30,34 +37,37 @@ impl Printer {
         self
     }
 
-    fn build_stmt(&mut self, stmt: &ast::Stmt) -> &mut Self {
+    fn build_stmt(&mut self, stmt: &mir::Stmt) -> &mut Self {
         match stmt {
-            ast::Stmt::VarDecl(var_decl) => self
-                .begin_child("VarDecl")
-                .add_empty_child(&var_decl.name.raw)
-                .add_empty_child("=")
-                .build_expr(&var_decl.init)
-                .end_child(),
-            ast::Stmt::Expr(expr) => self.build_expr(expr),
+            mir::Stmt::VarDecl(var_decl) => {
+                // var_decl.
+                self.begin_child("VarDecl")
+                    .add_empty_child(&var_decl.name.raw)
+                    .add_empty_child("=")
+                    .build_expr(&var_decl.init)
+                    .end_child()
+            }
+            mir::Stmt::Expr(expr) => self.build_expr(expr),
         }
     }
 
-    fn build_expr(&mut self, expr: &ast::Expr) -> &mut Self {
+    fn build_expr(&mut self, expr: &mir::Expr) -> &mut Self {
+        let ty = expr.get_type();
         match expr {
-            ast::Expr::Lit(lit) => match &lit.kind {
-                ast::LitKind::Int(v) => self.add_empty_child(&format!("{}", v)),
-                ast::LitKind::Float(v) => self.add_empty_child(&format!("{}", v)),
-                ast::LitKind::Bool(v) => self.add_empty_child(&format!("{}", v)),
-                ast::LitKind::String(v) => self.add_empty_child(&v),
+            mir::Expr::Lit(lit) => match &lit.kind {
+                ast::LitKind::Int(v) => self.add_empty_child(&format!("{}::{:?}", v, ty)),
+                ast::LitKind::Float(v) => self.add_empty_child(&format!("{}::{:?}", v, ty)),
+                ast::LitKind::Bool(v) => self.add_empty_child(&format!("{}::{:?}", v, ty)),
+                ast::LitKind::String(v) => self.add_empty_child(&format!("{}::{:?}", v, ty)),
             },
-            ast::Expr::Ident(ident) => self.add_empty_child(&ident.raw),
-            ast::Expr::Binary(binary) => self
-                .begin_child("Binary")
+            mir::Expr::Ident(ident) => self.add_empty_child(&format!("{}::{:?}", ident.raw, ty)),
+            mir::Expr::Binary(binary) => self
+                .begin_child(&format!("Binary::{:?}", ty))
                 .build_expr(&binary.lhs)
                 .add_empty_child(&binary.op.symbol)
                 .build_expr(&binary.rhs)
                 .end_child(),
-            ast::Expr::Unary(unary) => unimplemented!(),
+            mir::Expr::Unary(unary) => unimplemented!(),
         }
     }
 
@@ -65,8 +75,4 @@ impl Printer {
         let tree = self.builder.build();
         ptree::print_tree(&tree)
     }
-}
-
-pub fn print(stmt: &ast::Stmt) -> std::io::Result<()> {
-    Printer::new().build_stmt(stmt).print_tree()
 }

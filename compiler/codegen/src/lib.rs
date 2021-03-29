@@ -6,7 +6,7 @@ use inkwell::types::{AnyTypeEnum, BasicType, BasicTypeEnum};
 use inkwell::values::{AnyValueEnum, BasicValueEnum};
 use parse::ast;
 use std::error::Error;
-use typeck::ty;
+use typeck::mir;
 use typeck::typeck::TypeCk;
 
 pub struct CodeGen<'ctx> {
@@ -39,20 +39,18 @@ impl<'ctx> CodeGen<'ctx> {
 
     pub fn compile(&mut self, input: &str) -> Result<(), Box<dyn Error>> {
         let stmt = parse::parse(&input)?;
-        self.typeck.typecheck_stmt(&stmt)?;
+        let mir = self.typeck.typecheck_stmt(&stmt)?;
 
-        if cfg!(feature = "print") {
-            printer::print(&stmt)?;
-        } else {
-            match stmt {
-                ast::Stmt::VarDecl(var_decl) => {
-                    let val = self.compile_var_decl(var_decl);
-                    self.print_val(val);
-                }
-                ast::Stmt::Expr(expr) => {
-                    let val = self.compile_expr(&expr);
-                    self.print_val(val);
-                }
+        printer::print(&mir)?;
+
+        match stmt {
+            ast::Stmt::VarDecl(var_decl) => {
+                let val = self.compile_var_decl(var_decl);
+                self.print_val(val);
+            }
+            ast::Stmt::Expr(expr) => {
+                let val = self.compile_expr(&expr);
+                self.print_val(val);
             }
         }
         Ok(())
@@ -81,7 +79,7 @@ impl<'ctx> CodeGen<'ctx> {
                 ast::LitKind::Int(v) => {
                     let ty = self.typeck.get_type(lit.id).unwrap().into_int_ty();
                     let llvm_ty = match ty {
-                        ty::IntTy::ISize => self.context.i64_type(),
+                        mir::IntTy::I64 => self.context.i64_type(),
                         _ => unimplemented!(),
                     };
                     llvm_ty.const_int(v, false).into()

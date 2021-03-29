@@ -84,7 +84,7 @@ pub struct Lit {
     pub kind: LitKind,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum LitKind {
     Int(u64),
     Float(f64),

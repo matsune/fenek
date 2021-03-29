@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 ptree = "0.3.2"
 parse = { path = "../parse" }
+typeck = { path = "../typeck" }

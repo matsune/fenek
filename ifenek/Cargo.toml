@@ -12,5 +12,3 @@ inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", feat
 printer = { path = "../compiler/printer" }
 codegen = { path = "../compiler/codegen" }
 
-[features]
-print = []
