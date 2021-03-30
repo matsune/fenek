@@ -66,7 +66,7 @@ Enum!(Expr [
     {Unary, unary}
 ]);
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Ident {
     pub id: NodeId,
     pub raw: String,

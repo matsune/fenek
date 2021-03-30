@@ -11,8 +11,10 @@ mod tests;
 
 #[derive(Error, Debug)]
 pub enum TypeCkError {
-    #[error("already declared variable `{0}`")]
-    AlreadyDeclaredVariable(String),
+    #[error("already defined variable `{0}`")]
+    AlreadyDefinedVariable(String),
+    #[error("undefined variable `{0}`")]
+    UndefinedVariable(String),
     #[error("invalid binary types")]
     InvalidBinaryTypes,
 }
@@ -23,6 +25,8 @@ pub struct TypeCk {
     pub ty_map: HashMap<ast::NodeId, mir::Type>,
     scope_tree: ArenaTree<ScopeTable>,
     scope_id: TreeNodeIdx,
+
+    def_id: usize,
 }
 
 impl TypeCk {
@@ -33,6 +37,7 @@ impl TypeCk {
             ty_map: HashMap::new(),
             scope_tree,
             scope_id,
+            def_id: 0,
         }
     }
 
@@ -40,21 +45,32 @@ impl TypeCk {
         self.ty_map.insert(id, ty);
     }
 
+    fn gen_def_id(&mut self) -> usize {
+        let id = self.def_id;
+        self.def_id += 1;
+        id
+    }
+
     pub fn typecheck_stmt<'a>(&'a mut self, stmt: &ast::Stmt) -> Result<mir::Stmt> {
         match stmt {
             ast::Stmt::Expr(expr) => self.typecheck_expr(expr).map(|expr| expr.into()),
             ast::Stmt::VarDecl(var_decl) => {
                 if self.current_scope().lookup(&var_decl.name.raw).is_some() {
-                    return Err(TypeCkError::AlreadyDeclaredVariable(
+                    return Err(TypeCkError::AlreadyDefinedVariable(
                         var_decl.name.raw.clone(),
                     ));
                 }
                 let expr = self.typecheck_expr(&var_decl.init)?;
-                self.current_scope_mut().insert_var(
-                    var_decl.name.raw.clone(),
-                    VarDef::new(expr.get_type(), false),
+                let def = VarDef::new(self.gen_def_id(), expr.get_type(), false);
+                self.current_scope_mut()
+                    .insert_var(var_decl.name.raw.clone(), def);
+                let var_decl = mir::VarDecl::new(
+                    var_decl.id,
+                    var_decl.name.clone(),
+                    Box::new(expr),
+                    def.into(),
                 );
-                Ok(expr.into())
+                Ok(var_decl.into())
             }
         }
     }
@@ -81,7 +97,7 @@ impl TypeCk {
             }
             ast::Expr::Ident(ident) => match self.current_scope().lookup(&ident.raw) {
                 Some(def) => mir::Ident::new(ident.raw.clone(), *def).into(),
-                None => unimplemented!(),
+                None => return Err(TypeCkError::UndefinedVariable(ident.raw.clone())),
             },
             ast::Expr::Binary(binary) => self.typecheck_binary(binary)?.into(),
             ast::Expr::Unary(unary) => self.typecheck_unary(unary)?.into(),

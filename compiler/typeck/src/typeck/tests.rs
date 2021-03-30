@@ -1,4 +1,6 @@
 use super::*;
+use mir::{FloatTy, IntTy, Type};
+use parse::ast::*;
 
 #[test]
 fn test_typeck() {
@@ -32,7 +34,7 @@ fn test_typeck() {
     let mut typeck = TypeCk::new();
     let expr = Lit::new(2, LitKind::Int(1)).into();
     let stmt = VarDecl::new(0, Ident::new(1, "a".to_string()), expr).into();
-    assert_eq!(typeck.typecheck_stmt(&stmt).unwrap(), Type::Void);
+    typeck.typecheck_stmt(&stmt).unwrap();
     assert_eq!(*typeck.get_type(2).unwrap(), Type::Int(IntTy::I64));
     assert_eq!(
         typeck
@@ -48,7 +50,10 @@ fn test_typeck() {
     let lhs = Lit::new(1, LitKind::Int(1)).into();
     let rhs = Lit::new(2, LitKind::Int(2)).into();
     let expr = Expr::Binary(Binary::new(0, BinOp::new("+".to_string(), 10), lhs, rhs));
-    assert_eq!(typeck.typecheck_expr(&expr).unwrap(), Type::Int(IntTy::I64));
+    assert_eq!(
+        typeck.typecheck_expr(&expr).unwrap().get_type(),
+        Type::Int(IntTy::I64)
+    );
 }
 
 #[test]

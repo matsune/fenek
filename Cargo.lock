@@ -246,8 +246,10 @@ version = "0.1.0"
 dependencies = [
  "codegen",
  "inkwell",
+ "parse",
  "printer",
  "rustyline",
+ "typeck",
 ]
 
 [[package]]

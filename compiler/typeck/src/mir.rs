@@ -69,6 +69,18 @@ pub struct VarDecl {
     pub id: ast::NodeId,
     pub name: ast::Ident,
     pub init: Box<Expr>,
+    pub def: Def,
+}
+
+impl VarDecl {
+    pub fn new(id: ast::NodeId, name: ast::Ident, init: Box<Expr>, def: Def) -> Self {
+        Self {
+            id,
+            name,
+            init,
+            def,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

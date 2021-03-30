@@ -65,16 +65,29 @@ impl Def {
             Def::Var(var_def) => var_def.ty,
         }
     }
+
+    pub fn id(&self) -> usize {
+        match self {
+            Def::Var(var_def) => var_def.id,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct VarDef {
+    pub id: usize,
     pub ty: mir::Type,
     pub is_mut: bool,
 }
 
 impl VarDef {
-    pub fn new(ty: mir::Type, is_mut: bool) -> Self {
-        Self { ty, is_mut }
+    pub fn new(id: usize, ty: mir::Type, is_mut: bool) -> Self {
+        Self { id, ty, is_mut }
+    }
+}
+
+impl Into<Def> for VarDef {
+    fn into(self) -> Def {
+        Def::Var(self)
     }
 }

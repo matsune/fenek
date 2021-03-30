@@ -1,4 +1,4 @@
 pub mod mir;
-mod scope;
-mod tree;
+pub mod scope;
+pub mod tree;
 pub mod typeck;
