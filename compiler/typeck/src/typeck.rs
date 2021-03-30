@@ -116,7 +116,13 @@ impl TypeCk {
             "-" => self
                 .binary_sub_type(lhs.get_type(), rhs.get_type())
                 .ok_or(TypeCkError::InvalidBinaryTypes),
-            _ => unimplemented!("binary op"),
+            "*" => self
+                .binary_mul_type(lhs.get_type(), rhs.get_type())
+                .ok_or(TypeCkError::InvalidBinaryTypes),
+            "/" => self
+                .binary_div_type(lhs.get_type(), rhs.get_type())
+                .ok_or(TypeCkError::InvalidBinaryTypes),
+            _ => Err(TypeCkError::InvalidBinaryTypes),
         }?;
         Ok(mir::Binary::new(binary.id, binary.op.clone(), lhs, rhs, ty))
     }
@@ -150,6 +156,22 @@ impl TypeCk {
     }
 
     fn binary_sub_type(&self, lhs: mir::Type, rhs: mir::Type) -> Option<mir::Type> {
+        match (lhs, rhs) {
+            (mir::Type::Int(lty), mir::Type::Int(rty)) if lty == rty => Some(lhs),
+            (mir::Type::Float(lty), mir::Type::Float(rty)) if lty == rty => Some(lhs),
+            _ => None,
+        }
+    }
+
+    fn binary_mul_type(&self, lhs: mir::Type, rhs: mir::Type) -> Option<mir::Type> {
+        match (lhs, rhs) {
+            (mir::Type::Int(lty), mir::Type::Int(rty)) if lty == rty => Some(lhs),
+            (mir::Type::Float(lty), mir::Type::Float(rty)) if lty == rty => Some(lhs),
+            _ => None,
+        }
+    }
+
+    fn binary_div_type(&self, lhs: mir::Type, rhs: mir::Type) -> Option<mir::Type> {
         match (lhs, rhs) {
             (mir::Type::Int(lty), mir::Type::Int(rty)) if lty == rty => Some(lhs),
             (mir::Type::Float(lty), mir::Type::Float(rty)) if lty == rty => Some(lhs),
