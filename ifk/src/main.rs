@@ -10,7 +10,7 @@ use repl::Repl;
 fn main() -> Result<(), Box<dyn Error>> {
     let history_file = ".ifenek.history";
     let ctx = Context::create();
-    let mut repl = Repl::create(&ctx, "ifenek")?;
+    let mut repl = Repl::new(&ctx);
     let mut rl: Editor<()> = Editor::new();
     if rl.load_history(&history_file).is_err() {}
 

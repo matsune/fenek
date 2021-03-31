@@ -1,5 +1,5 @@
 [package]
-name = "ifenek"
+name = "ifk"
 version = "0.1.0"
 authors = ["Yuma Matsune <yuma.matsune@gmail.com>"]
 edition = "2018"

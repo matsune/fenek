@@ -241,7 +241,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ifenek"
+name = "ifk"
 version = "0.1.0"
 dependencies = [
  "codegen",

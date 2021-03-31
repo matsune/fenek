@@ -13,9 +13,10 @@ use typeck::mir::Typed;
 use typeck::scope::Def;
 use typeck::typeck::TypeCk;
 
+const MODULE_NAME: &'static str = "ifk_repl";
+
 pub struct Repl<'ctx> {
     context: &'ctx Context,
-    module_name: &'static str,
     module: Module<'ctx>,
     builder: Builder<'ctx>,
     typeck: TypeCk,
@@ -24,26 +25,22 @@ pub struct Repl<'ctx> {
 }
 
 impl<'ctx> Repl<'ctx> {
-    pub fn create(
-        context: &'ctx Context,
-        module_name: &'static str,
-    ) -> Result<Self, Box<dyn Error>> {
-        let module = context.create_module(module_name);
+    pub fn new(context: &'ctx Context) -> Self {
+        let module = context.create_module(MODULE_NAME);
         let builder = context.create_builder();
-        let engine = module.create_interpreter_execution_engine()?;
+        // let engine = module.create_interpreter_execution_engine()?;
         let typeck = TypeCk::new();
-        Ok(Self {
+        Self {
             context,
-            module_name,
             module,
             builder,
             typeck,
             value_map: HashMap::new(),
-        })
+        }
     }
 
     pub fn eval(&mut self, input: &str) -> Result<(), Box<dyn Error>> {
-        self.module = self.context.create_module(self.module_name);
+        self.module = self.context.create_module(MODULE_NAME);
         self.builder = self.context.create_builder();
 
         let stmt = parse::parse(&input)?;
@@ -196,4 +193,26 @@ impl<'ctx> Repl<'ctx> {
             }
         }
     }
+
+    //     fn build_int_add(
+    //         &self,
+    //         lhs: IntValue,
+    //         rhs: IntValue,
+    //     ) -> Result<IntValue<'ctx>, Box<dyn Error>> {
+    //         unsafe {
+    //             let int_add_fn: JitFunction<unsafe extern "C" fn(i64, i64) -> i64> = self
+    //                 .engine
+    //                 .get_function(format!("int_add_{:?}", lhs.get_type()).as_str())
+    //                 .unwrap();
+    //         }
+    //         unimplemented!();
+    //     }
+
+    //     fn build_int_sub(
+    //         &self,
+    //         lhs: IntValue,
+    //         rhs: IntValue,
+    //     ) -> Result<IntValue<'ctx>, Box<dyn Error>> {
+    //         unimplemented!()
+    //     }
 }
