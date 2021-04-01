@@ -44,7 +44,7 @@ impl Token {
     }
 
     pub fn is_spaces(&self) -> bool {
-        matches!(self.kind, TokenKind::Spaces)
+        matches!(self.kind, TokenKind::Spaces | TokenKind::Newlines)
     }
 }
 

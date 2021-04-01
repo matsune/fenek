@@ -15,7 +15,7 @@ pub struct Opts {
     pub src: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Emit {
     Ast,
     LlvmIr,

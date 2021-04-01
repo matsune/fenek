@@ -217,6 +217,7 @@ dependencies = [
  "clap",
  "codegen",
  "parse",
+ "printer",
  "typeck",
 ]
 

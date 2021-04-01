@@ -31,8 +31,8 @@ pub enum ParseError {
     InvalidBinOp(String),
 }
 
-pub fn parse(tokens: VecDeque<Token>) -> Result<Stmt, ParseError> {
-    Parser::new(tokens).parse_stmt()
+pub fn parse(tokens: VecDeque<Token>) -> Result<Vec<Stmt>, ParseError> {
+    Parser::new(tokens).parse_stmts()
 }
 
 struct Parser {
@@ -76,6 +76,18 @@ impl Parser {
     fn gen_id(&mut self) -> NodeId {
         self.id += 1;
         self.id
+    }
+
+    pub fn parse_stmts(&mut self) -> Result<Vec<Stmt>, ParseError> {
+        let mut stmts = Vec::new();
+        loop {
+            self.skip_spaces();
+            if self.peek().is_none() {
+                break;
+            }
+            stmts.push(self.parse_stmt()?);
+        }
+        Ok(stmts)
     }
 
     pub fn parse_var_decl(&mut self) -> Result<VarDecl, ParseError> {

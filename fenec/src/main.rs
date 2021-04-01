@@ -23,7 +23,14 @@ fn read_file<P: AsRef<Path> + std::fmt::Display>(src: P) -> std::io::Result<Stri
 fn run_main() -> Result<(), Box<dyn Error>> {
     let opts = Opts::parse();
     let input = read_file(&opts.src).map_err(|err| format!("{}: {}", &opts.src, err))?;
-    let ast = parse::parse(&input)?;
-    println!("{:?}", ast);
+    let stmts = parse::parse(&input)?;
+    let mut typeck = typeck::TypeCk::new();
+    let mir = stmts
+        .into_iter()
+        .map(|stmt| typeck.typecheck_stmt(&stmt))
+        .collect::<Result<Vec<typeck::mir::Stmt>, _>>()?;
+    if opts.emit.contains(&opts::Emit::Ast) {
+        printer::print(mir.as_slice())?;
+    }
     Ok(())
 }

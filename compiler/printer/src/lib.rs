@@ -1,5 +1,4 @@
 use parse::ast;
-use parse::ast::Node;
 use ptree::TreeBuilder;
 use typeck::mir;
 use typeck::mir::Typed;
@@ -7,8 +6,12 @@ use typeck::mir::Typed;
 #[cfg(test)]
 mod tests;
 
-pub fn print(stmt: &mir::Stmt) -> std::io::Result<()> {
-    Printer::new().build_stmt(stmt).print_tree()
+pub fn print(stmts: &[mir::Stmt]) -> std::io::Result<()> {
+    let mut printer = Printer::new();
+    for stmt in stmts.iter() {
+        printer.build_stmt(stmt);
+    }
+    printer.print_tree()
 }
 
 struct Printer {
