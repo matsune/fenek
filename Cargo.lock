@@ -246,6 +246,7 @@ version = "0.1.0"
 dependencies = [
  "codegen",
  "inkwell",
+ "libc",
  "parse",
  "printer",
  "rustyline",

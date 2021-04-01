@@ -5,11 +5,15 @@ use inkwell::module::Module;
 use inkwell::support::LLVMString;
 use inkwell::types::{AnyTypeEnum, BasicType, BasicTypeEnum, FunctionType};
 use inkwell::values::{AnyValueEnum, BasicValueEnum, FunctionValue, IntValue};
+use inkwell::AddressSpace;
 use parse::ast;
 use std::collections::HashMap;
 use std::error::Error;
 use typeck::mir;
 use typeck::mir::Typed;
+extern crate libc;
+use libc::c_char;
+use std::ffi::CStr;
 use typeck::scope::Def;
 use typeck::typeck::TypeCk;
 
@@ -64,6 +68,7 @@ impl<'ctx> Repl<'ctx> {
                         self.builder.build_return(Some(&v.into_int_value()))
                     }
                     mir::Type::Float(_) => self.builder.build_return(Some(&v.into_float_value())),
+                    mir::Type::String => self.builder.build_return(Some(&v.into_pointer_value())),
                     _ => unimplemented!(),
                 };
                 let engine = self.module.create_interpreter_execution_engine()?;
@@ -87,6 +92,14 @@ impl<'ctx> Repl<'ctx> {
                     mir::Type::Float(mir::FloatTy::F32) => {
                         println!("{}", val.as_float(&self.context.f32_type()))
                     }
+                    mir::Type::String => {
+                        let s = unsafe {
+                            let c_buf: *const c_char = val.into_pointer();
+                            let c_str: &CStr = CStr::from_ptr(c_buf);
+                            c_str.to_str()?
+                        };
+                        println!("{}", s);
+                    }
                     _ => unimplemented!(),
                 };
             }
@@ -108,6 +121,7 @@ impl<'ctx> Repl<'ctx> {
                 mir::FloatTy::F64 => Box::new(self.context.f64_type()),
             },
             mir::Type::Bool => Box::new(self.context.bool_type()),
+            mir::Type::String => Box::new(self.context.i8_type().ptr_type(AddressSpace::Global)),
             _ => unimplemented!(),
         }
     }
@@ -150,7 +164,11 @@ impl<'ctx> Repl<'ctx> {
                     .bool_type()
                     .const_int(if v { 1 } else { 0 }, false)
                     .into()),
-                _ => unimplemented!(),
+                ast::LitKind::String(ref v) => Ok(self
+                    .builder
+                    .build_global_string_ptr(v, "")
+                    .as_pointer_value()
+                    .into()), //const_string(&v.as_bytes(), true)),
             },
             mir::Expr::Ident(ident) => Ok(*self.value_map.get(&ident.def.id()).unwrap()),
             mir::Expr::Binary(binary) => {

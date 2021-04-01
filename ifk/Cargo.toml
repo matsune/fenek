@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 rustyline = "8.0.0"
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm11-0"] }
+libc = "0.2"
 printer = { path = "../compiler/printer" }
 codegen = { path = "../compiler/codegen" }
 typeck = { path = "../compiler/typeck" }
