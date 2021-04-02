@@ -1,0 +1,4 @@
+fun main() -> i64 {
+  let a = 10;
+  ret a;
+}

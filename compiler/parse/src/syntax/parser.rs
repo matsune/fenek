@@ -72,7 +72,7 @@ impl Parser {
 
     pub fn parse_var_decl(&mut self) -> Result<VarDecl, ParseError> {
         self.bump_if(|tok| tok.kind == TokenKind::KwVar)
-            .ok_or(ParseError::Expected("`var`"))?;
+            .ok_or(ParseError::Expected("var"))?;
         self.bump_if(|tok| tok.is_spaces())
             .ok_or(ParseError::Expected("spaces"))?;
         let name = self
@@ -80,7 +80,7 @@ impl Parser {
             .ok_or(ParseError::Expected("ident"))?;
         self.skip_spaces();
         self.bump_if(|tok| tok.kind == TokenKind::Eq)
-            .ok_or(ParseError::Expected("`=`"))?;
+            .ok_or(ParseError::Expected("="))?;
         self.skip_spaces();
         let expr = self.parse_expr()?;
         Ok(VarDecl::new(

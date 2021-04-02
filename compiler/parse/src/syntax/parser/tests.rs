@@ -147,13 +147,13 @@ fn test_parse_var_decl_error() {
     let mut parser = make_parser!("var= 3");
     assert_eq!(
         parser.parse_var_decl().unwrap_err().to_string(),
-        "expected spaces"
+        "expected `spaces`"
     );
 
     let mut parser = make_parser!("var = 3");
     assert_eq!(
         parser.parse_var_decl().unwrap_err().to_string(),
-        "expected ident"
+        "expected `ident`"
     );
 
     let mut parser = make_parser!("var a");
