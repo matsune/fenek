@@ -17,6 +17,8 @@ pub enum TypeCkError {
     UndefinedVariable(String),
     #[error("invalid binary types")]
     InvalidBinaryTypes,
+    #[error("invalid unary types")]
+    InvalidUnaryTypes,
 }
 
 type Result<T> = std::result::Result<T, TypeCkError>;
@@ -128,19 +130,21 @@ impl TypeCk {
     }
 
     pub fn typecheck_unary(&mut self, unary: &ast::Unary) -> Result<mir::Unary> {
-        unimplemented!()
-        // let ty = match binary.op {
-        //     BinOp::Add => {
-        //         let lhs_ty = self.typecheck_expr(&binary.lhs)?;
-        //         let rhs_ty = self.typecheck_expr(&binary.rhs)?;
-        //         if lhs_ty != rhs_ty {
-        //             return Err(TypeCkError::InvalidBinaryTypes);
-        //         }
-        //         lhs_ty
-        //     }
-        //     _ => unimplemented!("binary op"),
-        // };
-        // Ok(ty)
+        let expr = self.typecheck_expr(&unary.expr)?;
+        let ty = expr.get_type();
+        match unary.op {
+            ast::UnaryOp::Add | ast::UnaryOp::Sub => {
+                if !ty.is_int() && !ty.is_float() {
+                    return Err(TypeCkError::InvalidUnaryTypes);
+                }
+            }
+            ast::UnaryOp::Not => {
+                if !ty.is_bool() {
+                    return Err(TypeCkError::InvalidUnaryTypes);
+                }
+            }
+        }
+        Ok(mir::Unary::new(unary.id, unary.op, expr, ty))
     }
 
     pub fn get_type(&mut self, id: ast::NodeId) -> Option<&mir::Type> {

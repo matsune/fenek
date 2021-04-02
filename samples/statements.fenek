@@ -6,3 +6,6 @@ false;
 var d = "abc";
 0.1 + 3.0;
 0b11 + 0o21 * 0xAD;
+-a;
++a+(-2);
+!true;

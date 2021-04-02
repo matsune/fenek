@@ -15,6 +15,18 @@ pub enum Type {
 }
 
 impl Type {
+    pub fn is_int(&self) -> bool {
+        matches!(self, Type::Int(_))
+    }
+
+    pub fn is_float(&self) -> bool {
+        matches!(self, Type::Float(_))
+    }
+
+    pub fn is_bool(&self) -> bool {
+        matches!(self, Type::Bool)
+    }
+
     pub fn into_int_ty(self) -> IntTy {
         match self {
             Self::Int(v) => v,

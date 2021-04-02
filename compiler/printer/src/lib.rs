@@ -78,7 +78,11 @@ impl Printer {
                 .add_empty_child(&binary.op.symbol)
                 .build_expr(&binary.rhs)
                 .end_child(),
-            mir::Expr::Unary(unary) => unimplemented!(),
+            mir::Expr::Unary(unary) => self
+                .begin_child(&format!("Unary::{:?}", ty))
+                .add_empty_child(&format!("{}", unary.op))
+                .build_expr(&unary.expr)
+                .end_child(),
         }
     }
 

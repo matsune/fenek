@@ -4,21 +4,23 @@ pub trait Node {
     fn id(&self) -> NodeId;
 }
 
-macro_rules! implement_node {
-    ($($name:ident),*) => {
-        $(
-            impl Node for $name {
-                fn id(&self) -> NodeId {
-                    self.id
-                }
+macro_rules! impl_node {
+    ($name:ident) => {
+        impl Node for $name {
+            fn id(&self) -> NodeId {
+                self.id
             }
-        )*
-    }
+        }
+    };
 }
-implement_node!(VarDecl, Lit, Ident, Binary, Unary);
+impl_node!(VarDecl);
+impl_node!(Lit);
+impl_node!(Ident);
+impl_node!(Binary);
+impl_node!(Unary);
 
 macro_rules! Enum {
-    ($name:ident [$({$Var:ident, $var:ident}),*]) => {
+    ($name:ident [$(($Var:ident, $var:ident)),*]) => {
         #[derive(Debug)]
         pub enum $name {
             $(
@@ -58,23 +60,33 @@ macro_rules! Enum {
     };
 }
 
-Enum!(Stmt [{Expr, expr}, {VarDecl, var_decl}]);
-Enum!(Expr [
-    {Lit, lit},
-    {Ident, ident},
-    {Binary, binary},
-    {Unary, unary}
+Enum!(Stmt [
+    (VarDecl, var_decl),
+    (Expr, expr)
 ]);
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct Ident {
+Enum!(Expr [
+    (Lit, lit),
+    (Ident, ident),
+    (Binary, binary),
+    (Unary, unary)
+]);
+
+/// var <name> = <expr>;
+#[derive(Debug)]
+pub struct VarDecl {
     pub id: NodeId,
-    pub raw: String,
+    pub name: Ident,
+    pub init: Box<Expr>,
 }
 
-impl Ident {
-    pub fn new(id: NodeId, raw: String) -> Self {
-        Ident { id, raw }
+impl VarDecl {
+    pub fn new(id: NodeId, name: Ident, init: Expr) -> Self {
+        VarDecl {
+            id,
+            name,
+            init: Box::new(init),
+        }
     }
 }
 
@@ -123,6 +135,18 @@ impl Lit {
             return v;
         }
         panic!()
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Ident {
+    pub id: NodeId,
+    pub raw: String,
+}
+
+impl Ident {
+    pub fn new(id: NodeId, raw: String) -> Self {
+        Ident { id, raw }
     }
 }
 
@@ -184,20 +208,16 @@ pub enum UnaryOp {
     Not,
 }
 
-/// let <name> = <expr>;
-#[derive(Debug)]
-pub struct VarDecl {
-    pub id: NodeId,
-    pub name: Ident,
-    pub init: Box<Expr>,
-}
-
-impl VarDecl {
-    pub fn new(id: NodeId, name: Ident, init: Expr) -> Self {
-        VarDecl {
-            id,
-            name,
-            init: Box::new(init),
-        }
+impl std::fmt::Display for UnaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                UnaryOp::Add => "+",
+                UnaryOp::Sub => "-",
+                UnaryOp::Not => "!",
+            }
+        )
     }
 }
