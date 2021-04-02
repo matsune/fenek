@@ -1,36 +1,11 @@
 use super::scanner::*;
 use super::token::*;
+use error::{CompileError, LexerError, LitError, Pos};
+use std::convert::TryInto;
 use std::str::Chars;
-use thiserror::Error;
 
 #[cfg(test)]
 mod tests;
-
-#[derive(Error, Debug)]
-pub enum LitError {
-    // #[error("unterminated char literal: `{0}`")]
-    // UnterminatedChar(String),
-    #[error("unterminated string literal: `{0}`")]
-    UnterminatedString(String),
-    #[error("unknown character escape: `\\{0}`")]
-    UnknownCharEscape(char),
-    #[error("invalid binary literal")]
-    InvalidBinaryLit,
-    #[error("invalid octal literal")]
-    InvalidOctalLit,
-    #[error("invalid hex literal")]
-    InvalidHexLit,
-    #[error("invalid float literal")]
-    InvalidFloatLit,
-}
-
-#[derive(Error, Debug)]
-pub enum LexerError {
-    #[error("unknown token `{0}`")]
-    UnknwonToken(char),
-    #[error(transparent)]
-    LitError(#[from] LitError),
-}
 
 /// '\n' | '\r'
 fn is_newline(c: char) -> bool {
@@ -67,26 +42,34 @@ fn is_hex_digit(c: char) -> bool {
     matches!(c, '0'..='9' | 'A'..='F' | 'a'..='f' )
 }
 
-pub fn lex(source: &str) -> Result<Vec<Token>, LexerError> {
+pub fn lex(source: &str) -> Result<Vec<Token>, CompileError> {
     let mut chars = source.chars();
     Lexer::new(&mut chars).lex()
 }
 
 struct Lexer<'a> {
     scanner: Scanner<'a>,
+    begin: Pos,
+    end: Pos,
 }
 
 impl<'a> Lexer<'a> {
     fn new(source: &'a mut Chars<'a>) -> Self {
         Lexer {
             scanner: Scanner::new(source),
+            begin: Pos::default(),
+            end: Pos::default(),
         }
     }
 
-    fn lex(&mut self) -> Result<Vec<Token>, LexerError> {
+    fn lex(&mut self) -> Result<Vec<Token>, CompileError> {
         let mut vec = Vec::new();
         loop {
-            let tok = self.scan()?;
+            self.begin = self.end;
+            let tok = self
+                .scan()
+                .map_err(|err| CompileError::new(self.begin, Box::new(err)))?;
+            self.begin = self.end;
             if tok.kind == TokenKind::Eof {
                 break;
             }
@@ -95,34 +78,46 @@ impl<'a> Lexer<'a> {
         Ok(vec)
     }
 
+    fn mk_tok(&self, kind: TokenKind, raw: String) -> Token {
+        Token::new(kind, raw, self.begin)
+    }
+
     fn scan(&mut self) -> Result<Token, LexerError> {
         let c = self.bump();
         let tok = match c {
-            EOF => Token::new(TokenKind::Eof, EOF.into()),
+            EOF => self.mk_tok(TokenKind::Eof, EOF.into()),
             c if is_whitespace(c) => self.scan_while(TokenKind::Spaces, c.into(), is_whitespace),
             c if is_newline(c) => self.scan_while(TokenKind::Newlines, c.into(), is_newline),
             '/' => match self.peek() {
-                '/' => self.scan_while(TokenKind::LineComment, c.into(), |c| !is_newline(c)),
-                _ => Token::new(TokenKind::Slash, c.into()),
+                '/' => {
+                    let mut tok =
+                        self.scan_while(TokenKind::LineComment, c.into(), |c| !is_newline(c));
+                    let c = self.bump();
+                    if is_newline(c) {
+                        tok.raw.push(c);
+                    }
+                    tok
+                }
+                _ => self.mk_tok(TokenKind::Slash, c.into()),
             },
-            ';' => Token::new(TokenKind::Semi, c.into()),
-            ',' => Token::new(TokenKind::Comma, c.into()),
-            '(' => Token::new(TokenKind::LParen, c.into()),
-            ')' => Token::new(TokenKind::RParen, c.into()),
-            '{' => Token::new(TokenKind::LBrace, c.into()),
-            '}' => Token::new(TokenKind::RBrace, c.into()),
-            ':' => Token::new(TokenKind::Colon, c.into()),
-            '=' => Token::new(TokenKind::Eq, c.into()),
-            '!' => Token::new(TokenKind::Not, c.into()),
-            '<' => Token::new(TokenKind::Lt, c.into()),
-            '>' => Token::new(TokenKind::Gt, c.into()),
-            '-' => Token::new(TokenKind::Minus, c.into()),
-            '&' => Token::new(TokenKind::And, c.into()),
-            '|' => Token::new(TokenKind::Or, c.into()),
-            '+' => Token::new(TokenKind::Plus, c.into()),
-            '*' => Token::new(TokenKind::Star, c.into()),
-            '^' => Token::new(TokenKind::Caret, c.into()),
-            '%' => Token::new(TokenKind::Percent, c.into()),
+            ';' => self.mk_tok(TokenKind::Semi, c.into()),
+            ',' => self.mk_tok(TokenKind::Comma, c.into()),
+            '(' => self.mk_tok(TokenKind::LParen, c.into()),
+            ')' => self.mk_tok(TokenKind::RParen, c.into()),
+            '{' => self.mk_tok(TokenKind::LBrace, c.into()),
+            '}' => self.mk_tok(TokenKind::RBrace, c.into()),
+            ':' => self.mk_tok(TokenKind::Colon, c.into()),
+            '=' => self.mk_tok(TokenKind::Eq, c.into()),
+            '!' => self.mk_tok(TokenKind::Not, c.into()),
+            '<' => self.mk_tok(TokenKind::Lt, c.into()),
+            '>' => self.mk_tok(TokenKind::Gt, c.into()),
+            '-' => self.mk_tok(TokenKind::Minus, c.into()),
+            '&' => self.mk_tok(TokenKind::And, c.into()),
+            '|' => self.mk_tok(TokenKind::Or, c.into()),
+            '+' => self.mk_tok(TokenKind::Plus, c.into()),
+            '*' => self.mk_tok(TokenKind::Star, c.into()),
+            '^' => self.mk_tok(TokenKind::Caret, c.into()),
+            '%' => self.mk_tok(TokenKind::Percent, c.into()),
             c if is_num(c) => self.scan_number(c)?,
             '"' => self.scan_string()?,
             // '\'' => self.scan_char()?,
@@ -150,7 +145,7 @@ impl<'a> Lexer<'a> {
         while self.peek() != EOF && predicate(self.peek()) {
             raw.push(self.bump());
         }
-        Token::new(kind, raw)
+        self.mk_tok(kind, raw)
     }
 
     fn scan_number(&mut self, first: char) -> Result<Token, LitError> {
@@ -185,9 +180,9 @@ impl<'a> Lexer<'a> {
                 while is_num(self.peek()) || self.peek() == '_' {
                     raw.push(self.bump());
                 }
-                Token::new(TokenKind::Lit(LitKind::Float), raw)
+                self.mk_tok(TokenKind::Lit(LitKind::Float), raw)
             }
-            _ => Token::new(
+            _ => self.mk_tok(
                 TokenKind::Lit(LitKind::Int {
                     base: IntBase::Decimal,
                 }),
@@ -200,8 +195,15 @@ impl<'a> Lexer<'a> {
     fn peek(&mut self) -> char {
         self.scanner.peek()
     }
+
     fn bump(&mut self) -> char {
-        self.scanner.bump()
+        let c = self.scanner.bump();
+        if is_newline(c) {
+            self.end.newline();
+        } else {
+            self.end.add_row(c.len_utf8().try_into().unwrap());
+        }
+        c
     }
 
     // binary_lit       ::= "0" ("b" | "B") { "_" } binary_digits
@@ -222,7 +224,7 @@ impl<'a> Lexer<'a> {
                 return Err(LitError::InvalidBinaryLit);
             }
         }
-        Ok(Token::new(
+        Ok(self.mk_tok(
             TokenKind::Lit(LitKind::Int {
                 base: IntBase::Binary,
             }),
@@ -248,7 +250,7 @@ impl<'a> Lexer<'a> {
                 return Err(LitError::InvalidOctalLit);
             }
         }
-        Ok(Token::new(
+        Ok(self.mk_tok(
             TokenKind::Lit(LitKind::Int {
                 base: IntBase::Octal,
             }),
@@ -270,10 +272,7 @@ impl<'a> Lexer<'a> {
         while self.peek() == '_' || is_hex_digit(self.peek()) {
             raw.push(self.bump());
         }
-        Ok(Token::new(
-            TokenKind::Lit(LitKind::Int { base: IntBase::Hex }),
-            raw,
-        ))
+        Ok(self.mk_tok(TokenKind::Lit(LitKind::Int { base: IntBase::Hex }), raw))
     }
 
     fn scan_string(&mut self) -> Result<Token, LitError> {
@@ -281,6 +280,7 @@ impl<'a> Lexer<'a> {
         let mut terminated = false;
         loop {
             let c = self.bump();
+
             match c {
                 '"' => {
                     raw.push(c);
@@ -300,7 +300,9 @@ impl<'a> Lexer<'a> {
                         't' => '\t',
                         '0' => '\0',
                         'x' => unimplemented!("hex_digit"),
-                        c => return Result::Err(LitError::UnknownCharEscape(c)),
+                        c => {
+                            return Result::Err(LitError::UnknownCharEscape(c));
+                        }
                     };
                     raw.push(escaped_c);
                 }
@@ -309,7 +311,7 @@ impl<'a> Lexer<'a> {
             }
         }
         if terminated {
-            Result::Ok(Token::new(TokenKind::Lit(LitKind::String), raw))
+            Result::Ok(self.mk_tok(TokenKind::Lit(LitKind::String), raw))
         } else {
             Result::Err(LitError::UnterminatedString(raw))
         }
@@ -348,7 +350,7 @@ impl<'a> Lexer<'a> {
     //         }
     //     }
     //     if terminated {
-    //         Result::Ok(Token::new(TokenKind::Lit(LitKind::Char), raw))
+    //         Result::Ok(self.mk_tok(TokenKind::Lit(LitKind::Char), raw))
     //     } else {
     //         Result::Err(LitError::UnterminatedChar(raw))
     //     }

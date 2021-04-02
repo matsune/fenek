@@ -184,6 +184,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
+name = "error"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "fenec"
 version = "0.1.0"
 dependencies = [
@@ -438,8 +445,8 @@ dependencies = [
 name = "parse"
 version = "0.1.0"
 dependencies = [
+ "error",
  "paste",
- "thiserror",
 ]
 
 [[package]]
@@ -783,8 +790,8 @@ dependencies = [
 name = "typeck"
 version = "0.1.0"
 dependencies = [
+ "error",
  "parse",
- "thiserror",
 ]
 
 [[package]]

@@ -1,38 +1,15 @@
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Pos(pub u32, pub u32);
-
-impl Default for Pos {
-    fn default() -> Self {
-        Pos(1, 1)
-    }
-}
-
-impl std::fmt::Display for Pos {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}", self.0, self.1)
-    }
-}
-
-impl Pos {
-    pub fn newline(&mut self) {
-        self.0 += 1;
-        self.1 = 1;
-    }
-
-    pub fn add_row(&mut self, row: u32) {
-        self.1 += row;
-    }
-}
+use error::Pos;
 
 #[derive(Debug, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
     pub raw: String,
+    pub pos: Pos,
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, raw: String) -> Self {
-        Token { kind, raw }
+    pub fn new(kind: TokenKind, raw: String, pos: Pos) -> Self {
+        Token { kind, raw, pos }
     }
 
     pub fn is_lit(&self) -> bool {

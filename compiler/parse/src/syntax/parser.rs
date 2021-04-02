@@ -1,37 +1,12 @@
 use super::ast::*;
-use crate::lex::{IntBase, LexerError, Token, TokenKind};
+use crate::lex::{IntBase, Token, TokenKind};
+use error::{CompileError, ParseError, Pos};
 use std::collections::{HashMap, VecDeque};
-use thiserror::Error;
 
 #[cfg(test)]
 mod tests;
 
-#[derive(Error, Debug)]
-pub enum ParseError {
-    #[error(transparent)]
-    LexerError(#[from] LexerError),
-
-    #[error("invalid statement")]
-    InvalidStmt,
-    #[error("expected {0}")]
-    Expected(&'static str),
-    #[error("invalid var decl")]
-    InvalidVarDecl,
-    #[error("invalid expr")]
-    InvalidExpr,
-    #[error("constant {0} overflows int")]
-    OverflowInt(String),
-    #[error("invalid int literal {0}")]
-    InvalidInt(String),
-    #[error("invalid float literal {0}")]
-    InvalidFloat(String),
-    #[error("unclosed expr")]
-    UnclosedParenExpr,
-    #[error("invalid binary op {0}")]
-    InvalidBinOp(String),
-}
-
-pub fn parse(tokens: VecDeque<Token>) -> Result<Vec<Stmt>, ParseError> {
+pub fn parse(tokens: VecDeque<Token>) -> Result<Vec<Stmt>, CompileError> {
     Parser::new(tokens).parse_stmts()
 }
 
@@ -65,10 +40,6 @@ impl Parser {
         self.tokens.front()
     }
 
-    fn peek_mut(&mut self) -> Option<&mut Token> {
-        self.tokens.front_mut()
-    }
-
     fn bump(&mut self) -> Option<Token> {
         self.tokens.pop_front()
     }
@@ -78,14 +49,23 @@ impl Parser {
         self.id
     }
 
-    pub fn parse_stmts(&mut self) -> Result<Vec<Stmt>, ParseError> {
+    pub fn parse_stmts(&mut self) -> Result<Vec<Stmt>, CompileError> {
         let mut stmts = Vec::new();
         loop {
             self.skip_spaces();
             if self.peek().is_none() {
                 break;
             }
-            stmts.push(self.parse_stmt()?);
+            stmts.push(self.parse_stmt().map_err(|err| {
+                CompileError::new(
+                    if let Some(tok) = self.tokens.front() {
+                        tok.pos
+                    } else {
+                        Pos::default()
+                    },
+                    Box::new(err),
+                )
+            })?);
         }
         Ok(stmts)
     }
@@ -105,7 +85,7 @@ impl Parser {
         let expr = self.parse_expr()?;
         Ok(VarDecl::new(
             self.gen_id(),
-            Ident::new(self.gen_id(), name.raw),
+            Ident::new(self.gen_id(), name.raw, name.pos),
             expr,
         ))
     }
@@ -129,7 +109,7 @@ impl Parser {
             _ => self.parse_expr()?.into(),
         };
         self.bump_if(|tok| tok.kind == TokenKind::Semi)
-            .ok_or(ParseError::InvalidStmt)?;
+            .ok_or(ParseError::Expected(";"))?;
         Ok(stmt)
     }
 
@@ -202,9 +182,9 @@ impl Parser {
                     crate::lex::LitKind::Bool(b) => LitKind::Bool(b),
                     crate::lex::LitKind::String => LitKind::String(tok.raw),
                 };
-                Expr::Lit(Lit::new(self.gen_id(), kind))
+                Expr::Lit(Lit::new(self.gen_id(), kind, tok.pos))
             }
-            TokenKind::Ident => Ident::new(self.gen_id(), tok.raw).into(),
+            TokenKind::Ident => Ident::new(self.gen_id(), tok.raw, tok.pos).into(),
             TokenKind::LParen => {
                 let expr = self.parse_expr()?;
                 if self.peek().ok_or(ParseError::UnclosedParenExpr)?.kind != TokenKind::RParen {
@@ -255,6 +235,7 @@ impl Parser {
         let tok = self.peek().ok_or(ParseError::InvalidExpr)?;
         let lhs = match tok.kind {
             TokenKind::Not | TokenKind::Plus | TokenKind::Minus => {
+                let pos = tok.pos;
                 let unary_op = match self.bump().unwrap().kind {
                     TokenKind::Not => UnaryOp::Not,
                     TokenKind::Plus => UnaryOp::Add,
@@ -262,7 +243,7 @@ impl Parser {
                     _ => unreachable!(),
                 };
                 let expr = self.parse_primary_expr()?;
-                Unary::new(self.gen_id(), unary_op, expr).into()
+                Unary::new(self.gen_id(), unary_op, expr, pos).into()
             }
             _ => self.parse_primary_expr()?,
         };
@@ -289,7 +270,7 @@ impl Parser {
 
     fn skip_spaces(&mut self) {
         match self.peek() {
-            Some(peek) if peek.is_spaces() => {
+            Some(peek) if peek.is_spaces() || peek.kind == TokenKind::LineComment => {
                 self.bump();
             }
             _ => {}

@@ -1,3 +1,5 @@
+use error::Pos;
+
 pub type NodeId = u32;
 
 pub trait Node {
@@ -72,6 +74,17 @@ Enum!(Expr [
     (Unary, unary)
 ]);
 
+impl Expr {
+    pub fn pos(&self) -> Pos {
+        match self {
+            Expr::Lit(lit) => lit.pos,
+            Expr::Ident(ident) => ident.pos,
+            Expr::Binary(binary) => binary.lhs.pos(),
+            Expr::Unary(unary) => unary.pos,
+        }
+    }
+}
+
 /// var <name> = <expr>;
 #[derive(Debug)]
 pub struct VarDecl {
@@ -94,6 +107,7 @@ impl VarDecl {
 pub struct Lit {
     pub id: NodeId,
     pub kind: LitKind,
+    pub pos: Pos,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -105,8 +119,8 @@ pub enum LitKind {
 }
 
 impl Lit {
-    pub fn new(id: NodeId, kind: LitKind) -> Self {
-        Lit { id, kind }
+    pub fn new(id: NodeId, kind: LitKind, pos: Pos) -> Self {
+        Lit { id, kind, pos }
     }
 
     pub fn into_int(self) -> u64 {
@@ -142,11 +156,12 @@ impl Lit {
 pub struct Ident {
     pub id: NodeId,
     pub raw: String,
+    pub pos: Pos,
 }
 
 impl Ident {
-    pub fn new(id: NodeId, raw: String) -> Self {
-        Ident { id, raw }
+    pub fn new(id: NodeId, raw: String, pos: Pos) -> Self {
+        Ident { id, raw, pos }
     }
 }
 
@@ -186,14 +201,16 @@ pub struct Unary {
     pub id: NodeId,
     pub op: UnaryOp,
     pub expr: Box<Expr>,
+    pub pos: Pos,
 }
 
 impl Unary {
-    pub fn new(id: NodeId, op: UnaryOp, expr: Expr) -> Self {
+    pub fn new(id: NodeId, op: UnaryOp, expr: Expr, pos: Pos) -> Self {
         Unary {
             id,
             op,
             expr: Box::new(expr),
+            pos,
         }
     }
 }

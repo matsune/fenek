@@ -2,26 +2,14 @@ use crate::mir;
 use crate::mir::Typed;
 use crate::scope::*;
 use crate::tree::{ArenaTree, TreeNodeIdx};
+use error::{CompileError, TypeCkError};
 use parse::ast;
 use parse::ast::Node;
 use std::collections::HashMap;
-use thiserror::Error;
 #[cfg(test)]
 mod tests;
 
-#[derive(Error, Debug)]
-pub enum TypeCkError {
-    #[error("already defined variable `{0}`")]
-    AlreadyDefinedVariable(String),
-    #[error("undefined variable `{0}`")]
-    UndefinedVariable(String),
-    #[error("invalid binary types")]
-    InvalidBinaryTypes,
-    #[error("invalid unary types")]
-    InvalidUnaryTypes,
-}
-
-type Result<T> = std::result::Result<T, TypeCkError>;
+type Result<T> = std::result::Result<T, CompileError>;
 
 pub struct TypeCk {
     pub ty_map: HashMap<ast::NodeId, mir::Type>,
@@ -58,8 +46,11 @@ impl TypeCk {
             ast::Stmt::Expr(expr) => self.typecheck_expr(expr).map(|expr| expr.into()),
             ast::Stmt::VarDecl(var_decl) => {
                 if self.current_scope().lookup(&var_decl.name.raw).is_some() {
-                    return Err(TypeCkError::AlreadyDefinedVariable(
-                        var_decl.name.raw.clone(),
+                    return Err(CompileError::new(
+                        var_decl.name.pos,
+                        Box::new(TypeCkError::AlreadyDefinedVariable(
+                            var_decl.name.raw.clone(),
+                        )),
                     ));
                 }
                 let expr = self.typecheck_expr(&var_decl.init)?;
@@ -99,7 +90,12 @@ impl TypeCk {
             }
             ast::Expr::Ident(ident) => match self.current_scope().lookup(&ident.raw) {
                 Some(def) => mir::Ident::new(ident.raw.clone(), *def).into(),
-                None => return Err(TypeCkError::UndefinedVariable(ident.raw.clone())),
+                None => {
+                    return Err(CompileError::new(
+                        ident.pos,
+                        Box::new(TypeCkError::UndefinedVariable(ident.raw.clone())),
+                    ))
+                }
             },
             ast::Expr::Binary(binary) => self.typecheck_binary(binary)?.into(),
             ast::Expr::Unary(unary) => self.typecheck_unary(unary)?.into(),
@@ -125,7 +121,8 @@ impl TypeCk {
                 .binary_div_type(lhs.get_type(), rhs.get_type())
                 .ok_or(TypeCkError::InvalidBinaryTypes),
             _ => Err(TypeCkError::InvalidBinaryTypes),
-        }?;
+        }
+        .map_err(|err| CompileError::new(binary.lhs.pos(), Box::new(err)))?;
         Ok(mir::Binary::new(binary.id, binary.op.clone(), lhs, rhs, ty))
     }
 
@@ -135,12 +132,18 @@ impl TypeCk {
         match unary.op {
             ast::UnaryOp::Add | ast::UnaryOp::Sub => {
                 if !ty.is_int() && !ty.is_float() {
-                    return Err(TypeCkError::InvalidUnaryTypes);
+                    return Err(CompileError::new(
+                        unary.expr.pos(),
+                        Box::new(TypeCkError::InvalidUnaryTypes),
+                    ));
                 }
             }
             ast::UnaryOp::Not => {
                 if !ty.is_bool() {
-                    return Err(TypeCkError::InvalidUnaryTypes);
+                    return Err(CompileError::new(
+                        unary.expr.pos(),
+                        Box::new(TypeCkError::InvalidUnaryTypes),
+                    ));
                 }
             }
         }
