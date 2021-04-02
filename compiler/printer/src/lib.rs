@@ -42,14 +42,17 @@ impl Printer {
 
     fn build_stmt(&mut self, stmt: &mir::Stmt) -> &mut Self {
         match stmt {
-            mir::Stmt::VarDecl(var_decl) => {
-                // var_decl.
-                self.begin_child("VarDecl")
-                    .add_empty_child(&var_decl.name.raw)
-                    .add_empty_child("=")
-                    .build_expr(&var_decl.init)
-                    .end_child()
-            }
+            mir::Stmt::VarDecl(var_decl) => self
+                .begin_child("VarDecl")
+                .add_empty_child(&format!(
+                    "{}::{:?} def_id={}",
+                    var_decl.name.raw,
+                    var_decl.def.get_type(),
+                    var_decl.def.id(),
+                ))
+                .add_empty_child("=")
+                .build_expr(&var_decl.init)
+                .end_child(),
             mir::Stmt::Expr(expr) => self.build_expr(expr),
         }
     }
@@ -63,7 +66,12 @@ impl Printer {
                 ast::LitKind::Bool(v) => self.add_empty_child(&format!("{}::{:?}", v, ty)),
                 ast::LitKind::String(v) => self.add_empty_child(&format!("{}::{:?}", v, ty)),
             },
-            mir::Expr::Ident(ident) => self.add_empty_child(&format!("{}::{:?}", ident.raw, ty)),
+            mir::Expr::Ident(ident) => self.add_empty_child(&format!(
+                "{}::{:?} def_id={}",
+                ident.raw,
+                ty,
+                ident.def.id()
+            )),
             mir::Expr::Binary(binary) => self
                 .begin_child(&format!("Binary::{:?}", ty))
                 .build_expr(&binary.lhs)
