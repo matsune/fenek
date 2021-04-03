@@ -15,6 +15,9 @@ macro_rules! impl_node {
         }
     };
 }
+impl_node!(Fun);
+impl_node!(FunArg);
+impl_node!(Block);
 impl_node!(VarDecl);
 impl_node!(Lit);
 impl_node!(Ident);
@@ -60,6 +63,60 @@ macro_rules! Enum {
 
         )*
     };
+}
+
+pub struct Fun {
+    pub id: NodeId,
+    pub name: Ident,
+    pub args: FunArgs,
+    pub ret_ty: Option<Ident>,
+    pub block: Block,
+    pub pos: Pos,
+}
+
+impl Fun {
+    pub fn new(
+        id: NodeId,
+        name: Ident,
+        args: FunArgs,
+        ret_ty: Option<Ident>,
+        block: Block,
+        pos: Pos,
+    ) -> Self {
+        Fun {
+            id,
+            name,
+            args,
+            ret_ty,
+            block,
+            pos,
+        }
+    }
+}
+
+pub type FunArgs = Vec<FunArg>;
+
+pub struct FunArg {
+    pub id: NodeId,
+    pub name: Ident,
+    pub ty: Ident,
+}
+
+impl FunArg {
+    pub fn new(id: NodeId, name: Ident, ty: Ident) -> Self {
+        FunArg { id, name, ty }
+    }
+}
+
+pub struct Block {
+    pub id: NodeId,
+    pub stmts: Vec<Stmt>,
+}
+
+impl Block {
+    pub fn new(id: NodeId, stmts: Vec<Stmt>) -> Self {
+        Block { id, stmts }
+    }
 }
 
 Enum!(Stmt [

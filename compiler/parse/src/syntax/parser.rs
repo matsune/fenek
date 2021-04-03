@@ -6,8 +6,8 @@ use std::collections::{HashMap, VecDeque};
 #[cfg(test)]
 mod tests;
 
-pub fn parse(tokens: VecDeque<Token>) -> Result<Vec<Stmt>, CompileError> {
-    Parser::new(tokens).parse_stmts()
+pub fn parse(tokens: VecDeque<Token>) -> Result<Fun, CompileError> {
+    Parser::new(tokens).parse_fun()
 }
 
 struct Parser {
@@ -49,26 +49,123 @@ impl Parser {
         self.id
     }
 
-    pub fn parse_stmts(&mut self) -> Result<Vec<Stmt>, CompileError> {
+    pub fn parse_fun(&mut self) -> Result<Fun, CompileError> {
+        let kw_fun = self
+            .bump_if(|tok| tok.kind == TokenKind::KwFun)
+            .ok_or_else(|| self.expected_err("func"))?;
+        let pos = kw_fun.pos;
+        self.skip_spaces();
+        let name = self
+            .bump_if(|tok| tok.is_ident())
+            .ok_or_else(|| self.expected_err("ident"))?;
+        let name = Ident::new(self.gen_id(), name.raw, name.pos);
+        self.skip_spaces();
+        let args = self.parse_fun_args()?;
+        self.skip_spaces();
+        let ret_ty = match self.peek() {
+            Some(tok) if tok.kind == TokenKind::LBrace => None,
+            _ => {
+                // has return type
+                self.bump_if(|tok| tok.kind == TokenKind::Minus)
+                    .ok_or_else(|| self.expected_err("->"))?;
+                self.bump_if(|tok| tok.kind == TokenKind::Gt)
+                    .ok_or_else(|| self.expected_err("->"))?;
+                self.skip_spaces();
+                let ret_ty = self
+                    .bump_if(|tok| tok.is_ident())
+                    .ok_or_else(|| self.expected_err("ident"))?;
+                self.skip_spaces();
+                Some(Ident::new(self.gen_id(), ret_ty.raw, ret_ty.pos))
+            }
+        };
+        let block = self.parse_block()?;
+        Ok(Fun::new(self.gen_id(), name, args, ret_ty, block, pos))
+    }
+
+    fn parse_block(&mut self) -> Result<Block, CompileError> {
+        self.bump_if(|tok| tok.kind == TokenKind::LBrace)
+            .ok_or_else(|| self.expected_err("{"))?;
+
         let mut stmts = Vec::new();
         loop {
             self.skip_spaces();
-            if self.peek().is_none() {
+            match self.peek() {
+                None => break,
+                Some(tok) => match tok.kind {
+                    TokenKind::Semi => {
+                        self.bump();
+                        continue;
+                    }
+                    TokenKind::RBrace => break,
+                    _ => {}
+                },
+            }
+            stmts.push(
+                self.parse_stmt()
+                    .map_err(|err| CompileError::new(self.current_pos(), Box::new(err)))?,
+            );
+        }
+
+        self.bump_if(|tok| tok.kind == TokenKind::RBrace)
+            .ok_or_else(|| self.expected_err("}"))?;
+        Ok(Block::new(self.gen_id(), stmts))
+    }
+
+    /// fun_args    ::= '(' <args>* ')'
+    /// args        ::= <ident> ':' <ident> (',' <args>)?
+    fn parse_fun_args(&mut self) -> Result<FunArgs, CompileError> {
+        self.bump_if(|tok| tok.kind == TokenKind::LParen)
+            .ok_or_else(|| self.expected_err("("))?;
+        self.skip_spaces();
+        let mut args = Vec::new();
+        if matches!(self.peek(), Some(tok) if tok.kind == TokenKind::RParen) {
+            self.bump();
+            return Ok(args);
+        }
+        loop {
+            let name = self
+                .bump_if(|tok| tok.is_ident())
+                .ok_or_else(|| self.expected_err("ident"))?;
+            self.skip_spaces();
+            self.bump_if(|tok| tok.kind == TokenKind::Colon)
+                .ok_or_else(|| self.expected_err(":"))?;
+            self.skip_spaces();
+            let ty = self
+                .bump_if(|tok| tok.is_ident())
+                .ok_or_else(|| self.expected_err("type ident"))?;
+            args.push(FunArg::new(
+                self.gen_id(),
+                Ident::new(self.gen_id(), name.raw, name.pos),
+                Ident::new(self.gen_id(), ty.raw, ty.pos),
+            ));
+            self.skip_spaces();
+            if matches!(self.peek(), Some(tok) if tok.kind == TokenKind::Comma) {
+                self.bump();
+                self.skip_spaces();
+            } else {
                 break;
             }
-            stmts.push(self.parse_stmt().map_err(|err| {
-                CompileError::new(
-                    if let Some(tok) = self.tokens.front() {
-                        tok.pos
-                    } else {
-                        Pos::default()
-                    },
-                    Box::new(err),
-                )
-            })?);
         }
-        Ok(stmts)
+        self.bump_if(|tok| tok.kind == TokenKind::RParen)
+            .ok_or_else(|| self.expected_err(")"))?;
+        Ok(args)
     }
+
+    fn current_pos(&self) -> Pos {
+        if let Some(tok) = self.tokens.front() {
+            tok.pos
+        } else {
+            Pos::default()
+        }
+    }
+
+    fn expected_err(&self, expected: &'static str) -> CompileError {
+        CompileError::new(self.current_pos(), Box::new(ParseError::Expected(expected)))
+    }
+
+    // pub fn parse_stmts(&mut self) -> Result<Vec<Stmt>, CompileError> {
+    //     Ok(stmts)
+    // }
 
     pub fn parse_var_decl(&mut self) -> Result<VarDecl, ParseError> {
         self.bump_if(|tok| tok.kind == TokenKind::KwVar)
@@ -269,11 +366,13 @@ impl Parser {
     }
 
     fn skip_spaces(&mut self) {
-        match self.peek() {
-            Some(peek) if peek.is_spaces() || peek.kind == TokenKind::LineComment => {
-                self.bump();
+        loop {
+            match self.peek() {
+                Some(peek) if peek.is_spaces() || peek.kind == TokenKind::LineComment => {
+                    self.bump();
+                }
+                _ => return,
             }
-            _ => {}
         }
     }
 }

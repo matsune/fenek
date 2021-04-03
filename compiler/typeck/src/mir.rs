@@ -1,4 +1,4 @@
-use crate::scope::Def;
+use crate::scope::{Def, FunDef, VarDef};
 use parse::ast;
 
 pub trait Typed {
@@ -41,13 +41,54 @@ pub enum IntTy {
     I16,
     I32,
     I64,
-    // ISize,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum FloatTy {
     F32,
     F64,
+}
+
+pub struct Fun {
+    pub id: ast::NodeId,
+    pub name: Ident,
+    pub args: FunArgs,
+    pub ret_ty: Type,
+    pub block: Block,
+    pub def: FunDef,
+}
+
+impl Fun {
+    pub fn new(
+        id: ast::NodeId,
+        name: Ident,
+        args: FunArgs,
+        ret_ty: Type,
+        block: Block,
+        def: FunDef,
+    ) -> Self {
+        Fun {
+            id,
+            name,
+            args,
+            ret_ty,
+            block,
+            def,
+        }
+    }
+}
+
+pub type FunArgs = Vec<Ident>;
+
+pub struct Block {
+    pub id: ast::NodeId,
+    pub stmts: Vec<Stmt>,
+}
+
+impl Block {
+    pub fn new(id: ast::NodeId, stmts: Vec<Stmt>) -> Self {
+        Block { id, stmts }
+    }
 }
 
 #[derive(Debug)]
@@ -81,11 +122,11 @@ pub struct VarDecl {
     pub id: ast::NodeId,
     pub name: ast::Ident,
     pub init: Box<Expr>,
-    pub def: Def,
+    pub def: VarDef,
 }
 
 impl VarDecl {
-    pub fn new(id: ast::NodeId, name: ast::Ident, init: Box<Expr>, def: Def) -> Self {
+    pub fn new(id: ast::NodeId, name: ast::Ident, init: Box<Expr>, def: VarDef) -> Self {
         Self {
             id,
             name,
@@ -134,7 +175,8 @@ impl Ident {
 
 impl Typed for Ident {
     fn get_type(&self) -> Type {
-        match self.def {
+        match &self.def {
+            Def::Fun(fun_def) => fun_def.ret_ty,
             Def::Var(var_def) => var_def.ty,
         }
     }

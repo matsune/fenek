@@ -51,6 +51,7 @@ pub enum TokenKind {
     Ident,
     Lit(LitKind),
     KwVar,
+    KwFun,
     Slash,
     Semi,
     Comma,

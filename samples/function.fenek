@@ -1,4 +1,4 @@
-fun main() -> i64 {
-  let a = 10;
-  ret a;
+fun main(argc: i8) -> i64 {
+  var a = 10;;
+  var b = a * 30;
 }

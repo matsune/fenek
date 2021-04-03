@@ -1,33 +1,5 @@
 use crate::mir;
-use crate::tree::*;
 use std::collections::HashMap;
-
-// #[derive(Debug, Default)]
-// pub struct ScopeTree {
-//     inner: ArenaTree<Scope>,
-// }
-
-// impl ScopeTree {
-//     pub fn add_scope(&mut self, scope: Scope) -> TreeNodeIdx {
-//         self.inner.add_node(scope)
-//     }
-
-//     pub fn global_scope(&self) -> &TreeNode<Scope> {
-//         self.inner.get(0).unwrap()
-//     }
-
-//     pub fn global_scope_mut(&mut self) -> &mut TreeNode<Scope> {
-//         self.inner.get_mut(0).unwrap()
-//     }
-
-//     pub fn get(&self, idx: TreeNodeIdx) -> Option<&TreeNode<Scope>> {
-//         self.inner.get(idx)
-//     }
-
-//     pub fn get_mut(&mut self, idx: TreeNodeIdx) -> Option<&mut TreeNode<Scope>> {
-//         self.inner.get_mut(idx)
-//     }
-// }
 
 #[derive(Debug, Default)]
 pub struct ScopeTable {
@@ -48,28 +20,69 @@ impl ScopeTable {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum Def {
+    Fun(FunDef),
     Var(VarDef),
 }
 
 impl Def {
+    pub fn into_fun_def(self) -> FunDef {
+        match self {
+            Def::Fun(def) => def,
+            _ => panic!(),
+        }
+    }
+
     pub fn into_var_def(self) -> VarDef {
         match self {
             Def::Var(var_def) => var_def,
+            _ => panic!(),
+        }
+    }
+
+    pub fn as_var_def(&self) -> &VarDef {
+        match self {
+            Def::Var(ref var_def) => var_def,
+            _ => panic!(),
         }
     }
 
     pub fn get_type(&self) -> mir::Type {
         match self {
+            Def::Fun(fun_def) => fun_def.ret_ty,
             Def::Var(var_def) => var_def.ty,
         }
     }
 
     pub fn id(&self) -> usize {
         match self {
+            Def::Fun(fun_def) => fun_def.id,
             Def::Var(var_def) => var_def.id,
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FunDef {
+    pub id: usize,
+    pub ret_ty: mir::Type,
+    pub arg_tys: Vec<mir::Type>,
+}
+
+impl FunDef {
+    pub fn new(id: usize, ret_ty: mir::Type, arg_tys: Vec<mir::Type>) -> Self {
+        Self {
+            id,
+            ret_ty,
+            arg_tys,
+        }
+    }
+}
+
+impl Into<Def> for FunDef {
+    fn into(self) -> Def {
+        Def::Fun(self)
     }
 }
 
@@ -78,11 +91,17 @@ pub struct VarDef {
     pub id: usize,
     pub ty: mir::Type,
     pub is_mut: bool,
+    pub is_arg: bool,
 }
 
 impl VarDef {
-    pub fn new(id: usize, ty: mir::Type, is_mut: bool) -> Self {
-        Self { id, ty, is_mut }
+    pub fn new(id: usize, ty: mir::Type, is_mut: bool, is_arg: bool) -> Self {
+        Self {
+            id,
+            ty,
+            is_mut,
+            is_arg,
+        }
     }
 }
 

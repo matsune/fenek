@@ -6,11 +6,9 @@ use typeck::mir::Typed;
 #[cfg(test)]
 mod tests;
 
-pub fn print(stmts: &[mir::Stmt]) -> std::io::Result<()> {
+pub fn print(fun: &mir::Fun) -> std::io::Result<()> {
     let mut printer = Printer::new();
-    for stmt in stmts.iter() {
-        printer.build_stmt(stmt);
-    }
+    printer.build_fun(fun);
     printer.print_tree()
 }
 
@@ -40,15 +38,31 @@ impl Printer {
         self
     }
 
+    fn build_fun(&mut self, fun: &mir::Fun) -> &mut Self {
+        let args = fun
+            .args
+            .iter()
+            .map(|arg| format!("{}: {:?}", arg.raw, arg.def.as_var_def().ty))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let ret_ty = match fun.ret_ty {
+            mir::Type::Void => String::from(""),
+            _ => format!(" -> {:?}", fun.ret_ty),
+        };
+        self.begin_child(&format!("fun {}({}){}", fun.name.raw, args, ret_ty));
+        for stmt in fun.block.stmts.iter() {
+            self.build_stmt(stmt);
+        }
+        self
+    }
+
     fn build_stmt(&mut self, stmt: &mir::Stmt) -> &mut Self {
         match stmt {
             mir::Stmt::VarDecl(var_decl) => self
                 .begin_child("VarDecl")
                 .add_empty_child(&format!(
                     "{}::{:?} def_id={}",
-                    var_decl.name.raw,
-                    var_decl.def.get_type(),
-                    var_decl.def.id(),
+                    var_decl.name.raw, var_decl.def.ty, var_decl.def.id,
                 ))
                 .add_empty_child("=")
                 .build_expr(&var_decl.init)

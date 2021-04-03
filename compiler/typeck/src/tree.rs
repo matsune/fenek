@@ -6,9 +6,12 @@ pub struct ArenaTree<T> {
 }
 
 impl<T> ArenaTree<T> {
-    pub fn add_node(&mut self, val: T) -> TreeNodeIdx {
+    pub fn add_node(&mut self, val: T, parent: Option<TreeNodeIdx>) -> TreeNodeIdx {
         let idx = self.arena.len();
-        self.arena.push(TreeNode::new(idx, val));
+        if let Some(parent_idx) = parent {
+            self.get_mut(parent_idx).unwrap().children.push(idx);
+        }
+        self.arena.push(TreeNode::new(idx, val, parent));
         idx
     }
 
@@ -24,26 +27,26 @@ impl<T> ArenaTree<T> {
 #[derive(Debug)]
 pub struct TreeNode<T> {
     idx: TreeNodeIdx,
-    val: T,
-    parent: Option<TreeNodeIdx>,
+    inner: T,
+    pub parent: Option<TreeNodeIdx>,
     children: Vec<TreeNodeIdx>,
 }
 
 impl<T> TreeNode<T> {
-    pub fn new(idx: TreeNodeIdx, val: T) -> Self {
+    pub fn new(idx: TreeNodeIdx, inner: T, parent: Option<TreeNodeIdx>) -> Self {
         Self {
             idx,
-            val,
-            parent: None,
+            inner,
+            parent,
             children: vec![],
         }
     }
 
     pub fn get(&self) -> &T {
-        &self.val
+        &self.inner
     }
 
     pub fn get_mut(&mut self) -> &mut T {
-        &mut self.val
+        &mut self.inner
     }
 }

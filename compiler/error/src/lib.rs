@@ -76,6 +76,8 @@ pub enum ParseError {
 pub enum TypeCkError {
     #[error("already defined variable `{0}`")]
     AlreadyDefinedVariable(String),
+    #[error("undefined type `{0}`")]
+    UndefinedType(String),
     #[error("undefined variable `{0}`")]
     UndefinedVariable(String),
     #[error("invalid binary types")]

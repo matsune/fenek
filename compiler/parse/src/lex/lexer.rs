@@ -129,6 +129,7 @@ impl<'a> Lexer<'a> {
                     "true" => TokenKind::Lit(LitKind::Bool(true)),
                     "false" => TokenKind::Lit(LitKind::Bool(false)),
                     "var" => TokenKind::KwVar,
+                    "fun" => TokenKind::KwFun,
                     _ => TokenKind::Ident,
                 };
                 tok

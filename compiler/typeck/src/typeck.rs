@@ -14,7 +14,7 @@ type Result<T> = std::result::Result<T, CompileError>;
 pub struct TypeCk {
     pub ty_map: HashMap<ast::NodeId, mir::Type>,
     scope_tree: ArenaTree<ScopeTable>,
-    scope_id: TreeNodeIdx,
+    scope_idx: TreeNodeIdx,
 
     def_id: usize,
 }
@@ -22,13 +22,24 @@ pub struct TypeCk {
 impl TypeCk {
     pub fn new() -> Self {
         let mut scope_tree = ArenaTree::default();
-        let scope_id = scope_tree.add_node(ScopeTable::default());
+        let global_scope = ScopeTable::default();
+        let scope_idx = scope_tree.add_node(global_scope, None);
         TypeCk {
             ty_map: HashMap::new(),
             scope_tree,
-            scope_id,
+            scope_idx,
             def_id: 0,
         }
+    }
+
+    fn push_scope(&mut self) {
+        self.scope_tree
+            .add_node(ScopeTable::default(), Some(self.scope_idx));
+    }
+
+    fn pop_scope(&mut self) {
+        let parent_idx = self.scope_tree.get(self.scope_idx).unwrap().parent.unwrap();
+        self.scope_idx = parent_idx;
     }
 
     fn add_type(&mut self, id: ast::NodeId, ty: mir::Type) {
@@ -39,6 +50,71 @@ impl TypeCk {
         let id = self.def_id;
         self.def_id += 1;
         id
+    }
+
+    pub fn typecheck_fun<'a>(&'a mut self, fun: &ast::Fun) -> Result<mir::Fun> {
+        let ret_ty = if let Some(ty) = &fun.ret_ty {
+            self.get_type_from_name(&ty.raw).ok_or(CompileError::new(
+                ty.pos,
+                Box::new(TypeCkError::UndefinedType(ty.raw.clone())),
+            ))?
+        } else {
+            mir::Type::Void
+        };
+        self.push_scope();
+
+        let mut args = Vec::new();
+        for arg in &fun.args {
+            if self.current_scope().lookup(&arg.name.raw).is_some() {
+                return Err(CompileError::new(
+                    arg.name.pos,
+                    Box::new(TypeCkError::AlreadyDefinedVariable(arg.name.raw.clone())),
+                ));
+            }
+            let ty = self
+                .get_type_from_name(&arg.ty.raw)
+                .ok_or(CompileError::new(
+                    arg.ty.pos,
+                    Box::new(TypeCkError::UndefinedType(arg.ty.raw.clone())),
+                ))?;
+            let def = VarDef::new(self.gen_def_id(), ty, false, true);
+            self.current_scope_mut()
+                .insert_var(arg.name.raw.clone(), def);
+            args.push(mir::Ident::new(arg.name.raw.clone(), def.into()));
+        }
+        let mut stmts = Vec::new();
+        for stmt in &fun.block.stmts {
+            stmts.push(self.typecheck_stmt(&stmt)?);
+        }
+        let def = FunDef::new(
+            self.gen_def_id(),
+            ret_ty,
+            args.iter().map(|arg| arg.def.as_var_def().ty).collect(),
+        );
+        let name = mir::Ident::new(fun.name.raw.clone(), def.clone().into());
+        Ok(mir::Fun::new(
+            fun.id,
+            name,
+            args,
+            ret_ty,
+            mir::Block::new(fun.block.id, stmts),
+            def,
+        ))
+    }
+
+    fn get_type_from_name(&self, ty: &str) -> Option<mir::Type> {
+        let ty = match ty {
+            "i8" => mir::Type::Int(mir::IntTy::I8),
+            "i16" => mir::Type::Int(mir::IntTy::I16),
+            "i32" => mir::Type::Int(mir::IntTy::I32),
+            "i64" => mir::Type::Int(mir::IntTy::I64),
+            "f32" => mir::Type::Float(mir::FloatTy::F32),
+            "f64" => mir::Type::Float(mir::FloatTy::F64),
+            "bool" => mir::Type::Bool,
+            "string" => mir::Type::String,
+            _ => return None,
+        };
+        Some(ty)
     }
 
     pub fn typecheck_stmt<'a>(&'a mut self, stmt: &ast::Stmt) -> Result<mir::Stmt> {
@@ -54,7 +130,7 @@ impl TypeCk {
                     ));
                 }
                 let expr = self.typecheck_expr(&var_decl.init)?;
-                let def = VarDef::new(self.gen_def_id(), expr.get_type(), false);
+                let def = VarDef::new(self.gen_def_id(), expr.get_type(), false, false);
                 self.current_scope_mut()
                     .insert_var(var_decl.name.raw.clone(), def);
                 let var_decl = mir::VarDecl::new(
@@ -69,11 +145,11 @@ impl TypeCk {
     }
 
     pub fn current_scope(&self) -> &ScopeTable {
-        self.scope_tree.get(self.scope_id).unwrap().get()
+        self.scope_tree.get(self.scope_idx).unwrap().get()
     }
 
     fn current_scope_mut(&mut self) -> &mut ScopeTable {
-        self.scope_tree.get_mut(self.scope_id).unwrap().get_mut()
+        self.scope_tree.get_mut(self.scope_idx).unwrap().get_mut()
     }
 
     pub fn typecheck_expr<'a>(&'a mut self, expr: &ast::Expr) -> Result<mir::Expr> {
@@ -89,7 +165,7 @@ impl TypeCk {
                 mir::Lit::new(lit.id, lit.kind.clone(), ty).into()
             }
             ast::Expr::Ident(ident) => match self.current_scope().lookup(&ident.raw) {
-                Some(def) => mir::Ident::new(ident.raw.clone(), *def).into(),
+                Some(def) => mir::Ident::new(ident.raw.clone(), def.clone()).into(),
                 None => {
                     return Err(CompileError::new(
                         ident.pos,
