@@ -29,5 +29,7 @@ fn run_main() -> Result<(), Box<dyn Error>> {
     if opts.emit.contains(&opts::Emit::Ast) {
         printer::print(&mir_fun)?;
     }
+    println!("\n======== LLVM IR =========\n");
+    codegen::codegen(mir_fun);
     Ok(())
 }

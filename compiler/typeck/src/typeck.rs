@@ -83,6 +83,9 @@ impl TypeCk {
             let ty = self.get_type_from_name(&arg.ty.raw).ok_or_else(|| {
                 self.compile_error(arg.ty.pos, TypeCkError::UndefinedType(arg.ty.raw.clone()))
             })?;
+            if ty == mir::Type::Void {
+                return Err(self.compile_error(arg.ty.pos, TypeCkError::InvalidType));
+            }
             let def = VarDef::new(self.gen_def_id(), ty, false, true);
             self.current_scope_mut()
                 .insert_var(arg.name.raw.clone(), def);
