@@ -1,4 +1,6 @@
 fun main(argc: i8) -> i64 {
-  var a = 10;;
+  var a = 10;
+  ; // empty stmt
   var b = a * 30;
+  ret b;
 }

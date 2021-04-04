@@ -20,6 +20,8 @@ impl ScopeTable {
     }
 }
 
+pub type DefId = usize;
+
 #[derive(Debug, Clone)]
 pub enum Def {
     Fun(FunDef),
@@ -55,7 +57,7 @@ impl Def {
         }
     }
 
-    pub fn id(&self) -> usize {
+    pub fn id(&self) -> DefId {
         match self {
             Def::Fun(fun_def) => fun_def.id,
             Def::Var(var_def) => var_def.id,
@@ -65,13 +67,13 @@ impl Def {
 
 #[derive(Debug, Clone)]
 pub struct FunDef {
-    pub id: usize,
+    pub id: DefId,
     pub ret_ty: mir::Type,
     pub arg_tys: Vec<mir::Type>,
 }
 
 impl FunDef {
-    pub fn new(id: usize, ret_ty: mir::Type, arg_tys: Vec<mir::Type>) -> Self {
+    pub fn new(id: DefId, ret_ty: mir::Type, arg_tys: Vec<mir::Type>) -> Self {
         Self {
             id,
             ret_ty,
@@ -88,14 +90,14 @@ impl Into<Def> for FunDef {
 
 #[derive(Debug, Clone, Copy)]
 pub struct VarDef {
-    pub id: usize,
+    pub id: DefId,
     pub ty: mir::Type,
     pub is_mut: bool,
     pub is_arg: bool,
 }
 
 impl VarDef {
-    pub fn new(id: usize, ty: mir::Type, is_mut: bool, is_arg: bool) -> Self {
+    pub fn new(id: DefId, ty: mir::Type, is_mut: bool, is_arg: bool) -> Self {
         Self {
             id,
             ty,

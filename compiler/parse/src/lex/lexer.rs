@@ -78,14 +78,14 @@ impl<'a> Lexer<'a> {
         Ok(vec)
     }
 
-    fn mk_tok(&self, kind: TokenKind, raw: String) -> Token {
-        Token::new(kind, raw, self.begin)
+    fn mk_tok<T: std::string::ToString>(&self, kind: TokenKind, raw: T) -> Token {
+        Token::new(kind, raw.to_string(), self.begin)
     }
 
     fn scan(&mut self) -> Result<Token, LexerError> {
         let c = self.bump();
         let tok = match c {
-            EOF => self.mk_tok(TokenKind::Eof, EOF.into()),
+            EOF => self.mk_tok(TokenKind::Eof, EOF),
             c if is_whitespace(c) => self.scan_while(TokenKind::Spaces, c.into(), is_whitespace),
             c if is_newline(c) => self.scan_while(TokenKind::Newlines, c.into(), is_newline),
             '/' => match self.peek() {
@@ -98,26 +98,33 @@ impl<'a> Lexer<'a> {
                     }
                     tok
                 }
-                _ => self.mk_tok(TokenKind::Slash, c.into()),
+                _ => self.mk_tok(TokenKind::Slash, c),
             },
-            ';' => self.mk_tok(TokenKind::Semi, c.into()),
-            ',' => self.mk_tok(TokenKind::Comma, c.into()),
-            '(' => self.mk_tok(TokenKind::LParen, c.into()),
-            ')' => self.mk_tok(TokenKind::RParen, c.into()),
-            '{' => self.mk_tok(TokenKind::LBrace, c.into()),
-            '}' => self.mk_tok(TokenKind::RBrace, c.into()),
-            ':' => self.mk_tok(TokenKind::Colon, c.into()),
-            '=' => self.mk_tok(TokenKind::Eq, c.into()),
-            '!' => self.mk_tok(TokenKind::Not, c.into()),
-            '<' => self.mk_tok(TokenKind::Lt, c.into()),
-            '>' => self.mk_tok(TokenKind::Gt, c.into()),
-            '-' => self.mk_tok(TokenKind::Minus, c.into()),
-            '&' => self.mk_tok(TokenKind::And, c.into()),
-            '|' => self.mk_tok(TokenKind::Or, c.into()),
-            '+' => self.mk_tok(TokenKind::Plus, c.into()),
-            '*' => self.mk_tok(TokenKind::Star, c.into()),
-            '^' => self.mk_tok(TokenKind::Caret, c.into()),
-            '%' => self.mk_tok(TokenKind::Percent, c.into()),
+            ';' => self.mk_tok(TokenKind::Semi, c),
+            ',' => self.mk_tok(TokenKind::Comma, c),
+            '(' => self.mk_tok(TokenKind::LParen, c),
+            ')' => self.mk_tok(TokenKind::RParen, c),
+            '{' => self.mk_tok(TokenKind::LBrace, c),
+            '}' => self.mk_tok(TokenKind::RBrace, c),
+            ':' => self.mk_tok(TokenKind::Colon, c),
+            '=' => self.mk_tok(TokenKind::Eq, c),
+            '!' => self.mk_tok(TokenKind::Not, c),
+            '<' => self.mk_tok(TokenKind::Lt, c),
+            '>' => self.mk_tok(TokenKind::Gt, c),
+            '-' => {
+                if self.peek() == '>' {
+                    self.bump();
+                    self.mk_tok(TokenKind::Arrow, "->")
+                } else {
+                    self.mk_tok(TokenKind::Minus, c)
+                }
+            }
+            '&' => self.mk_tok(TokenKind::And, c),
+            '|' => self.mk_tok(TokenKind::Or, c),
+            '+' => self.mk_tok(TokenKind::Plus, c),
+            '*' => self.mk_tok(TokenKind::Star, c),
+            '^' => self.mk_tok(TokenKind::Caret, c),
+            '%' => self.mk_tok(TokenKind::Percent, c),
             c if is_num(c) => self.scan_number(c)?,
             '"' => self.scan_string()?,
             // '\'' => self.scan_char()?,
@@ -130,6 +137,7 @@ impl<'a> Lexer<'a> {
                     "false" => TokenKind::Lit(LitKind::Bool(false)),
                     "var" => TokenKind::KwVar,
                     "fun" => TokenKind::KwFun,
+                    "ret" => TokenKind::KwRet,
                     _ => TokenKind::Ident,
                 };
                 tok
@@ -202,7 +210,7 @@ impl<'a> Lexer<'a> {
         if is_newline(c) {
             self.end.newline();
         } else {
-            self.end.add_row(c.len_utf8().try_into().unwrap());
+            self.end.add_row(c.len_utf16().try_into().unwrap());
         }
         c
     }

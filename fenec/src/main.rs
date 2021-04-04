@@ -24,7 +24,7 @@ fn run_main() -> Result<(), Box<dyn Error>> {
     let opts = Opts::parse();
     let input = read_file(&opts.src).map_err(|err| format!("{}: {}", &opts.src, err))?;
     let fun = parse::parse(&input)?;
-    let mut typeck = typeck::TypeCk::new();
+    let mut typeck = typeck::TypeCk::default();
     let mir_fun = typeck.typecheck_fun(&fun)?;
     if opts.emit.contains(&opts::Emit::Ast) {
         printer::print(&mir_fun)?;

@@ -23,6 +23,7 @@ impl_node!(Lit);
 impl_node!(Ident);
 impl_node!(Binary);
 impl_node!(Unary);
+impl_node!(Ret);
 
 macro_rules! Enum {
     ($name:ident [$(($Var:ident, $var:ident)),*]) => {
@@ -121,7 +122,8 @@ impl Block {
 
 Enum!(Stmt [
     (VarDecl, var_decl),
-    (Expr, expr)
+    (Expr, expr),
+    (Ret, ret)
 ]);
 
 Enum!(Expr [
@@ -293,5 +295,18 @@ impl std::fmt::Display for UnaryOp {
                 UnaryOp::Not => "!",
             }
         )
+    }
+}
+
+#[derive(Debug)]
+pub struct Ret {
+    pub id: NodeId,
+    pub expr: Option<Expr>,
+    pub pos: Pos,
+}
+
+impl Ret {
+    pub fn new(id: NodeId, expr: Option<Expr>, pos: Pos) -> Self {
+        Self { id, expr, pos }
     }
 }

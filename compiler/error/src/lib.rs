@@ -54,8 +54,10 @@ pub enum ParseError {
 
     #[error("invalid statement")]
     InvalidStmt,
+    #[error("unexpected EOF")]
+    UnexpectedEof,
     #[error("expected `{0}`")]
-    Expected(&'static str),
+    Expected(String),
     #[error("invalid var decl")]
     InvalidVarDecl,
     #[error("invalid expr")]
@@ -80,6 +82,8 @@ pub enum TypeCkError {
     UndefinedType(String),
     #[error("undefined variable `{0}`")]
     UndefinedVariable(String),
+    #[error("invalid return type")]
+    InvalidReturnType,
     #[error("invalid binary types")]
     InvalidBinaryTypes,
     #[error("invalid unary types")]

@@ -6,7 +6,9 @@ use std::collections::{HashMap, VecDeque};
 #[cfg(test)]
 mod tests;
 
-pub fn parse(tokens: VecDeque<Token>) -> Result<Fun, CompileError> {
+type Result<T> = std::result::Result<T, CompileError>;
+
+pub fn parse(tokens: VecDeque<Token>) -> Result<Fun> {
     Parser::new(tokens).parse_fun()
 }
 
@@ -49,142 +51,12 @@ impl Parser {
         self.id
     }
 
-    pub fn parse_fun(&mut self) -> Result<Fun, CompileError> {
-        let kw_fun = self
-            .bump_if(|tok| tok.kind == TokenKind::KwFun)
-            .ok_or_else(|| self.expected_err("func"))?;
-        let pos = kw_fun.pos;
-        self.skip_spaces();
-        let name = self
-            .bump_if(|tok| tok.is_ident())
-            .ok_or_else(|| self.expected_err("ident"))?;
-        let name = Ident::new(self.gen_id(), name.raw, name.pos);
-        self.skip_spaces();
-        let args = self.parse_fun_args()?;
-        self.skip_spaces();
-        let ret_ty = match self.peek() {
-            Some(tok) if tok.kind == TokenKind::LBrace => None,
-            _ => {
-                // has return type
-                self.bump_if(|tok| tok.kind == TokenKind::Minus)
-                    .ok_or_else(|| self.expected_err("->"))?;
-                self.bump_if(|tok| tok.kind == TokenKind::Gt)
-                    .ok_or_else(|| self.expected_err("->"))?;
-                self.skip_spaces();
-                let ret_ty = self
-                    .bump_if(|tok| tok.is_ident())
-                    .ok_or_else(|| self.expected_err("ident"))?;
-                self.skip_spaces();
-                Some(Ident::new(self.gen_id(), ret_ty.raw, ret_ty.pos))
-            }
-        };
-        let block = self.parse_block()?;
-        Ok(Fun::new(self.gen_id(), name, args, ret_ty, block, pos))
-    }
-
-    fn parse_block(&mut self) -> Result<Block, CompileError> {
-        self.bump_if(|tok| tok.kind == TokenKind::LBrace)
-            .ok_or_else(|| self.expected_err("{"))?;
-
-        let mut stmts = Vec::new();
-        loop {
-            self.skip_spaces();
-            match self.peek() {
-                None => break,
-                Some(tok) => match tok.kind {
-                    TokenKind::Semi => {
-                        self.bump();
-                        continue;
-                    }
-                    TokenKind::RBrace => break,
-                    _ => {}
-                },
-            }
-            stmts.push(
-                self.parse_stmt()
-                    .map_err(|err| CompileError::new(self.current_pos(), Box::new(err)))?,
-            );
-        }
-
-        self.bump_if(|tok| tok.kind == TokenKind::RBrace)
-            .ok_or_else(|| self.expected_err("}"))?;
-        Ok(Block::new(self.gen_id(), stmts))
-    }
-
-    /// fun_args    ::= '(' <args>* ')'
-    /// args        ::= <ident> ':' <ident> (',' <args>)?
-    fn parse_fun_args(&mut self) -> Result<FunArgs, CompileError> {
-        self.bump_if(|tok| tok.kind == TokenKind::LParen)
-            .ok_or_else(|| self.expected_err("("))?;
-        self.skip_spaces();
-        let mut args = Vec::new();
-        if matches!(self.peek(), Some(tok) if tok.kind == TokenKind::RParen) {
-            self.bump();
-            return Ok(args);
-        }
-        loop {
-            let name = self
-                .bump_if(|tok| tok.is_ident())
-                .ok_or_else(|| self.expected_err("ident"))?;
-            self.skip_spaces();
-            self.bump_if(|tok| tok.kind == TokenKind::Colon)
-                .ok_or_else(|| self.expected_err(":"))?;
-            self.skip_spaces();
-            let ty = self
-                .bump_if(|tok| tok.is_ident())
-                .ok_or_else(|| self.expected_err("type ident"))?;
-            args.push(FunArg::new(
-                self.gen_id(),
-                Ident::new(self.gen_id(), name.raw, name.pos),
-                Ident::new(self.gen_id(), ty.raw, ty.pos),
-            ));
-            self.skip_spaces();
-            if matches!(self.peek(), Some(tok) if tok.kind == TokenKind::Comma) {
-                self.bump();
-                self.skip_spaces();
-            } else {
-                break;
-            }
-        }
-        self.bump_if(|tok| tok.kind == TokenKind::RParen)
-            .ok_or_else(|| self.expected_err(")"))?;
-        Ok(args)
-    }
-
     fn current_pos(&self) -> Pos {
-        if let Some(tok) = self.tokens.front() {
+        if let Some(tok) = self.peek() {
             tok.pos
         } else {
             Pos::default()
         }
-    }
-
-    fn expected_err(&self, expected: &'static str) -> CompileError {
-        CompileError::new(self.current_pos(), Box::new(ParseError::Expected(expected)))
-    }
-
-    // pub fn parse_stmts(&mut self) -> Result<Vec<Stmt>, CompileError> {
-    //     Ok(stmts)
-    // }
-
-    pub fn parse_var_decl(&mut self) -> Result<VarDecl, ParseError> {
-        self.bump_if(|tok| tok.kind == TokenKind::KwVar)
-            .ok_or(ParseError::Expected("var"))?;
-        self.bump_if(|tok| tok.is_spaces())
-            .ok_or(ParseError::Expected("spaces"))?;
-        let name = self
-            .bump_if(|tok| tok.is_ident())
-            .ok_or(ParseError::Expected("ident"))?;
-        self.skip_spaces();
-        self.bump_if(|tok| tok.kind == TokenKind::Eq)
-            .ok_or(ParseError::Expected("="))?;
-        self.skip_spaces();
-        let expr = self.parse_expr()?;
-        Ok(VarDecl::new(
-            self.gen_id(),
-            Ident::new(self.gen_id(), name.raw, name.pos),
-            expr,
-        ))
     }
 
     fn bump_if<Fn>(&mut self, pred: Fn) -> Option<Token>
@@ -199,25 +71,181 @@ impl Parser {
         None
     }
 
-    pub fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
-        let tok = self.peek().ok_or(ParseError::InvalidStmt)?;
+    fn skip_spaces(&mut self) {
+        loop {
+            match self.peek() {
+                Some(peek)
+                    if matches!(
+                        peek.kind,
+                        TokenKind::Spaces | TokenKind::Newlines | TokenKind::LineComment
+                    ) =>
+                {
+                    self.bump();
+                }
+                _ => return,
+            }
+        }
+    }
+
+    fn expected_err<T: std::string::ToString>(&self, expected: T) -> CompileError {
+        CompileError::new(
+            self.current_pos(),
+            Box::new(ParseError::Expected(expected.to_string())),
+        )
+    }
+
+    fn compile_error(&self, error: ParseError) -> CompileError {
+        CompileError::new(self.current_pos(), Box::new(error))
+    }
+
+    fn is_next_kind(&self, kind: TokenKind) -> bool {
+        matches!(self.peek(), Some(tok) if tok.kind == kind)
+    }
+
+    fn expect_kind(&mut self, kind: TokenKind) -> Result<Token> {
+        let expect = kind.to_string();
+        self.bump_if(|tok| tok.kind == kind)
+            .ok_or_else(|| self.expected_err(expect.as_str()))
+    }
+
+    fn new_ident(&mut self, ident: Token) -> Ident {
+        Ident::new(self.gen_id(), ident.raw, ident.pos)
+    }
+
+    fn parse_ident(&mut self) -> Result<Ident> {
+        let ident = self.expect_kind(TokenKind::Ident)?;
+        Ok(self.new_ident(ident))
+    }
+
+    pub fn parse_fun(&mut self) -> Result<Fun> {
+        let kw_fun = self.expect_kind(TokenKind::KwFun)?;
+        let pos = kw_fun.pos;
+        self.skip_spaces();
+        let name = self.parse_ident()?;
+        self.skip_spaces();
+        let args = self.parse_fun_args()?;
+        self.skip_spaces();
+        let ret_ty = match self.peek() {
+            Some(tok) if tok.kind == TokenKind::LBrace => None,
+            _ => {
+                // has return type
+                self.expect_kind(TokenKind::Arrow)?;
+                self.skip_spaces();
+                let ret_ty = self.parse_ident()?;
+                self.skip_spaces();
+                Some(ret_ty)
+            }
+        };
+        let block = self.parse_block()?;
+        Ok(Fun::new(self.gen_id(), name, args, ret_ty, block, pos))
+    }
+
+    fn parse_block(&mut self) -> Result<Block> {
+        self.expect_kind(TokenKind::LBrace)?;
+
+        let mut stmts = Vec::new();
+        loop {
+            self.skip_spaces();
+            match self.peek() {
+                None => break,
+                Some(tok) => match tok.kind {
+                    TokenKind::Semi => {
+                        // empty stmt
+                        self.bump();
+                        continue;
+                    }
+                    TokenKind::RBrace => break,
+                    _ => {}
+                },
+            }
+            stmts.push(self.parse_stmt()?);
+        }
+
+        self.expect_kind(TokenKind::RBrace)?;
+        Ok(Block::new(self.gen_id(), stmts))
+    }
+
+    /// fun_args    ::= '(' <args>* ')'
+    /// args        ::= <ident> ':' <ident> (',' <args>)?
+    fn parse_fun_args(&mut self) -> Result<FunArgs> {
+        self.expect_kind(TokenKind::LParen)?;
+        self.skip_spaces();
+
+        let mut args = Vec::new();
+        if self.is_next_kind(TokenKind::RParen) {
+            // empty args
+            self.bump();
+            return Ok(args);
+        }
+
+        loop {
+            let arg_name = self.parse_ident()?;
+            self.skip_spaces();
+            self.expect_kind(TokenKind::Colon)?;
+            self.skip_spaces();
+            let arg_ty = self.parse_ident()?;
+            self.skip_spaces();
+            args.push(FunArg::new(self.gen_id(), arg_name, arg_ty));
+            if self.is_next_kind(TokenKind::Comma) {
+                // has next arg
+                self.bump();
+                self.skip_spaces();
+            } else {
+                break;
+            }
+        }
+
+        self.expect_kind(TokenKind::RParen)?;
+        Ok(args)
+    }
+
+    pub fn parse_var_decl(&mut self) -> Result<VarDecl> {
+        self.expect_kind(TokenKind::KwVar)?;
+        self.skip_spaces();
+        let name = self.parse_ident()?;
+        self.skip_spaces();
+        self.expect_kind(TokenKind::Eq)?;
+        self.skip_spaces();
+        let expr = self.parse_expr()?;
+        Ok(VarDecl::new(self.gen_id(), name, expr))
+    }
+
+    pub fn parse_ret(&mut self) -> Result<Ret> {
+        let ret = self.expect_kind(TokenKind::KwRet)?;
+        self.skip_spaces();
+        if self.is_next_kind(TokenKind::Semi) {
+            return Ok(Ret::new(self.gen_id(), None, ret.pos));
+        }
+        let expr = self.parse_expr()?;
+        Ok(Ret::new(self.gen_id(), Some(expr), ret.pos))
+    }
+
+    pub fn parse_stmt(&mut self) -> Result<Stmt> {
+        let tok = self
+            .peek()
+            .ok_or_else(|| self.compile_error(ParseError::UnexpectedEof))?;
         let stmt = match tok.kind {
             TokenKind::KwVar => self.parse_var_decl()?.into(),
+            TokenKind::KwRet => self.parse_ret()?.into(),
             _ => self.parse_expr()?.into(),
         };
-        self.bump_if(|tok| tok.kind == TokenKind::Semi)
-            .ok_or(ParseError::Expected(";"))?;
+        self.expect_kind(TokenKind::Semi)?;
         Ok(stmt)
     }
 
-    pub fn parse_expr(&mut self) -> Result<Expr, ParseError> {
+    pub fn parse_expr(&mut self) -> Result<Expr> {
         self.parse_expr_prec(0)
     }
 
-    fn parse_primary_expr(&mut self) -> Result<Expr, ParseError> {
+    fn parse_primary_expr(&mut self) -> Result<Expr> {
         let tok = self
-            .bump_if(|tok| tok.is_ident() || tok.is_lit() || tok.kind == TokenKind::LParen)
-            .ok_or(ParseError::InvalidExpr)?;
+            .bump_if(|tok| {
+                matches!(
+                    tok.kind,
+                    TokenKind::Ident | TokenKind::Lit(_) | TokenKind::LParen
+                )
+            })
+            .ok_or_else(|| self.compile_error(ParseError::InvalidExpr))?;
         let expr = match tok.kind {
             TokenKind::Lit(kind) => {
                 let kind = match kind {
@@ -226,54 +254,56 @@ impl Parser {
                             IntBase::Binary => {
                                 u64::from_str_radix(&tok.raw.replace("_", "")[2..], 2).map_err(
                                     |err| {
-                                        if is_parse_int_overflow_error(err) {
+                                        let parse_err = if is_parse_int_overflow_error(err) {
                                             ParseError::OverflowInt(tok.raw.clone())
                                         } else {
                                             ParseError::InvalidInt(tok.raw.clone())
-                                        }
+                                        };
+                                        self.compile_error(parse_err)
                                     },
                                 )?
                             }
                             IntBase::Octal => {
                                 u64::from_str_radix(&tok.raw.replace("_", "")[2..], 8).map_err(
                                     |err| {
-                                        if is_parse_int_overflow_error(err) {
+                                        let parse_err = if is_parse_int_overflow_error(err) {
                                             ParseError::OverflowInt(tok.raw.clone())
                                         } else {
                                             ParseError::InvalidInt(tok.raw.clone())
-                                        }
+                                        };
+                                        self.compile_error(parse_err)
                                     },
                                 )?
                             }
                             IntBase::Decimal => {
                                 tok.raw.replace("_", "").parse::<u64>().map_err(|err| {
-                                    if is_parse_int_overflow_error(err) {
+                                    let parse_err = if is_parse_int_overflow_error(err) {
                                         ParseError::OverflowInt(tok.raw.clone())
                                     } else {
                                         ParseError::InvalidInt(tok.raw.clone())
-                                    }
+                                    };
+                                    self.compile_error(parse_err)
                                 })?
                             }
                             IntBase::Hex => u64::from_str_radix(&tok.raw.replace("_", "")[2..], 16)
                                 .map_err(|err| {
-                                    if is_parse_int_overflow_error(err) {
+                                    let parse_err = if is_parse_int_overflow_error(err) {
                                         ParseError::OverflowInt(tok.raw.clone())
                                     } else {
                                         ParseError::InvalidInt(tok.raw.clone())
-                                    }
+                                    };
+                                    self.compile_error(parse_err)
                                 })?,
                         };
                         if n > i64::MAX as u64 {
-                            return Err(ParseError::OverflowInt(tok.raw));
+                            return Err(self.compile_error(ParseError::OverflowInt(tok.raw)));
                         }
                         LitKind::Int(n)
                     }
                     crate::lex::LitKind::Float => {
-                        let f = tok
-                            .raw
-                            .replace("_", "")
-                            .parse::<f64>()
-                            .map_err(|_err| ParseError::InvalidFloat(tok.raw.clone()))?;
+                        let f = tok.raw.replace("_", "").parse::<f64>().map_err(|_| {
+                            self.compile_error(ParseError::InvalidFloat(tok.raw.clone()))
+                        })?;
                         LitKind::Float(f)
                     }
                     crate::lex::LitKind::Bool(b) => LitKind::Bool(b),
@@ -284,8 +314,8 @@ impl Parser {
             TokenKind::Ident => Ident::new(self.gen_id(), tok.raw, tok.pos).into(),
             TokenKind::LParen => {
                 let expr = self.parse_expr()?;
-                if self.peek().ok_or(ParseError::UnclosedParenExpr)?.kind != TokenKind::RParen {
-                    return Err(ParseError::UnclosedParenExpr);
+                if !self.is_next_kind(TokenKind::RParen) {
+                    return Err(self.compile_error(ParseError::UnclosedParenExpr));
                 }
                 self.bump();
                 expr
@@ -328,8 +358,10 @@ impl Parser {
         self.binop_map.get(&symbol)
     }
 
-    fn parse_expr_prec(&mut self, last_prec: u8) -> Result<Expr, ParseError> {
-        let tok = self.peek().ok_or(ParseError::InvalidExpr)?;
+    fn parse_expr_prec(&mut self, last_prec: u8) -> Result<Expr> {
+        let tok = self
+            .peek()
+            .ok_or_else(|| self.compile_error(ParseError::UnexpectedEof))?;
         let lhs = match tok.kind {
             TokenKind::Not | TokenKind::Plus | TokenKind::Minus => {
                 let pos = tok.pos;
@@ -339,6 +371,7 @@ impl Parser {
                     TokenKind::Minus => UnaryOp::Sub,
                     _ => unreachable!(),
                 };
+                self.skip_spaces();
                 let expr = self.parse_primary_expr()?;
                 Unary::new(self.gen_id(), unary_op, expr, pos).into()
             }
@@ -362,17 +395,6 @@ impl Parser {
             self.skip_spaces();
             let rhs = self.parse_expr_prec(bin_op.precedence)?;
             lhs = Binary::new(self.gen_id(), bin_op, lhs, rhs).into();
-        }
-    }
-
-    fn skip_spaces(&mut self) {
-        loop {
-            match self.peek() {
-                Some(peek) if peek.is_spaces() || peek.kind == TokenKind::LineComment => {
-                    self.bump();
-                }
-                _ => return,
-            }
         }
     }
 }

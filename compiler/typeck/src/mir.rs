@@ -91,31 +91,26 @@ impl Block {
     }
 }
 
-#[derive(Debug)]
-pub enum Stmt {
-    Expr(Expr),
-    VarDecl(VarDecl),
-}
+macro_rules! Enum {
+    ($name:ident [$($Var:ident),*]) => {
+        #[derive(Debug)]
+        pub enum $name {
+            $(
+                $Var($Var),
+            )*
+        }
 
-#[derive(Debug)]
-pub enum Expr {
-    Lit(Lit),
-    Ident(Ident),
-    Binary(Binary),
-    Unary(Unary),
-}
-
-impl Into<Stmt> for Expr {
-    fn into(self) -> Stmt {
-        Stmt::Expr(self)
+        $(
+            impl Into<$name> for $Var {
+                fn into(self) -> $name {
+                    $name::$Var(self)
+                }
+            }
+        )*
     }
 }
 
-impl Into<Stmt> for VarDecl {
-    fn into(self) -> Stmt {
-        Stmt::VarDecl(self)
-    }
-}
+Enum!(Stmt [VarDecl, Ret, Expr]);
 
 #[derive(Debug)]
 pub struct VarDecl {
@@ -136,6 +131,31 @@ impl VarDecl {
     }
 }
 
+#[derive(Debug)]
+pub struct Ret {
+    pub id: ast::NodeId,
+    pub expr: Option<Expr>,
+}
+
+impl Ret {
+    pub fn new(id: ast::NodeId, expr: Option<Expr>) -> Self {
+        Self { id, expr }
+    }
+}
+
+Enum!(Expr [Lit, Ident, Binary, Unary]);
+
+impl Typed for Expr {
+    fn get_type(&self) -> Type {
+        match self {
+            Expr::Lit(lit) => lit.get_type(),
+            Expr::Ident(ident) => ident.get_type(),
+            Expr::Binary(binary) => binary.get_type(),
+            Expr::Unary(unary) => unary.get_type(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Lit {
     pub id: ast::NodeId,
@@ -146,12 +166,6 @@ pub struct Lit {
 impl Lit {
     pub fn new(id: ast::NodeId, kind: ast::LitKind, ty: Type) -> Self {
         Self { id, kind, ty }
-    }
-}
-
-impl Into<Expr> for Lit {
-    fn into(self) -> Expr {
-        Expr::Lit(self)
     }
 }
 
@@ -178,23 +192,6 @@ impl Typed for Ident {
         match &self.def {
             Def::Fun(fun_def) => fun_def.ret_ty,
             Def::Var(var_def) => var_def.ty,
-        }
-    }
-}
-
-impl Into<Expr> for Ident {
-    fn into(self) -> Expr {
-        Expr::Ident(self)
-    }
-}
-
-impl Typed for Expr {
-    fn get_type(&self) -> Type {
-        match self {
-            Expr::Lit(lit) => lit.get_type(),
-            Expr::Ident(ident) => ident.get_type(),
-            Expr::Binary(binary) => binary.get_type(),
-            Expr::Unary(unary) => unary.get_type(),
         }
     }
 }
@@ -226,12 +223,6 @@ impl Typed for Binary {
     }
 }
 
-impl Into<Expr> for Binary {
-    fn into(self) -> Expr {
-        Expr::Binary(self)
-    }
-}
-
 #[derive(Debug)]
 pub struct Unary {
     pub id: ast::NodeId,
@@ -254,11 +245,5 @@ impl Unary {
 impl Typed for Unary {
     fn get_type(&self) -> Type {
         self.ty
-    }
-}
-
-impl Into<Expr> for Unary {
-    fn into(self) -> Expr {
-        Expr::Unary(self)
     }
 }

@@ -68,6 +68,16 @@ impl Printer {
                 .build_expr(&var_decl.init)
                 .end_child(),
             mir::Stmt::Expr(expr) => self.build_expr(expr),
+            mir::Stmt::Ret(ret) => {
+                self.begin_child("Ret");
+                match &ret.expr {
+                    Some(expr) => {
+                        self.build_expr(&expr);
+                    }
+                    None => {}
+                };
+                self.end_child()
+            }
         }
     }
 
