@@ -92,6 +92,18 @@ impl TypeCk {
         for stmt in &fun.block.stmts {
             stmts.push(self.typecheck_stmt(&stmt)?);
         }
+        if !ret_ty.is_void() {
+            // last statement must be ret
+            let last_stmt = stmts
+                .last()
+                .ok_or_else(|| self.compile_error(fun.pos, TypeCkError::InvalidReturnType))?;
+            if !matches!(last_stmt, mir::Stmt::Ret(_)) {
+                return Err(self.compile_error(
+                    fun.block.stmts.last().unwrap().pos(),
+                    TypeCkError::InvalidReturnType,
+                ));
+            }
+        }
         let def = FunDef::new(
             self.gen_def_id(),
             ret_ty,

@@ -126,6 +126,16 @@ Enum!(Stmt [
     (Ret, ret)
 ]);
 
+impl Stmt {
+    pub fn pos(&self) -> Pos {
+        match self {
+            Stmt::VarDecl(var_decl) => var_decl.pos,
+            Stmt::Expr(expr) => expr.pos(),
+            Stmt::Ret(ret) => ret.pos,
+        }
+    }
+}
+
 Enum!(Expr [
     (Lit, lit),
     (Ident, ident),
@@ -150,14 +160,16 @@ pub struct VarDecl {
     pub id: NodeId,
     pub name: Ident,
     pub init: Box<Expr>,
+    pub pos: Pos,
 }
 
 impl VarDecl {
-    pub fn new(id: NodeId, name: Ident, init: Expr) -> Self {
+    pub fn new(id: NodeId, name: Ident, init: Expr, pos: Pos) -> Self {
         VarDecl {
             id,
             name,
             init: Box::new(init),
+            pos,
         }
     }
 }

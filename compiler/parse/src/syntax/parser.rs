@@ -200,14 +200,14 @@ impl Parser {
     }
 
     pub fn parse_var_decl(&mut self) -> Result<VarDecl> {
-        self.expect_kind(TokenKind::KwVar)?;
+        let pos = self.expect_kind(TokenKind::KwVar)?.pos;
         self.skip_spaces();
         let name = self.parse_ident()?;
         self.skip_spaces();
         self.expect_kind(TokenKind::Eq)?;
         self.skip_spaces();
         let expr = self.parse_expr()?;
-        Ok(VarDecl::new(self.gen_id(), name, expr))
+        Ok(VarDecl::new(self.gen_id(), name, expr, pos))
     }
 
     pub fn parse_ret(&mut self) -> Result<Ret> {

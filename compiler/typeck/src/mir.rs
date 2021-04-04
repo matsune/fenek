@@ -15,6 +15,10 @@ pub enum Type {
 }
 
 impl Type {
+    pub fn is_void(&self) -> bool {
+        matches!(self, Type::Void)
+    }
+
     pub fn is_int(&self) -> bool {
         matches!(self, Type::Int(_))
     }
