@@ -117,6 +117,10 @@ impl<'ctx> Codegen<'ctx> {
         self.function.as_mut().unwrap()
     }
 
+    fn builder(&self) -> &Builder<'ctx> {
+        &self.function().builder
+    }
+
     fn append_basic_block(&self, name: &str) -> BasicBlock<'ctx> {
         self.context
             .append_basic_block(self.function().fn_value, name)
@@ -143,11 +147,8 @@ impl<'ctx> Codegen<'ctx> {
         for (idx, ty) in fun.def.arg_tys.iter().enumerate() {
             let name = fun.args[idx].raw.clone();
             let param = self.function().fn_value.get_nth_param(idx as u32).unwrap();
-            let ptr = self
-                .function()
-                .builder
-                .build_alloca(param.get_type(), &name);
-            self.function().builder.build_store(ptr, param);
+            let ptr = self.builder().build_alloca(param.get_type(), &name);
+            self.builder().build_store(ptr, param);
             self.function_mut()
                 .var_map
                 .insert(fun.args[idx].def.id(), Variable::new(name, *ty, true, ptr));
@@ -156,9 +157,63 @@ impl<'ctx> Codegen<'ctx> {
 
     fn build_stmt(&mut self, stmt: mir::Stmt) {
         match stmt {
-            mir::Stmt::VarDecl(var_decl) => unimplemented!(),
-            mir::Stmt::Ret(ret) => unimplemented!(),
-            mir::Stmt::Expr(expr) => unimplemented!(),
+            mir::Stmt::VarDecl(var_decl) => {
+                let name = var_decl.name.raw;
+                let val = self.build_expr(*var_decl.init);
+                let ptr = self
+                    .builder()
+                    .build_alloca(self.llvm_basic_ty(&var_decl.def.ty), &name);
+                self.builder().build_store(ptr, val);
+                self.function_mut().var_map.insert(
+                    var_decl.def.id,
+                    Variable::new(name, var_decl.def.ty, false, ptr),
+                );
+            }
+            mir::Stmt::Ret(ret) => match ret.expr {
+                Some(expr) => {
+                    let val = self.build_expr(expr);
+                    self.builder().build_return(Some(match val {
+                        BasicValueEnum::ArrayValue(ref value) => value,
+                        BasicValueEnum::IntValue(ref value) => value,
+                        BasicValueEnum::FloatValue(ref value) => value,
+                        BasicValueEnum::PointerValue(ref value) => value,
+                        BasicValueEnum::StructValue(ref value) => value,
+                        BasicValueEnum::VectorValue(ref value) => value,
+                    }));
+                }
+                None => {
+                    self.builder().build_return(None);
+                }
+            },
+            mir::Stmt::Expr(expr) => {
+                self.build_expr(expr);
+            }
+        }
+    }
+
+    fn build_expr(&mut self, expr: mir::Expr) -> BasicValueEnum<'ctx> {
+        match expr {
+            mir::Expr::Lit(lit) => {
+                let ty = lit.get_type();
+                let basic_ty = self.llvm_basic_ty(&ty);
+                match lit.kind {
+                    ast::LitKind::Int(v) => basic_ty.into_int_type().const_int(v, true).into(),
+                    ast::LitKind::Float(v) => basic_ty.into_float_type().const_float(v).into(),
+                    ast::LitKind::Bool(v) => basic_ty
+                        .into_int_type()
+                        .const_int(if v { 1 } else { 0 }, true)
+                        .into(),
+                    ast::LitKind::String(v) => {
+                        unimplemented!()
+                    }
+                }
+            }
+            mir::Expr::Ident(ident) => self.builder().build_load(
+                self.function().var_map.get(&ident.def.id()).unwrap().ptr,
+                "",
+            ),
+            mir::Expr::Binary(binary) => unimplemented!(),
+            mir::Expr::Unary(unary) => unimplemented!(),
         }
     }
 
