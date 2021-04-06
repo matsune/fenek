@@ -1,8 +1,10 @@
 use clap::Clap;
+use codegen::Codegen;
+use inkwell::context::Context;
 use opts::Opts;
 use std::error::Error;
 use std::io::prelude::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 mod opts;
 
@@ -29,7 +31,13 @@ fn run_main() -> Result<(), Box<dyn Error>> {
     if opts.emit.contains(&opts::Emit::Ast) {
         printer::print(&mir_fun)?;
     }
-    println!("\n======== LLVM IR =========\n");
-    codegen::codegen(mir_fun);
+    let ctx = Context::create();
+    let mut codegen = Codegen::new(&ctx);
+    codegen.build_fun(&mir_fun);
+    if opts.emit.contains(&opts::Emit::LlvmIr) {
+        let mut out = PathBuf::from(opts.src);
+        out.set_extension("ll");
+        codegen.output_to_file(out)?;
+    }
     Ok(())
 }
