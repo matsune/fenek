@@ -1,6 +1,5 @@
 fun main() -> i64 {
-  var a = 10 + 9223372036854775807;
-  ; // empty stmt
-  //var b = a * 30;
-  ret a;
+  var a = -10 + 7;
+  var b = (3 - (-2)) * 4;
+  ret a + b;
 }
