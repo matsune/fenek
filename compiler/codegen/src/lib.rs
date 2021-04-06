@@ -315,18 +315,58 @@ impl<'ctx> Codegen<'ctx> {
                 let lhs = self.build_expr(&binary.lhs);
                 let rhs = self.build_expr(&binary.rhs);
                 match binary.get_type() {
-                    mir::Type::Int(_) => match binary.op.symbol.as_str() {
-                        "+" => self.build_checked_int_arithmetic(
-                            lhs.into_int_value(),
-                            rhs.into_int_value(),
-                            "sadd",
-                        ),
-                        _ => unimplemented!(),
-                    },
+                    mir::Type::Int(_) => {
+                        let lhs = lhs.into_int_value();
+                        let rhs = rhs.into_int_value();
+                        match binary.op.symbol.as_str() {
+                            "+" => self.build_checked_int_arithmetic(lhs, rhs, "sadd"),
+                            "-" => self.build_checked_int_arithmetic(lhs, rhs, "ssub"),
+                            "*" => self.build_checked_int_arithmetic(lhs, rhs, "smul"),
+                            "/" => self.builder().build_int_signed_div(lhs, rhs, "sdiv").into(),
+                            _ => unimplemented!(),
+                        }
+                    }
+                    mir::Type::Float(_) => {
+                        let lhs = lhs.into_float_value();
+                        let rhs = rhs.into_float_value();
+                        match binary.op.symbol.as_str() {
+                            "+" => self.builder().build_float_add(lhs, rhs, "fadd").into(),
+                            "-" => self.builder().build_float_sub(lhs, rhs, "fsub").into(),
+                            "*" => self.builder().build_float_mul(lhs, rhs, "fmul").into(),
+                            "/" => self.builder().build_float_div(lhs, rhs, "fdiv").into(),
+                            _ => unimplemented!(),
+                        }
+                    }
                     _ => unimplemented!(),
                 }
             }
-            mir::Expr::Unary(unary) => unimplemented!(),
+            mir::Expr::Unary(unary) => match unary.op {
+                ast::UnaryOp::Add => self.build_expr(&unary.expr),
+                ast::UnaryOp::Sub => {
+                    let expr = self.build_expr(&unary.expr);
+                    match unary.get_type() {
+                        mir::Type::Int(_) => self
+                            .builder()
+                            .build_int_neg(expr.into_int_value(), "neg")
+                            .into(),
+                        mir::Type::Float(_) => self
+                            .builder()
+                            .build_float_neg(expr.into_float_value(), "neg")
+                            .into(),
+                        _ => unimplemented!(),
+                    }
+                }
+                ast::UnaryOp::Not => {
+                    let expr = self.build_expr(&unary.expr);
+                    match unary.get_type() {
+                        mir::Type::Bool => self
+                            .builder()
+                            .build_int_neg(expr.into_int_value(), "neg")
+                            .into(),
+                        _ => unreachable!(),
+                    }
+                }
+            },
         }
     }
 
@@ -418,11 +458,11 @@ impl<'ctx> Codegen<'ctx> {
             "exit",
             self.context
                 .void_type()
-                .fn_type(&[self.context.i8_type().into()], false),
+                .fn_type(&[self.context.i32_type().into()], false),
         );
         self.builder().build_call(
             exit,
-            &[self.context.i8_type().const_int(status, true).into()],
+            &[self.context.i32_type().const_int(status, true).into()],
             "exit",
         );
     }
