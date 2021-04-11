@@ -1,0 +1,6 @@
+fun main() -> f32 {
+  var a = 12;
+  var b = a + 3.2;
+  var c = true;
+  ret 4 + a / b;
+}

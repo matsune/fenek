@@ -66,6 +66,7 @@ macro_rules! Enum {
     };
 }
 
+#[derive(Debug)]
 pub struct Fun {
     pub id: NodeId,
     pub name: Ident,
@@ -97,6 +98,7 @@ impl Fun {
 
 pub type FunArgs = Vec<FunArg>;
 
+#[derive(Debug)]
 pub struct FunArg {
     pub id: NodeId,
     pub name: Ident,
@@ -109,6 +111,7 @@ impl FunArg {
     }
 }
 
+#[derive(Debug)]
 pub struct Block {
     pub id: NodeId,
     pub stmts: Vec<Stmt>,

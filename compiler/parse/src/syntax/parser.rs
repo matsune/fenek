@@ -372,7 +372,7 @@ impl Parser {
                     _ => unreachable!(),
                 };
                 self.skip_spaces();
-                let expr = self.parse_primary_expr()?;
+                let expr = self.parse_expr()?;
                 Unary::new(self.gen_id(), unary_op, expr, pos).into()
             }
             _ => self.parse_primary_expr()?,

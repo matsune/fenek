@@ -1,65 +1,19 @@
 use crate::scope::{Def, FunDef, VarDef};
+use crate::ty;
 use parse::ast;
 
 pub trait Typed {
-    fn get_type(&self) -> Type;
+    fn get_type(&self) -> &ty::Type;
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum Type {
-    Void,
-    Int(IntTy),
-    Float(FloatTy),
-    Bool,
-    String,
-}
-
-impl Type {
-    pub fn is_void(&self) -> bool {
-        matches!(self, Type::Void)
-    }
-
-    pub fn is_int(&self) -> bool {
-        matches!(self, Type::Int(_))
-    }
-
-    pub fn is_float(&self) -> bool {
-        matches!(self, Type::Float(_))
-    }
-
-    pub fn is_bool(&self) -> bool {
-        matches!(self, Type::Bool)
-    }
-
-    pub fn into_int_ty(self) -> IntTy {
-        match self {
-            Self::Int(v) => v,
-            _ => panic!(),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum IntTy {
-    I8,
-    I16,
-    I32,
-    I64,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum FloatTy {
-    F32,
-    F64,
-}
-
+#[derive(Debug)]
 pub struct Fun {
     pub id: ast::NodeId,
     pub name: Ident,
     pub args: FunArgs,
-    pub ret_ty: Type,
+    pub ret_ty: ty::Type,
     pub block: Block,
-    pub def: FunDef,
+    pub def: FunDef<ty::Type>,
 }
 
 impl Fun {
@@ -67,9 +21,9 @@ impl Fun {
         id: ast::NodeId,
         name: Ident,
         args: FunArgs,
-        ret_ty: Type,
+        ret_ty: ty::Type,
         block: Block,
-        def: FunDef,
+        def: FunDef<ty::Type>,
     ) -> Self {
         Fun {
             id,
@@ -84,6 +38,7 @@ impl Fun {
 
 pub type FunArgs = Vec<Ident>;
 
+#[derive(Debug)]
 pub struct Block {
     pub id: ast::NodeId,
     pub stmts: Vec<Stmt>,
@@ -121,11 +76,11 @@ pub struct VarDecl {
     pub id: ast::NodeId,
     pub name: ast::Ident,
     pub init: Box<Expr>,
-    pub def: VarDef,
+    pub def: VarDef<ty::Type>,
 }
 
 impl VarDecl {
-    pub fn new(id: ast::NodeId, name: ast::Ident, init: Box<Expr>, def: VarDef) -> Self {
+    pub fn new(id: ast::NodeId, name: ast::Ident, init: Box<Expr>, def: VarDef<ty::Type>) -> Self {
         Self {
             id,
             name,
@@ -150,7 +105,7 @@ impl Ret {
 Enum!(Expr [Lit, Ident, Binary, Unary]);
 
 impl Typed for Expr {
-    fn get_type(&self) -> Type {
+    fn get_type(&self) -> &ty::Type {
         match self {
             Expr::Lit(lit) => lit.get_type(),
             Expr::Ident(ident) => ident.get_type(),
@@ -160,42 +115,42 @@ impl Typed for Expr {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Lit {
     pub id: ast::NodeId,
     pub kind: ast::LitKind,
-    pub ty: Type,
+    pub ty: ty::Type,
 }
 
 impl Lit {
-    pub fn new(id: ast::NodeId, kind: ast::LitKind, ty: Type) -> Self {
+    pub fn new(id: ast::NodeId, kind: ast::LitKind, ty: ty::Type) -> Self {
         Self { id, kind, ty }
     }
 }
 
 impl Typed for Lit {
-    fn get_type(&self) -> Type {
-        self.ty
+    fn get_type(&self) -> &ty::Type {
+        &self.ty
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Ident {
     pub raw: String,
-    pub def: Def,
+    pub def: Def<ty::Type>,
 }
 
 impl Ident {
-    pub fn new(raw: String, def: Def) -> Self {
+    pub fn new(raw: String, def: Def<ty::Type>) -> Self {
         Self { raw, def }
     }
 }
 
 impl Typed for Ident {
-    fn get_type(&self) -> Type {
+    fn get_type(&self) -> &ty::Type {
         match &self.def {
-            Def::Fun(fun_def) => fun_def.ret_ty,
-            Def::Var(var_def) => var_def.ty,
+            Def::Fun(fun_def) => &fun_def.ret_ty,
+            Def::Var(var_def) => &var_def.ty,
         }
     }
 }
@@ -206,11 +161,11 @@ pub struct Binary {
     pub op: ast::BinOp,
     pub lhs: Box<Expr>,
     pub rhs: Box<Expr>,
-    pub ty: Type,
+    pub ty: ty::Type,
 }
 
 impl Binary {
-    pub fn new(id: ast::NodeId, op: ast::BinOp, lhs: Expr, rhs: Expr, ty: Type) -> Self {
+    pub fn new(id: ast::NodeId, op: ast::BinOp, lhs: Expr, rhs: Expr, ty: ty::Type) -> Self {
         Binary {
             id,
             op,
@@ -222,8 +177,8 @@ impl Binary {
 }
 
 impl Typed for Binary {
-    fn get_type(&self) -> Type {
-        self.ty
+    fn get_type(&self) -> &ty::Type {
+        &self.ty
     }
 }
 
@@ -232,22 +187,20 @@ pub struct Unary {
     pub id: ast::NodeId,
     pub op: ast::UnaryOp,
     pub expr: Box<Expr>,
-    pub ty: Type,
 }
 
 impl Unary {
-    pub fn new(id: ast::NodeId, op: ast::UnaryOp, expr: Expr, ty: Type) -> Self {
+    pub fn new(id: ast::NodeId, op: ast::UnaryOp, expr: Expr) -> Self {
         Unary {
             id,
             op,
             expr: Box::new(expr),
-            ty,
         }
     }
 }
 
 impl Typed for Unary {
-    fn get_type(&self) -> Type {
-        self.ty
+    fn get_type(&self) -> &ty::Type {
+        &self.expr.get_type()
     }
 }

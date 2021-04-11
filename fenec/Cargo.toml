@@ -12,5 +12,4 @@ clap = "3.0.0-beta.2"
 parse = { path = "../compiler/parse" }
 typeck = { path = "../compiler/typeck" }
 printer = { path = "../compiler/printer" }
-codegen = { path = "../compiler/codegen" }
 

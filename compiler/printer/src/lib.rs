@@ -2,6 +2,7 @@ use parse::ast;
 use ptree::TreeBuilder;
 use typeck::mir;
 use typeck::mir::Typed;
+use typeck::ty;
 
 #[cfg(test)]
 mod tests;
@@ -46,7 +47,7 @@ impl Printer {
             .collect::<Vec<_>>()
             .join(", ");
         let ret_ty = match fun.ret_ty {
-            mir::Type::Void => String::from(""),
+            ty::Type::Void => String::from(""),
             _ => format!(" -> {:?}", fun.ret_ty),
         };
         self.begin_child(&format!("fun {}({}){}", fun.name.raw, args, ret_ty));

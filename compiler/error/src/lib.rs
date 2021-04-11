@@ -90,4 +90,8 @@ pub enum TypeCkError {
     InvalidBinaryTypes,
     #[error("invalid unary types")]
     InvalidUnaryTypes,
+    #[error("conflict types {0} and {1}")]
+    ConflictTypes(String, String),
+    #[error("unresolved type")]
+    UnresolvedType,
 }
