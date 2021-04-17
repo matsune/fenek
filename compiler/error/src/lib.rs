@@ -86,6 +86,8 @@ pub enum TypeCkError {
     UndefinedVariable(String),
     #[error("invalid return type")]
     InvalidReturnType,
+    #[error("must be ret statement")]
+    MustBeRetStmt,
     #[error("invalid binary types")]
     InvalidBinaryTypes,
     #[error("invalid unary types")]

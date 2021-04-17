@@ -1,13 +1,13 @@
 use parse::ast;
 use ptree::TreeBuilder;
-use typeck::mir;
-use typeck::mir::Typed;
+use typeck::hir;
+use typeck::hir::Typed;
 use typeck::ty;
 
 #[cfg(test)]
 mod tests;
 
-pub fn print(fun: &mir::Fun) -> std::io::Result<()> {
+pub fn print(fun: &hir::Fun) -> std::io::Result<()> {
     let mut printer = Printer::new();
     printer.build_fun(fun);
     printer.print_tree()
@@ -39,7 +39,7 @@ impl Printer {
         self
     }
 
-    fn build_fun(&mut self, fun: &mir::Fun) -> &mut Self {
+    fn build_fun(&mut self, fun: &hir::Fun) -> &mut Self {
         let args = fun
             .args
             .iter()
@@ -57,9 +57,9 @@ impl Printer {
         self
     }
 
-    fn build_stmt(&mut self, stmt: &mir::Stmt) -> &mut Self {
+    fn build_stmt(&mut self, stmt: &hir::Stmt) -> &mut Self {
         match stmt {
-            mir::Stmt::VarDecl(var_decl) => self
+            hir::Stmt::VarDecl(var_decl) => self
                 .begin_child("VarDecl")
                 .add_empty_child(&format!(
                     "{}::{:?} def_id={}",
@@ -68,8 +68,8 @@ impl Printer {
                 .add_empty_child("=")
                 .build_expr(&var_decl.init)
                 .end_child(),
-            mir::Stmt::Expr(expr) => self.build_expr(expr),
-            mir::Stmt::Ret(ret) => {
+            hir::Stmt::Expr(expr) => self.build_expr(expr),
+            hir::Stmt::Ret(ret) => {
                 self.begin_child("Ret");
                 match &ret.expr {
                     Some(expr) => {
@@ -82,28 +82,28 @@ impl Printer {
         }
     }
 
-    fn build_expr(&mut self, expr: &mir::Expr) -> &mut Self {
+    fn build_expr(&mut self, expr: &hir::Expr) -> &mut Self {
         let ty = expr.get_type();
         match expr {
-            mir::Expr::Lit(lit) => match &lit.kind {
+            hir::Expr::Lit(lit) => match &lit.kind {
                 ast::LitKind::Int(v) => self.add_empty_child(&format!("{}::{:?}", v, ty)),
                 ast::LitKind::Float(v) => self.add_empty_child(&format!("{}::{:?}", v, ty)),
                 ast::LitKind::Bool(v) => self.add_empty_child(&format!("{}::{:?}", v, ty)),
                 ast::LitKind::String(v) => self.add_empty_child(&format!("{}::{:?}", v, ty)),
             },
-            mir::Expr::Ident(ident) => self.add_empty_child(&format!(
+            hir::Expr::Ident(ident) => self.add_empty_child(&format!(
                 "{}::{:?} def_id={}",
                 ident.raw,
                 ty,
                 ident.def.id()
             )),
-            mir::Expr::Binary(binary) => self
+            hir::Expr::Binary(binary) => self
                 .begin_child(&format!("Binary::{:?}", ty))
                 .build_expr(&binary.lhs)
                 .add_empty_child(&binary.op.symbol)
                 .build_expr(&binary.rhs)
                 .end_child(),
-            mir::Expr::Unary(unary) => self
+            hir::Expr::Unary(unary) => self
                 .begin_child(&format!("Unary::{:?}", ty))
                 .add_empty_child(&format!("{}", unary.op))
                 .build_expr(&unary.expr)

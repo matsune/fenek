@@ -1,6 +1,6 @@
+use crate::hir;
+use crate::hir::Typed;
 use crate::infer_ty::*;
-use crate::mir;
-use crate::mir::Typed;
 use crate::scope::*;
 use crate::ty;
 use error::{CompileError, Pos, TypeCkError};
@@ -17,7 +17,7 @@ fn compile_error(pos: Pos, typeck_err: TypeCkError) -> CompileError {
     CompileError::new(pos, Box::new(typeck_err))
 }
 
-pub fn lower(fun: &ast::Fun) -> Result<mir::Fun> {
+pub fn lower(fun: &ast::Fun) -> Result<hir::Fun> {
     let lower = {
         // infer types and return Lower instance
         let ty_arena = InferTyArena::default();
@@ -147,18 +147,6 @@ impl<'a> TyAnalyzer<'a> {
         for stmt in &fun.block.stmts {
             self.analyze_stmt(&stmt)?;
         }
-        // if !ret_ty.get().is_void() {
-        //     // last statement must be ret
-        //     let last_stmt = stmts
-        //         .last()
-        //         .ok_or_else(|| compile_error(fun.pos, TypeCkError::InvalidReturnType))?;
-        //     if !matches!(last_stmt, mir::Stmt::Ret(_)) {
-        //         return Err(compile_error(
-        //             fun.block.stmts.last().unwrap().pos(),
-        //             TypeCkError::InvalidReturnType,
-        //         ));
-        //     }
-        // }
 
         let def = FunDef::new(
             self.gen_def_id(),
@@ -375,7 +363,7 @@ impl Lower {
         }
     }
 
-    fn lower_fun(&self, fun: &ast::Fun) -> Result<mir::Fun> {
+    fn lower_fun(&self, fun: &ast::Fun) -> Result<hir::Fun> {
         let scope = self.scopes.get(0).unwrap();
         let fun_def = scope.lookup(&fun.name.raw).unwrap();
         let ret_ty = match &fun.ret_ty {
@@ -389,39 +377,62 @@ impl Lower {
         let mut args = Vec::new();
         for arg in &fun.args {
             let def = scope.lookup(&arg.name.raw).unwrap().as_var_def();
-            args.push(mir::Ident::new(
+            args.push(hir::Ident::new(
                 arg.name.raw.clone(),
                 VarDef::new(def.id, self.get_type_from_name(&arg.name.raw), def.is_mut).into(),
             ));
         }
         let mut stmts = Vec::new();
-        for stmt in &fun.block.stmts {
-            stmts.push(self.lower_stmt(scope, &stmt)?);
+        for (idx, stmt) in fun.block.stmts.iter().enumerate() {
+            let pos = stmt.pos();
+            let stmt = self.lower_stmt(scope, &stmt)?;
+            let is_last = idx == fun.block.stmts.len() - 1;
+            match &stmt {
+                hir::Stmt::Ret(ret) if is_last => {
+                    let expr_ty = match &ret.expr {
+                        Some(expr) => expr.get_type().clone(),
+                        None => ty::Type::Void,
+                    };
+                    if expr_ty != ret_ty {
+                        return Err(compile_error(pos, TypeCkError::InvalidReturnType));
+                    }
+                }
+                hir::Stmt::Ret(ret) if !is_last => {
+                    // warning? ret statement should not be in the middle of block
+                }
+                _ if is_last && !ret_ty.is_void() => {
+                    // error if fun_ret_ty is not void
+                    return Err(compile_error(pos, TypeCkError::MustBeRetStmt));
+                }
+                _ => {}
+            }
+            stmts.push(stmt);
         }
+
         let def = FunDef::new(
             fun_def.id(),
             ret_ty.clone(),
             args.iter().map(|v| v.def.as_var_def().ty.clone()).collect(),
         );
-        let name = mir::Ident::new(fun.name.raw.clone(), def.clone().into());
-        Ok(mir::Fun::new(
+        let name = hir::Ident::new(fun.name.raw.clone(), def.clone().into());
+        Ok(hir::Fun::new(
             fun.id,
             name,
             args,
             ret_ty,
-            mir::Block::new(fun.block.id, stmts),
+            hir::Block::new(fun.block.id, stmts),
             def,
         ))
     }
 
-    fn lower_stmt(&self, scope: &ScopeTable<ty::Type>, stmt: &ast::Stmt) -> Result<mir::Stmt> {
+    fn lower_stmt(&self, scope: &ScopeTable<ty::Type>, stmt: &ast::Stmt) -> Result<hir::Stmt> {
         let stmt = match stmt {
             ast::Stmt::Expr(expr) => self.lower_expr(scope, expr)?.into(),
             ast::Stmt::VarDecl(var_decl) => {
                 let expr = self.lower_expr(scope, &var_decl.init)?;
                 let ty = expr.get_type().clone();
                 let def = scope.lookup(&var_decl.name.raw).unwrap().as_var_def();
-                mir::VarDecl::new(
+                hir::VarDecl::new(
                     var_decl.id,
                     var_decl.name.clone(),
                     Box::new(expr),
@@ -434,19 +445,19 @@ impl Lower {
                     Some(expr) => Some(self.lower_expr(scope, &expr)?),
                     None => None,
                 };
-                mir::Ret::new(ret.id, expr).into()
+                hir::Ret::new(ret.id, expr).into()
             }
         };
         Ok(stmt)
     }
 
-    fn lower_expr(&self, scope: &ScopeTable<ty::Type>, expr: &ast::Expr) -> Result<mir::Expr> {
+    fn lower_expr(&self, scope: &ScopeTable<ty::Type>, expr: &ast::Expr) -> Result<hir::Expr> {
         let ty = self.ty_map.get(&expr.id()).unwrap().clone();
         match expr {
-            ast::Expr::Lit(lit) => Ok(mir::Lit::new(lit.id, lit.kind.clone(), ty).into()),
+            ast::Expr::Lit(lit) => Ok(hir::Lit::new(lit.id, lit.kind.clone(), ty).into()),
             ast::Expr::Ident(ident) => {
                 let def = scope.lookup(&ident.raw).unwrap().as_var_def();
-                Ok(mir::Ident::new(
+                Ok(hir::Ident::new(
                     ident.raw.clone(),
                     VarDef::new(def.id, ty, def.is_mut).into(),
                 )
@@ -461,7 +472,7 @@ impl Lower {
         &self,
         scope: &ScopeTable<ty::Type>,
         binary: &ast::Binary,
-    ) -> Result<mir::Expr> {
+    ) -> Result<hir::Expr> {
         let lhs = self.lower_expr(scope, &binary.lhs)?;
         let rhs = self.lower_expr(scope, &binary.rhs)?;
         match binary.op.symbol.as_str() {
@@ -477,7 +488,7 @@ impl Lower {
             },
             _ => unimplemented!(),
         };
-        Ok(mir::Binary::new(
+        Ok(hir::Binary::new(
             binary.id,
             binary.op.clone(),
             lhs,
@@ -487,7 +498,7 @@ impl Lower {
         .into())
     }
 
-    fn lower_unary(&self, scope: &ScopeTable<ty::Type>, unary: &ast::Unary) -> Result<mir::Expr> {
+    fn lower_unary(&self, scope: &ScopeTable<ty::Type>, unary: &ast::Unary) -> Result<hir::Expr> {
         let expr = self.lower_expr(scope, &unary.expr)?;
         let ty = expr.get_type();
         match unary.op {
@@ -508,6 +519,6 @@ impl Lower {
                 }
             }
         };
-        Ok(mir::Unary::new(unary.id, unary.op, expr).into())
+        Ok(hir::Unary::new(unary.id, unary.op, expr).into())
     }
 }
