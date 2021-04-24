@@ -4,9 +4,23 @@ use crate::infer_ty::*;
 use crate::scope::*;
 use crate::ty;
 use error::{CompileError, Pos, TypeCkError};
+use num_traits::Num;
 use parse::ast;
 use parse::ast::Node;
+use parse::IntBase;
+use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::convert::TryInto;
+
+// https://github.com/rust-lang/rust/issues/22639
+fn is_parse_int_overflow_error(e: std::num::ParseIntError) -> bool {
+    let pos_overflow_err = "2147483648".parse::<i32>().err().unwrap();
+    if e == pos_overflow_err {
+        return true;
+    }
+    let neg_overflow_err = "-2147483649".parse::<i32>().err().unwrap();
+    e == neg_overflow_err
+}
 
 #[cfg(test)]
 mod tests;
@@ -15,6 +29,27 @@ type Result<T> = std::result::Result<T, CompileError>;
 
 fn compile_error(pos: Pos, typeck_err: TypeCkError) -> CompileError {
     CompileError::new(pos, Box::new(typeck_err))
+}
+
+fn parse_int_literal<T: Num>(
+    base: IntBase,
+    literal: &str,
+) -> std::result::Result<T, T::FromStrRadixErr> {
+    match base {
+        IntBase::Binary => T::from_str_radix(
+            &literal.replace("_", "").replace("0b", "").replace("0B", ""),
+            2,
+        ),
+        IntBase::Octal => T::from_str_radix(
+            &literal.replace("_", "").replace("0o", "").replace("0O", ""),
+            8,
+        ),
+        IntBase::Decimal => T::from_str_radix(&literal.replace("_", ""), 10),
+        IntBase::Hex => T::from_str_radix(
+            &literal.replace("_", "").replace("0x", "").replace("0X", ""),
+            16,
+        ),
+    }
 }
 
 pub fn lower(fun: &ast::Fun) -> Result<hir::Fun> {
@@ -221,9 +256,9 @@ impl<'a> TyAnalyzer<'a> {
         let ty = match expr {
             ast::Expr::Lit(lit) => match lit.kind {
                 ast::LitKind::Int(_) => self.ty_arena.alloc_int_lit(),
-                ast::LitKind::Float(_) => self.ty_arena.alloc_float_lit(),
-                ast::LitKind::Bool(_) => self.ty_arena.alloc_bool(),
-                ast::LitKind::String(_) => unimplemented!(),
+                ast::LitKind::Float => self.ty_arena.alloc_float_lit(),
+                ast::LitKind::Bool => self.ty_arena.alloc_bool(),
+                ast::LitKind::String => unimplemented!(),
             },
             ast::Expr::Ident(ident) => match self.get_scope().lookup(&ident.raw) {
                 Some(def) => def.as_var_def().ty,
@@ -451,10 +486,108 @@ impl Lower {
         Ok(stmt)
     }
 
+    fn lower_lit(&self, lit: &ast::Lit) -> Result<hir::Lit> {
+        let id = lit.id;
+        let ty = self.ty_map.get(&id).unwrap().clone();
+        self.lower_literal(id, ty, lit.kind.clone(), &lit.literal, lit.pos)
+    }
+
+    fn lower_literal(
+        &self,
+        id: ast::NodeId,
+        ty: ty::Type,
+        lit_kind: ast::LitKind,
+        literal: &str,
+        pos: Pos,
+    ) -> Result<hir::Lit> {
+        let lit = match lit_kind {
+            // int literal
+            ast::LitKind::Int(base) => match ty {
+                // to int
+                ty::Type::Int(kind) => match kind {
+                    // to i8
+                    ty::IntKind::I8 => {
+                        let n = parse_int_literal(base, &literal).map_err(|err| {
+                            let err = if is_parse_int_overflow_error(err) {
+                                TypeCkError::OverflowInt(literal.to_string(), "i8".to_string())
+                            } else {
+                                TypeCkError::InvalidInt(literal.to_string())
+                            };
+                            compile_error(pos, err)
+                        })?;
+                        hir::Lit::new(id, hir::LitKind::I8(n), ty)
+                    }
+                    // to i16
+                    ty::IntKind::I16 => {
+                        let n = parse_int_literal(base, &literal).map_err(|err| {
+                            let err = if is_parse_int_overflow_error(err) {
+                                TypeCkError::OverflowInt(literal.to_string(), "i16".to_string())
+                            } else {
+                                TypeCkError::InvalidInt(literal.to_string())
+                            };
+                            compile_error(pos, err)
+                        })?;
+                        hir::Lit::new(id, hir::LitKind::I16(n), ty)
+                    }
+                    // to i32
+                    ty::IntKind::I32 => {
+                        let n = parse_int_literal(base, &literal).map_err(|err| {
+                            let err = if is_parse_int_overflow_error(err) {
+                                TypeCkError::OverflowInt(literal.to_string(), "i32".to_string())
+                            } else {
+                                TypeCkError::InvalidInt(literal.to_string())
+                            };
+                            compile_error(pos, err)
+                        })?;
+                        hir::Lit::new(id, hir::LitKind::I32(n), ty)
+                    }
+                    // to i64
+                    ty::IntKind::I64 => {
+                        let n = parse_int_literal(base, &literal).map_err(|err| {
+                            let err = if is_parse_int_overflow_error(err) {
+                                TypeCkError::OverflowInt(literal.to_string(), "i64".to_string())
+                            } else {
+                                TypeCkError::InvalidInt(literal.to_string())
+                            };
+                            compile_error(pos, err)
+                        })?;
+                        hir::Lit::new(id, hir::LitKind::I64(n), ty)
+                    }
+                },
+                ty::Type::Float(kind) => match kind {
+                    // // to f32
+                    // ty::FloatKind::F32 => hir::Lit::new(
+                    //     id,
+                    //     hir::LitKind::F32(n.try_into().map_err(|_| {
+                    //         compile_error(lit.pos, TypeCkError::Overflow("f32".to_string()))
+                    //     })?),
+                    //     ty,
+                    // ),
+                    // // to f64
+                    // ty::FloatKind::F64 => hir::Lit::new(
+                    //     id,
+                    //     hir::LitKind::F64(n.try_into().map_err(|_| {
+                    //         compile_error(lit.pos, TypeCkError::Overflow("f64".to_string()))
+                    //     })?),
+                    //     ty,
+                    // ),
+                    _ => unimplemented!(),
+                },
+                _ => return Err(compile_error(pos, TypeCkError::InvalidType)),
+            },
+            ast::LitKind::Bool => match ty {
+                ty::Type::Bool => hir::Lit::new(id, hir::LitKind::Bool(literal == "true"), ty),
+                _ => return Err(compile_error(pos, TypeCkError::InvalidType)),
+            },
+            _ => unimplemented!(),
+        };
+        Ok(lit)
+    }
+
     fn lower_expr(&self, scope: &ScopeTable<ty::Type>, expr: &ast::Expr) -> Result<hir::Expr> {
         let ty = self.ty_map.get(&expr.id()).unwrap().clone();
         match expr {
-            ast::Expr::Lit(lit) => Ok(hir::Lit::new(lit.id, lit.kind.clone(), ty).into()),
+            ast::Expr::Lit(lit) => self.lower_lit(lit).map(|v| v.into()),
             ast::Expr::Ident(ident) => {
                 let def = scope.lookup(&ident.raw).unwrap().as_var_def();
                 Ok(hir::Ident::new(
@@ -464,7 +597,77 @@ impl Lower {
                 .into())
             }
             ast::Expr::Binary(binary) => self.lower_binary(scope, binary),
-            ast::Expr::Unary(unary) => self.lower_unary(scope, unary),
+            ast::Expr::Unary(unary) => {
+                match unary.expr.borrow() {
+                    ast::Expr::Lit(lit) => {
+                        match unary.op {
+                            ast::UnaryOp::Add => {
+                                // + should have number
+                                if !ty.is_int() && !ty.is_float() {
+                                    return Err(compile_error(
+                                        unary.expr.pos(),
+                                        TypeCkError::InvalidUnaryTypes,
+                                    ));
+                                }
+                                self.lower_lit(&lit).map(|v| v.into())
+                            }
+                            ast::UnaryOp::Sub => {
+                                // - should have number
+                                if !ty.is_int() && !ty.is_float() {
+                                    return Err(compile_error(
+                                        unary.expr.pos(),
+                                        TypeCkError::InvalidUnaryTypes,
+                                    ));
+                                }
+                                let mut literal = String::from("-");
+                                literal.push_str(&lit.literal);
+                                self.lower_literal(lit.id, ty, lit.kind.clone(), &literal, lit.pos)
+                                    .map(|v| v.into())
+                            }
+                            ast::UnaryOp::Not => {
+                                // ! should have bool
+                                if !ty.is_bool() {
+                                    return Err(compile_error(
+                                        unary.expr.pos(),
+                                        TypeCkError::InvalidUnaryTypes,
+                                    ));
+                                }
+                                self.lower_lit(&lit).map(|v| {
+                                    // invert bool value
+                                    let mut v = v;
+                                    v.kind = hir::LitKind::Bool(!v.kind.as_bool());
+                                    v.into()
+                                })
+                            }
+                        }
+                    }
+                    _ => {
+                        let expr = self.lower_expr(scope, &unary.expr)?;
+                        let expr_ty = expr.get_type();
+                        match unary.op {
+                            ast::UnaryOp::Add | ast::UnaryOp::Sub => {
+                                // + and - should have number
+                                if !expr_ty.is_int() && !expr_ty.is_float() {
+                                    return Err(compile_error(
+                                        unary.expr.pos(),
+                                        TypeCkError::InvalidUnaryTypes,
+                                    ));
+                                }
+                            }
+                            ast::UnaryOp::Not => {
+                                // ! should have bool
+                                if !expr_ty.is_bool() {
+                                    return Err(compile_error(
+                                        unary.expr.pos(),
+                                        TypeCkError::InvalidUnaryTypes,
+                                    ));
+                                }
+                            }
+                        }
+                        Ok(hir::Unary::new(unary.id, unary.op, expr).into())
+                    }
+                }
+            }
         }
     }
 
@@ -496,29 +699,5 @@ impl Lower {
             self.ty_map.get(&binary.id).unwrap().clone(),
         )
         .into())
-    }
-
-    fn lower_unary(&self, scope: &ScopeTable<ty::Type>, unary: &ast::Unary) -> Result<hir::Expr> {
-        let expr = self.lower_expr(scope, &unary.expr)?;
-        let ty = expr.get_type();
-        match unary.op {
-            ast::UnaryOp::Add | ast::UnaryOp::Sub => {
-                if !ty.is_int() && !ty.is_float() {
-                    return Err(compile_error(
-                        unary.expr.pos(),
-                        TypeCkError::InvalidUnaryTypes,
-                    ));
-                }
-            }
-            ast::UnaryOp::Not => {
-                if !ty.is_bool() {
-                    return Err(compile_error(
-                        unary.expr.pos(),
-                        TypeCkError::InvalidUnaryTypes,
-                    ));
-                }
-            }
-        };
-        Ok(hir::Unary::new(unary.id, unary.op, expr).into())
     }
 }

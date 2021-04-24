@@ -62,12 +62,6 @@ pub enum ParseError {
     InvalidVarDecl,
     #[error("invalid expr")]
     InvalidExpr,
-    #[error("constant {0} overflows int")]
-    OverflowInt(String),
-    #[error("invalid int literal {0}")]
-    InvalidInt(String),
-    #[error("invalid float literal {0}")]
-    InvalidFloat(String),
     #[error("unclosed expr")]
     UnclosedParenExpr,
     #[error("invalid binary op {0}")]
@@ -96,4 +90,14 @@ pub enum TypeCkError {
     ConflictTypes(String, String),
     #[error("unresolved type")]
     UnresolvedType,
+    #[error("overflow {0}")]
+    Overflow(String),
+    #[error("constant {0} overflows {1}")]
+    OverflowInt(String, String),
+    #[error("constant {0} negative overflows {1}")]
+    OverflowNegInt(String, String),
+    #[error("invalid int literal {0}")]
+    InvalidInt(String),
+    #[error("invalid float literal {0}")]
+    InvalidFloat(String),
 }

@@ -1,3 +1,4 @@
+use crate::lex::IntBase;
 use error::Pos;
 
 pub type NodeId = u32;
@@ -181,48 +182,26 @@ impl VarDecl {
 pub struct Lit {
     pub id: NodeId,
     pub kind: LitKind,
+    pub literal: String,
     pub pos: Pos,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum LitKind {
-    Int(u64),
-    Float(f64),
-    Bool(bool),
-    String(String),
+    Int(IntBase),
+    Float,
+    Bool,
+    String,
 }
 
 impl Lit {
-    pub fn new(id: NodeId, kind: LitKind, pos: Pos) -> Self {
-        Lit { id, kind, pos }
-    }
-
-    pub fn into_int(self) -> u64 {
-        if let LitKind::Int(v) = self.kind {
-            return v;
+    pub fn new(id: NodeId, kind: LitKind, literal: String, pos: Pos) -> Self {
+        Lit {
+            id,
+            kind,
+            literal,
+            pos,
         }
-        panic!()
-    }
-
-    pub fn into_float(self) -> f64 {
-        if let LitKind::Float(v) = self.kind {
-            return v;
-        }
-        panic!()
-    }
-
-    pub fn into_bool(self) -> bool {
-        if let LitKind::Bool(v) = self.kind {
-            return v;
-        }
-        panic!()
-    }
-
-    pub fn into_string(self) -> String {
-        if let LitKind::String(v) = self.kind {
-            return v;
-        }
-        panic!()
     }
 }
 

@@ -133,8 +133,7 @@ impl<'a> Lexer<'a> {
                     is_alphanumeric(c) || c == '_'
                 });
                 tok.kind = match tok.raw.as_str() {
-                    "true" => TokenKind::Lit(LitKind::Bool(true)),
-                    "false" => TokenKind::Lit(LitKind::Bool(false)),
+                    "true" | "false" => TokenKind::Lit(LitKind::Bool),
                     "var" => TokenKind::KwVar,
                     "fun" => TokenKind::KwFun,
                     "ret" => TokenKind::KwRet,

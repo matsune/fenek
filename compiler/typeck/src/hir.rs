@@ -118,12 +118,12 @@ impl Typed for Expr {
 #[derive(Debug)]
 pub struct Lit {
     pub id: ast::NodeId,
-    pub kind: ast::LitKind,
+    pub kind: LitKind,
     pub ty: ty::Type,
 }
 
 impl Lit {
-    pub fn new(id: ast::NodeId, kind: ast::LitKind, ty: ty::Type) -> Self {
+    pub fn new(id: ast::NodeId, kind: LitKind, ty: ty::Type) -> Self {
         Self { id, kind, ty }
     }
 }
@@ -131,6 +131,26 @@ impl Lit {
 impl Typed for Lit {
     fn get_type(&self) -> &ty::Type {
         &self.ty
+    }
+}
+
+#[derive(Debug)]
+pub enum LitKind {
+    I8(i8),
+    I16(i16),
+    I32(i32),
+    I64(i64),
+    F32(f32),
+    F64(f64),
+    Bool(bool),
+}
+
+impl LitKind {
+    pub fn as_bool(&self) -> bool {
+        if let Self::Bool(b) = self {
+            return *b;
+        }
+        panic!()
     }
 }
 

@@ -18,12 +18,6 @@ struct Parser {
     id: NodeId,
 }
 
-// https://github.com/rust-lang/rust/issues/22639
-fn is_parse_int_overflow_error(e: std::num::ParseIntError) -> bool {
-    let overflow_err = "4294967295000".parse::<u32>().err().unwrap();
-    e == overflow_err
-}
-
 impl Parser {
     pub fn new(tokens: VecDeque<Token>) -> Self {
         let mut binop_map = HashMap::new();
@@ -250,66 +244,21 @@ impl Parser {
             TokenKind::Lit(kind) => {
                 let kind = match kind {
                     crate::lex::LitKind::Int { base } => {
-                        let n = match base {
-                            IntBase::Binary => {
-                                u64::from_str_radix(&tok.raw.replace("_", "")[2..], 2).map_err(
-                                    |err| {
-                                        let parse_err = if is_parse_int_overflow_error(err) {
-                                            ParseError::OverflowInt(tok.raw.clone())
-                                        } else {
-                                            ParseError::InvalidInt(tok.raw.clone())
-                                        };
-                                        self.compile_error(parse_err)
-                                    },
-                                )?
-                            }
-                            IntBase::Octal => {
-                                u64::from_str_radix(&tok.raw.replace("_", "")[2..], 8).map_err(
-                                    |err| {
-                                        let parse_err = if is_parse_int_overflow_error(err) {
-                                            ParseError::OverflowInt(tok.raw.clone())
-                                        } else {
-                                            ParseError::InvalidInt(tok.raw.clone())
-                                        };
-                                        self.compile_error(parse_err)
-                                    },
-                                )?
-                            }
-                            IntBase::Decimal => {
-                                tok.raw.replace("_", "").parse::<u64>().map_err(|err| {
-                                    let parse_err = if is_parse_int_overflow_error(err) {
-                                        ParseError::OverflowInt(tok.raw.clone())
-                                    } else {
-                                        ParseError::InvalidInt(tok.raw.clone())
-                                    };
-                                    self.compile_error(parse_err)
-                                })?
-                            }
-                            IntBase::Hex => u64::from_str_radix(&tok.raw.replace("_", "")[2..], 16)
-                                .map_err(|err| {
-                                    let parse_err = if is_parse_int_overflow_error(err) {
-                                        ParseError::OverflowInt(tok.raw.clone())
-                                    } else {
-                                        ParseError::InvalidInt(tok.raw.clone())
-                                    };
-                                    self.compile_error(parse_err)
-                                })?,
-                        };
-                        if n > i64::MAX as u64 {
-                            return Err(self.compile_error(ParseError::OverflowInt(tok.raw)));
-                        }
-                        LitKind::Int(n)
+                        // if n > i64::MAX as u64 {
+                        //     return Err(self.compile_error(ParseError::OverflowInt(tok.raw)));
+                        // }
+                        LitKind::Int(base)
                     }
                     crate::lex::LitKind::Float => {
-                        let f = tok.raw.replace("_", "").parse::<f64>().map_err(|_| {
-                            self.compile_error(ParseError::InvalidFloat(tok.raw.clone()))
-                        })?;
-                        LitKind::Float(f)
+                        // let f = tok.raw.replace("_", "").parse::<f64>().map_err(|_| {
+                        //     self.compile_error(ParseError::InvalidFloat(tok.raw.clone()))
+                        // })?;
+                        LitKind::Float //(f)
                     }
-                    crate::lex::LitKind::Bool(b) => LitKind::Bool(b),
-                    crate::lex::LitKind::String => LitKind::String(tok.raw),
+                    crate::lex::LitKind::Bool => LitKind::Bool,
+                    crate::lex::LitKind::String => LitKind::String,
                 };
-                Expr::Lit(Lit::new(self.gen_id(), kind, tok.pos))
+                Expr::Lit(Lit::new(self.gen_id(), kind, tok.raw, tok.pos))
             }
             TokenKind::Ident => Ident::new(self.gen_id(), tok.raw, tok.pos).into(),
             TokenKind::LParen => {

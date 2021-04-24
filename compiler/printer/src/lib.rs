@@ -86,10 +86,13 @@ impl Printer {
         let ty = expr.get_type();
         match expr {
             hir::Expr::Lit(lit) => match &lit.kind {
-                ast::LitKind::Int(v) => self.add_empty_child(&format!("{}::{:?}", v, ty)),
-                ast::LitKind::Float(v) => self.add_empty_child(&format!("{}::{:?}", v, ty)),
-                ast::LitKind::Bool(v) => self.add_empty_child(&format!("{}::{:?}", v, ty)),
-                ast::LitKind::String(v) => self.add_empty_child(&format!("{}::{:?}", v, ty)),
+                hir::LitKind::I8(v) => self.add_empty_child(&format!("{}::i8", v)),
+                hir::LitKind::I16(v) => self.add_empty_child(&format!("{}::i16", v)),
+                hir::LitKind::I32(v) => self.add_empty_child(&format!("{}::i32", v)),
+                hir::LitKind::I64(v) => self.add_empty_child(&format!("{}::i64", v)),
+                hir::LitKind::F32(v) => self.add_empty_child(&format!("{}::f32", v)),
+                hir::LitKind::F64(v) => self.add_empty_child(&format!("{}::f64", v)),
+                hir::LitKind::Bool(v) => self.add_empty_child(&format!("{}::bool", v)),
             },
             hir::Expr::Ident(ident) => self.add_empty_child(&format!(
                 "{}::{:?} def_id={}",

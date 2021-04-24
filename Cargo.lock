@@ -781,6 +781,7 @@ name = "typeck"
 version = "0.1.0"
 dependencies = [
  "error",
+ "num-traits 0.2.14",
  "parse",
  "typed-arena",
 ]

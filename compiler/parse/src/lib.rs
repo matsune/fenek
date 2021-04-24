@@ -1,6 +1,7 @@
 mod lex;
 mod syntax;
 
+pub use lex::IntBase;
 pub use syntax::ast;
 
 pub fn parse(input: &str) -> Result<syntax::ast::Fun, error::CompileError> {

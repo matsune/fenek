@@ -17,7 +17,7 @@ impl Token {
 pub enum LitKind {
     Int { base: IntBase },
     Float,
-    Bool(bool),
+    Bool,
     // Char,
     String,
 }
@@ -79,13 +79,7 @@ impl std::fmt::Display for TokenKind {
                     IntBase::Hex => "hex int literal",
                 },
                 LitKind::Float => "float literal",
-                LitKind::Bool(v) => {
-                    if *v {
-                        "true"
-                    } else {
-                        "false"
-                    }
-                }
+                LitKind::Bool => "bool literal",
                 LitKind::String => "string literal",
             },
             TokenKind::KwVar => "var",
