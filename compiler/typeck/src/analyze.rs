@@ -10,7 +10,6 @@ use parse::ast::Node;
 use parse::IntBase;
 use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::convert::TryInto;
 use std::str::FromStr;
 
 // https://github.com/rust-lang/rust/issues/22639
@@ -489,19 +488,20 @@ impl Lower {
 
     fn lower_lit(&self, lit: &ast::Lit) -> Result<hir::Lit> {
         let id = lit.id;
-        let ty = self.ty_map.get(&id).unwrap().clone();
-        self.lower_literal(id, ty, lit.kind.clone(), &lit.literal, lit.pos)
+        let ty = self.ty_map.get(&id).unwrap();
+        let lit_kind = self
+            .lower_literal(ty, lit.kind.clone(), &lit.literal)
+            .map_err(|err| compile_error(lit.pos, err))?;
+        Ok(hir::Lit::new(id, lit_kind, ty.clone()))
     }
 
     fn lower_literal(
         &self,
-        id: ast::NodeId,
-        ty: ty::Type,
+        ty: &ty::Type,
         lit_kind: ast::LitKind,
         literal: &str,
-        pos: Pos,
-    ) -> Result<hir::Lit> {
-        let lit = match lit_kind {
+    ) -> std::result::Result<hir::LitKind, TypeCkError> {
+        let kind = match lit_kind {
             // int literal
             ast::LitKind::Int(base) => match ty {
                 // to int
@@ -509,93 +509,104 @@ impl Lower {
                     // to i8
                     ty::IntKind::I8 => {
                         let n = parse_int_literal(base, &literal).map_err(|err| {
-                            let err = if is_parse_int_overflow_error(err) {
+                            if is_parse_int_overflow_error(err) {
                                 TypeCkError::OverflowInt(literal.to_string(), "i8".to_string())
                             } else {
                                 TypeCkError::InvalidInt(literal.to_string())
-                            };
-                            compile_error(pos, err)
+                            }
                         })?;
-                        hir::Lit::new(id, hir::LitKind::I8(n), ty)
+                        hir::LitKind::I8(n)
                     }
                     // to i16
                     ty::IntKind::I16 => {
                         let n = parse_int_literal(base, &literal).map_err(|err| {
-                            let err = if is_parse_int_overflow_error(err) {
+                            if is_parse_int_overflow_error(err) {
                                 TypeCkError::OverflowInt(literal.to_string(), "i16".to_string())
                             } else {
                                 TypeCkError::InvalidInt(literal.to_string())
-                            };
-                            compile_error(pos, err)
+                            }
                         })?;
-                        hir::Lit::new(id, hir::LitKind::I16(n), ty)
+                        hir::LitKind::I16(n)
                     }
                     // to i32
                     ty::IntKind::I32 => {
                         let n = parse_int_literal(base, &literal).map_err(|err| {
-                            let err = if is_parse_int_overflow_error(err) {
+                            if is_parse_int_overflow_error(err) {
                                 TypeCkError::OverflowInt(literal.to_string(), "i32".to_string())
                             } else {
                                 TypeCkError::InvalidInt(literal.to_string())
-                            };
-                            compile_error(pos, err)
+                            }
                         })?;
-                        hir::Lit::new(id, hir::LitKind::I32(n), ty)
+                        hir::LitKind::I32(n)
                     }
                     // to i64
                     ty::IntKind::I64 => {
                         let n = parse_int_literal(base, &literal).map_err(|err| {
-                            let err = if is_parse_int_overflow_error(err) {
+                            if is_parse_int_overflow_error(err) {
                                 TypeCkError::OverflowInt(literal.to_string(), "i64".to_string())
                             } else {
                                 TypeCkError::InvalidInt(literal.to_string())
-                            };
-                            compile_error(pos, err)
+                            }
                         })?;
-                        hir::Lit::new(id, hir::LitKind::I64(n), ty)
+                        hir::LitKind::I64(n)
                     }
                 },
                 ty::Type::Float(kind) => match kind {
                     // to f32
                     ty::FloatKind::F32 => {
-                        let v = f32::from_str(&literal).map_err(|_| {
-                            compile_error(pos, TypeCkError::InvalidFloat(literal.to_string()))
-                        })?;
+                        let v = f32::from_str(&literal)
+                            .map_err(|_| TypeCkError::InvalidFloat(literal.to_string()))?;
                         if v == f32::INFINITY {
-                            return Err(compile_error(
-                                pos,
-                                TypeCkError::InvalidFloat(literal.to_string()),
-                            ));
+                            return Err(TypeCkError::InvalidFloat(literal.to_string()));
                         }
-                        hir::Lit::new(id, hir::LitKind::F32(v), ty)
+                        hir::LitKind::F32(v)
                     }
                     // to f64
                     ty::FloatKind::F64 => {
-                        let v = f64::from_str(&literal).map_err(|_| {
-                            compile_error(pos, TypeCkError::InvalidFloat(literal.to_string()))
-                        })?;
+                        let v = f64::from_str(&literal)
+                            .map_err(|_| TypeCkError::InvalidFloat(literal.to_string()))?;
                         if v == f64::INFINITY {
-                            return Err(compile_error(
-                                pos,
-                                TypeCkError::InvalidFloat(literal.to_string()),
-                            ));
+                            return Err(TypeCkError::InvalidFloat(literal.to_string()));
                         }
-                        hir::Lit::new(id, hir::LitKind::F64(v), ty)
+                        hir::LitKind::F64(v)
                     }
-                    _ => unimplemented!(),
                 },
-                _ => return Err(compile_error(pos, TypeCkError::InvalidType)),
+                _ => return Err(TypeCkError::InvalidType),
+            },
+            // float literal
+            ast::LitKind::Float => match ty {
+                ty::Type::Float(float_kind) => match float_kind {
+                    // to f32
+                    ty::FloatKind::F32 => {
+                        let v = f32::from_str(&literal)
+                            .map_err(|_| TypeCkError::InvalidFloat(literal.to_string()))?;
+                        if v == f32::INFINITY {
+                            return Err(TypeCkError::InvalidFloat(literal.to_string()));
+                        }
+                        hir::LitKind::F32(v)
+                    }
+                    // to f64
+                    ty::FloatKind::F64 => {
+                        let v = f64::from_str(&literal)
+                            .map_err(|_| TypeCkError::InvalidFloat(literal.to_string()))?;
+                        if v == f64::INFINITY {
+                            return Err(TypeCkError::InvalidFloat(literal.to_string()));
+                        }
+                        hir::LitKind::F64(v)
+                    }
+                },
+                _ => return Err(TypeCkError::InvalidType),
             },
             // bool literal
             ast::LitKind::Bool => match ty {
                 // to bool
-                ty::Type::Bool => hir::Lit::new(id, hir::LitKind::Bool(literal == "true"), ty),
+                ty::Type::Bool => hir::LitKind::Bool(literal == "true"),
                 // bool can't be other types
-                _ => return Err(compile_error(pos, TypeCkError::InvalidType)),
+                _ => return Err(TypeCkError::InvalidType),
             },
             _ => unimplemented!(),
         };
-        Ok(lit)
+        Ok(kind)
     }
 
     fn lower_expr(&self, scope: &ScopeTable<ty::Type>, expr: &ast::Expr) -> Result<hir::Expr> {
@@ -635,8 +646,9 @@ impl Lower {
                                 }
                                 let mut literal = String::from("-");
                                 literal.push_str(&lit.literal);
-                                self.lower_literal(lit.id, ty, lit.kind.clone(), &literal, lit.pos)
-                                    .map(|v| v.into())
+                                self.lower_literal(&ty, lit.kind.clone(), &literal)
+                                    .map(|lit_kind| hir::Lit::new(lit.id, lit_kind, ty).into())
+                                    .map_err(|err| compile_error(lit.pos, err))
                             }
                             ast::UnaryOp::Not => {
                                 // ! should have bool
