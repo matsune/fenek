@@ -11,6 +11,7 @@ use parse::IntBase;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::str::FromStr;
 
 // https://github.com/rust-lang/rust/issues/22639
 fn is_parse_int_overflow_error(e: std::num::ParseIntError) -> bool {
@@ -555,28 +556,41 @@ impl Lower {
                     }
                 },
                 ty::Type::Float(kind) => match kind {
-                    // // to f32
-                    // ty::FloatKind::F32 => hir::Lit::new(
-                    //     id,
-                    //     hir::LitKind::F32(n.try_into().map_err(|_| {
-                    //         compile_error(lit.pos, TypeCkError::Overflow("f32".to_string()))
-                    //     })?),
-                    //     ty,
-                    // ),
-                    // // to f64
-                    // ty::FloatKind::F64 => hir::Lit::new(
-                    //     id,
-                    //     hir::LitKind::F64(n.try_into().map_err(|_| {
-                    //         compile_error(lit.pos, TypeCkError::Overflow("f64".to_string()))
-                    //     })?),
-                    //     ty,
-                    // ),
+                    // to f32
+                    ty::FloatKind::F32 => {
+                        let v = f32::from_str(&literal).map_err(|_| {
+                            compile_error(pos, TypeCkError::InvalidFloat(literal.to_string()))
+                        })?;
+                        if v == f32::INFINITY {
+                            return Err(compile_error(
+                                pos,
+                                TypeCkError::InvalidFloat(literal.to_string()),
+                            ));
+                        }
+                        hir::Lit::new(id, hir::LitKind::F32(v), ty)
+                    }
+                    // to f64
+                    ty::FloatKind::F64 => {
+                        let v = f64::from_str(&literal).map_err(|_| {
+                            compile_error(pos, TypeCkError::InvalidFloat(literal.to_string()))
+                        })?;
+                        if v == f64::INFINITY {
+                            return Err(compile_error(
+                                pos,
+                                TypeCkError::InvalidFloat(literal.to_string()),
+                            ));
+                        }
+                        hir::Lit::new(id, hir::LitKind::F64(v), ty)
+                    }
                     _ => unimplemented!(),
                 },
                 _ => return Err(compile_error(pos, TypeCkError::InvalidType)),
             },
+            // bool literal
             ast::LitKind::Bool => match ty {
+                // to bool
                 ty::Type::Bool => hir::Lit::new(id, hir::LitKind::Bool(literal == "true"), ty),
+                // bool can't be other types
                 _ => return Err(compile_error(pos, TypeCkError::InvalidType)),
             },
             _ => unimplemented!(),

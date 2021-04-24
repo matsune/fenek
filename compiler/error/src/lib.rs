@@ -94,8 +94,6 @@ pub enum TypeCkError {
     Overflow(String),
     #[error("constant {0} overflows {1}")]
     OverflowInt(String, String),
-    #[error("constant {0} negative overflows {1}")]
-    OverflowNegInt(String, String),
     #[error("invalid int literal {0}")]
     InvalidInt(String),
     #[error("invalid float literal {0}")]
