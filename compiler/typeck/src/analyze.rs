@@ -50,14 +50,11 @@ fn parse_int_literal<T: Num>(
     }
 }
 
-pub fn lower<'ctx>(
-    ast_arena: &'ctx ast::AstArena<'ctx>,
-    fun: &'ctx ast::AstNode<'ctx>,
-) -> Result<hir::Fun> {
+pub fn lower<'ctx>(fun: &'ctx ast::AstNode<'ctx>) -> Result<hir::Fun> {
     let lower = {
         // infer types and return Lower instance
         let ty_arena = InferTyArena::default();
-        let mut analyzer = TyAnalyzer::new(&ty_arena, ast_arena);
+        let mut analyzer = TyAnalyzer::new(&ty_arena);
         analyzer.analyze(&fun)?;
 
         // Finalyze InferTy into ty::Type
@@ -105,13 +102,12 @@ pub fn lower<'ctx>(
             }
             scopes.push(_scope);
         }
-        Lower::new(ast_arena, node_ty_map, analyzer.node_scope_map, scopes)
+        Lower::new(node_ty_map, analyzer.node_scope_map, scopes)
     };
     lower.lower_fun(fun.id, fun.kind.as_fun())
 }
 
-struct TyAnalyzer<'a, 'ctx> {
-    ast_arena: &'ctx ast::AstArena<'ctx>,
+struct TyAnalyzer<'a> {
     ty_arena: &'a InferTyArena<'a>,
     node_ty_map: HashMap<ast::NodeID, &'a InferTy<'a>>,
     node_scope_map: HashMap<ast::NodeID, ArenaIdx>,
@@ -121,14 +117,13 @@ struct TyAnalyzer<'a, 'ctx> {
     current_fn_ret_ty: Option<&'a InferTy<'a>>,
 }
 
-impl<'a, 'ctx> TyAnalyzer<'a, 'ctx> {
-    fn new(ty_arena: &'a InferTyArena<'a>, ast_arena: &'ctx ast::AstArena<'ctx>) -> Self {
+impl<'a> TyAnalyzer<'a> {
+    fn new(ty_arena: &'a InferTyArena<'a>) -> Self {
         let mut scopes = Vec::new();
         let scope_idx = scopes.len();
         // global scope
         scopes.push(ScopeTable::new(scope_idx, None));
         TyAnalyzer {
-            ast_arena,
             ty_arena,
             node_scope_map: HashMap::new(),
             node_ty_map: HashMap::new(),
@@ -179,7 +174,7 @@ impl<'a, 'ctx> TyAnalyzer<'a, 'ctx> {
         Some(ty)
     }
 
-    fn analyze(&mut self, node: &'ctx ast::AstNode<'ctx>) -> Result<()> {
+    fn analyze(&mut self, node: &ast::AstNode) -> Result<()> {
         match &node.kind {
             ast::AstKind::Fun(fun) => self.analyze_fun(&fun),
             ast::AstKind::Stmt(stmt) => self.analyze_stmt(node.id, &stmt),
@@ -193,7 +188,7 @@ impl<'a, 'ctx> TyAnalyzer<'a, 'ctx> {
         }
     }
 
-    fn analyze_fun(&mut self, fun: &ast::Fun<'ctx>) -> Result<()> {
+    fn analyze_fun(&mut self, fun: &ast::Fun) -> Result<()> {
         let ret_ty = match &fun.ret_ty {
             Some(ret_ty) => {
                 let ret_ty_id = ret_ty.id;
@@ -253,7 +248,7 @@ impl<'a, 'ctx> TyAnalyzer<'a, 'ctx> {
         Ok(())
     }
 
-    fn analyze_stmt(&mut self, id: ast::NodeID, stmt: &'ctx ast::Stmt<'ctx>) -> Result<()> {
+    fn analyze_stmt(&mut self, id: ast::NodeID, stmt: &ast::Stmt) -> Result<()> {
         match stmt {
             ast::Stmt::Expr(expr) => {
                 self.analyze_expr(id, expr)?;
@@ -292,11 +287,7 @@ impl<'a, 'ctx> TyAnalyzer<'a, 'ctx> {
         Ok(())
     }
 
-    fn analyze_expr(
-        &mut self,
-        id: ast::NodeID,
-        expr: &'ctx ast::Expr<'ctx>,
-    ) -> Result<&'a InferTy<'a>> {
+    fn analyze_expr(&mut self, id: ast::NodeID, expr: &ast::Expr) -> Result<&'a InferTy<'a>> {
         let ty = match expr {
             ast::Expr::Lit(lit) => match lit.kind {
                 ast::LitKind::Int(_) => self.ty_arena.alloc_int_lit(),
@@ -320,11 +311,7 @@ impl<'a, 'ctx> TyAnalyzer<'a, 'ctx> {
         Ok(ty)
     }
 
-    fn analyze_binary(
-        &mut self,
-        id: ast::NodeID,
-        binary: &'ctx ast::Binary<'ctx>,
-    ) -> Result<&'a InferTy<'a>> {
+    fn analyze_binary(&mut self, id: ast::NodeID, binary: &ast::Binary) -> Result<&'a InferTy<'a>> {
         let binary_ty = self.ty_arena.alloc_var();
         self.node_ty_map.insert(id, binary_ty);
         let lhs_ty = self.analyze_expr(binary.lhs.id, &binary.lhs.kind.as_expr())?;
@@ -334,11 +321,7 @@ impl<'a, 'ctx> TyAnalyzer<'a, 'ctx> {
         Ok(binary_ty)
     }
 
-    fn analyze_unary(
-        &mut self,
-        id: ast::NodeID,
-        unary: &'ctx ast::Unary<'ctx>,
-    ) -> Result<&'a InferTy<'a>> {
+    fn analyze_unary(&mut self, id: ast::NodeID, unary: &ast::Unary) -> Result<&'a InferTy<'a>> {
         let unary_ty = self.ty_arena.alloc_var();
         self.node_ty_map.insert(id, unary_ty);
         let expr_ty = self.analyze_expr(unary.expr.id, &unary.expr.kind.as_expr())?;
@@ -414,22 +397,19 @@ fn unify<'a>(
     }
 }
 
-struct Lower<'ctx> {
-    ast_arena: &'ctx ast::AstArena<'ctx>,
+struct Lower {
     ty_map: HashMap<ast::NodeID, ty::Type>,
     node_scope_map: HashMap<ast::NodeID, ArenaIdx>,
     scopes: Vec<ScopeTable<ty::Type>>,
 }
 
-impl<'ctx> Lower<'ctx> {
+impl Lower {
     fn new(
-        ast_arena: &'ctx ast::AstArena<'ctx>,
         ty_map: HashMap<ast::NodeID, ty::Type>,
         node_scope_map: HashMap<ast::NodeID, ArenaIdx>,
         scopes: Vec<ScopeTable<ty::Type>>,
     ) -> Self {
         Self {
-            ast_arena,
             ty_map,
             scopes,
             node_scope_map,

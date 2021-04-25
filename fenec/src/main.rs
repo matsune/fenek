@@ -26,7 +26,7 @@ fn run_main() -> Result<(), Box<dyn Error>> {
         let input = read_file(&opts.src).map_err(|err| format!("{}: {}", &opts.src, err))?;
         let ast_arena = parse::ast::AstArena::new();
         let fun = parse::parse(&input, &ast_arena)?;
-        typeck::lower(&ast_arena, &fun)?
+        typeck::lower(&fun)?
     };
     if opts.emit.contains(&opts::Emit::Ast) {
         printer::print(&mir_fun)?;
