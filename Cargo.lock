@@ -189,6 +189,7 @@ dependencies = [
  "parse",
  "printer",
  "typeck",
+ "typed-arena",
 ]
 
 [[package]]
@@ -437,6 +438,7 @@ version = "0.1.0"
 dependencies = [
  "error",
  "paste",
+ "typed-arena",
 ]
 
 [[package]]

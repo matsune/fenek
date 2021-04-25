@@ -1,34 +1,35 @@
-use super::ast::*;
-use crate::lex::{IntBase, Token, TokenKind};
+use crate::lex::{Token, TokenKind};
+use crate::syntax::ast::*;
 use error::{CompileError, ParseError, Pos};
 use std::collections::{HashMap, VecDeque};
-
-#[cfg(test)]
-mod tests;
+use typed_arena::Arena;
 
 type Result<T> = std::result::Result<T, CompileError>;
 
-pub fn parse(tokens: VecDeque<Token>) -> Result<Fun> {
-    Parser::new(tokens).parse_fun()
+pub fn parse<'ctx>(
+    tokens: VecDeque<Token>,
+    arena: &'ctx Arena<AstNode<'ctx>>,
+) -> Result<&'ctx AstNode<'ctx>> {
+    Parser::new(tokens, arena).parse_fun()
 }
 
-struct Parser {
+struct Parser<'ctx> {
     tokens: VecDeque<Token>,
     binop_map: HashMap<String, BinOp>,
-    id: NodeId,
+    arena: &'ctx Arena<AstNode<'ctx>>,
 }
 
-impl Parser {
-    pub fn new(tokens: VecDeque<Token>) -> Self {
+impl<'ctx> Parser<'ctx> {
+    pub fn new(tokens: VecDeque<Token>, arena: &'ctx Arena<AstNode<'ctx>>) -> Self {
         let mut binop_map = HashMap::new();
-        binop_map.insert("+".to_string(), BinOp::new("+".to_string(), 10));
-        binop_map.insert("-".to_string(), BinOp::new("-".to_string(), 10));
-        binop_map.insert("*".to_string(), BinOp::new("*".to_string(), 20));
-        binop_map.insert("/".to_string(), BinOp::new("/".to_string(), 20));
+        binop_map.insert("+".to_string(), BinOp::new("+", 10));
+        binop_map.insert("-".to_string(), BinOp::new("-", 10));
+        binop_map.insert("*".to_string(), BinOp::new("*", 20));
+        binop_map.insert("/".to_string(), BinOp::new("/", 20));
         Parser {
             tokens,
             binop_map,
-            id: 0,
+            arena,
         }
     }
 
@@ -40,9 +41,8 @@ impl Parser {
         self.tokens.pop_front()
     }
 
-    fn gen_id(&mut self) -> NodeId {
-        self.id += 1;
-        self.id
+    fn gen_id(&self) -> NodeID {
+        self.arena.len()
     }
 
     fn current_pos(&self) -> Pos {
@@ -102,18 +102,20 @@ impl Parser {
             .ok_or_else(|| self.expected_err(expect.as_str()))
     }
 
-    fn new_ident(&mut self, ident: Token) -> Ident {
-        Ident::new(self.gen_id(), ident.raw, ident.pos)
+    fn new_ident(&self, ident: Token) -> &'ctx AstNode<'ctx> {
+        self.arena.alloc(AstNode::new(
+            self.gen_id(),
+            AstKind::new_ident(ident.raw, ident.pos),
+        ))
     }
 
-    fn parse_ident(&mut self) -> Result<Ident> {
+    fn parse_ident(&mut self) -> Result<&'ctx AstNode<'ctx>> {
         let ident = self.expect_kind(TokenKind::Ident)?;
         Ok(self.new_ident(ident))
     }
 
-    pub fn parse_fun(&mut self) -> Result<Fun> {
-        let kw_fun = self.expect_kind(TokenKind::KwFun)?;
-        let pos = kw_fun.pos;
+    pub fn parse_fun(&mut self) -> Result<&'ctx AstNode<'ctx>> {
+        self.expect_kind(TokenKind::KwFun)?;
         self.skip_spaces();
         let name = self.parse_ident()?;
         self.skip_spaces();
@@ -131,12 +133,15 @@ impl Parser {
             }
         };
         let block = self.parse_block()?;
-        Ok(Fun::new(self.gen_id(), name, args, ret_ty, block, pos))
+        Ok(self.arena.alloc(AstNode::new(
+            self.gen_id(),
+            AstKind::new_fun(name, args, ret_ty, block),
+        )))
     }
 
-    fn parse_block(&mut self) -> Result<Block> {
-        self.expect_kind(TokenKind::LBrace)?;
-
+    fn parse_block(&mut self) -> Result<&'ctx AstNode<'ctx>> {
+        let lbrace = self.expect_kind(TokenKind::LBrace)?;
+        let pos = lbrace.pos;
         let mut stmts = Vec::new();
         loop {
             self.skip_spaces();
@@ -156,12 +161,14 @@ impl Parser {
         }
 
         self.expect_kind(TokenKind::RBrace)?;
-        Ok(Block::new(self.gen_id(), stmts))
+        Ok(self
+            .arena
+            .alloc(AstNode::new(self.gen_id(), AstKind::new_block(stmts, pos))))
     }
 
     /// fun_args    ::= '(' <args>* ')'
     /// args        ::= <ident> ':' <ident> (',' <args>)?
-    fn parse_fun_args(&mut self) -> Result<FunArgs> {
+    fn parse_fun_args(&mut self) -> Result<FunArgs<'ctx>> {
         self.expect_kind(TokenKind::LParen)?;
         self.skip_spaces();
 
@@ -179,7 +186,8 @@ impl Parser {
             self.skip_spaces();
             let arg_ty = self.parse_ident()?;
             self.skip_spaces();
-            args.push(FunArg::new(self.gen_id(), arg_name, arg_ty));
+            // args.push(FunArg::new(self.gen_id(), arg_name, arg_ty));
+            args.push(FunArg::new(arg_name, arg_ty));
             if self.is_next_kind(TokenKind::Comma) {
                 // has next arg
                 self.bump();
@@ -193,45 +201,53 @@ impl Parser {
         Ok(args)
     }
 
-    pub fn parse_var_decl(&mut self) -> Result<VarDecl> {
-        let pos = self.expect_kind(TokenKind::KwVar)?.pos;
+    pub fn parse_var_decl(&mut self) -> Result<&'ctx AstNode<'ctx>> {
+        self.expect_kind(TokenKind::KwVar)?;
         self.skip_spaces();
         let name = self.parse_ident()?;
         self.skip_spaces();
         self.expect_kind(TokenKind::Eq)?;
         self.skip_spaces();
         let expr = self.parse_expr()?;
-        Ok(VarDecl::new(self.gen_id(), name, expr, pos))
+        Ok(self.arena.alloc(AstNode::new(
+            self.gen_id(),
+            AstKind::new_var_decl(name, expr),
+        )))
     }
 
-    pub fn parse_ret(&mut self) -> Result<Ret> {
+    pub fn parse_ret(&mut self) -> Result<&'ctx AstNode<'ctx>> {
         let ret = self.expect_kind(TokenKind::KwRet)?;
         self.skip_spaces();
         if self.is_next_kind(TokenKind::Semi) {
-            return Ok(Ret::new(self.gen_id(), None, ret.pos));
+            return Ok(self
+                .arena
+                .alloc(AstNode::new(self.gen_id(), AstKind::new_ret(None, ret.pos))));
         }
         let expr = self.parse_expr()?;
-        Ok(Ret::new(self.gen_id(), Some(expr), ret.pos))
+        Ok(self.arena.alloc(AstNode::new(
+            self.gen_id(),
+            AstKind::new_ret(Some(expr), ret.pos),
+        )))
     }
 
-    pub fn parse_stmt(&mut self) -> Result<Stmt> {
+    pub fn parse_stmt(&mut self) -> Result<&'ctx AstNode<'ctx>> {
         let tok = self
             .peek()
             .ok_or_else(|| self.compile_error(ParseError::UnexpectedEof))?;
         let stmt = match tok.kind {
-            TokenKind::KwVar => self.parse_var_decl()?.into(),
-            TokenKind::KwRet => self.parse_ret()?.into(),
-            _ => self.parse_expr()?.into(),
+            TokenKind::KwVar => self.parse_var_decl()?,
+            TokenKind::KwRet => self.parse_ret()?,
+            _ => self.parse_expr()?,
         };
         self.expect_kind(TokenKind::Semi)?;
         Ok(stmt)
     }
 
-    pub fn parse_expr(&mut self) -> Result<Expr> {
+    pub fn parse_expr(&mut self) -> Result<&'ctx AstNode<'ctx>> {
         self.parse_expr_prec(0)
     }
 
-    fn parse_primary_expr(&mut self) -> Result<Expr> {
+    fn parse_primary_expr(&mut self) -> Result<&'ctx AstNode<'ctx>> {
         let tok = self
             .bump_if(|tok| {
                 matches!(
@@ -243,24 +259,20 @@ impl Parser {
         let expr = match tok.kind {
             TokenKind::Lit(kind) => {
                 let kind = match kind {
-                    crate::lex::LitKind::Int { base } => {
-                        // if n > i64::MAX as u64 {
-                        //     return Err(self.compile_error(ParseError::OverflowInt(tok.raw)));
-                        // }
-                        LitKind::Int(base)
-                    }
-                    crate::lex::LitKind::Float => {
-                        // let f = tok.raw.replace("_", "").parse::<f64>().map_err(|_| {
-                        //     self.compile_error(ParseError::InvalidFloat(tok.raw.clone()))
-                        // })?;
-                        LitKind::Float //(f)
-                    }
+                    crate::lex::LitKind::Int { base } => LitKind::Int(base),
+                    crate::lex::LitKind::Float => LitKind::Float,
                     crate::lex::LitKind::Bool => LitKind::Bool,
                     crate::lex::LitKind::String => LitKind::String,
                 };
-                Expr::Lit(Lit::new(self.gen_id(), kind, tok.raw, tok.pos))
+                self.arena.alloc(AstNode::new(
+                    self.gen_id(),
+                    AstKind::new_lit(kind, tok.raw, tok.pos),
+                ))
             }
-            TokenKind::Ident => Ident::new(self.gen_id(), tok.raw, tok.pos).into(),
+            TokenKind::Ident => self.arena.alloc(AstNode::new(
+                self.gen_id(),
+                AstKind::new_ident(tok.raw, tok.pos),
+            )),
             TokenKind::LParen => {
                 let expr = self.parse_expr()?;
                 if !self.is_next_kind(TokenKind::RParen) {
@@ -294,56 +306,85 @@ impl Parser {
         self.binop_map.get(&symbol)
     }
 
-    fn parse_binop(&mut self) -> Option<&BinOp> {
-        let mut symbol = String::new();
+    // BinOp and precedence
+    fn parse_binop(&mut self) -> Option<(Ident, u8)> {
+        let pos = self.peek()?.pos;
+        let mut raw = String::new();
         while let Some(tok) = self.bump_if(|tok| {
             matches!(
                 tok.kind,
                 TokenKind::Plus | TokenKind::Minus | TokenKind::Star | TokenKind::Slash
             )
         }) {
-            symbol.push_str(&tok.raw);
+            raw.push_str(&tok.raw);
         }
-        self.binop_map.get(&symbol)
+        let prec = self.binop_map.get(&raw)?.precedence;
+        Some((Ident::new(raw, pos), prec))
     }
 
-    fn parse_expr_prec(&mut self, last_prec: u8) -> Result<Expr> {
+    fn parse_expr_prec(&mut self, last_prec: u8) -> Result<&'ctx AstNode<'ctx>> {
         let tok = self
             .peek()
             .ok_or_else(|| self.compile_error(ParseError::UnexpectedEof))?;
         let lhs = match tok.kind {
             TokenKind::Not | TokenKind::Plus | TokenKind::Minus => {
                 let pos = tok.pos;
-                let unary_op = match self.bump().unwrap().kind {
-                    TokenKind::Not => UnaryOp::Not,
-                    TokenKind::Plus => UnaryOp::Add,
-                    TokenKind::Minus => UnaryOp::Sub,
+                let unary_op_kind = match self.bump().unwrap().kind {
+                    TokenKind::Not => UnaryOpKind::Not,
+                    TokenKind::Plus => UnaryOpKind::Add,
+                    TokenKind::Minus => UnaryOpKind::Sub,
                     _ => unreachable!(),
                 };
+                let unary_op = self.arena.alloc(AstNode::new(
+                    self.gen_id(),
+                    AstKind::new_unary_op(unary_op_kind, pos),
+                ));
                 self.skip_spaces();
                 let expr = self.parse_expr()?;
-                Unary::new(self.gen_id(), unary_op, expr, pos).into()
+                self.arena.alloc(AstNode::new(
+                    self.gen_id(),
+                    AstKind::new_unary(unary_op, expr),
+                ))
             }
             _ => self.parse_primary_expr()?,
         };
         self.skip_spaces();
-        let bin_op = match self.peek_binop() {
-            Some(op) if op.precedence >= last_prec => self.parse_binop().unwrap().clone(),
+        let (bin_op, bin_op_prec) = match self.peek_binop() {
+            Some(op) if op.precedence >= last_prec => self.parse_binop().unwrap(),
             _ => return Ok(lhs),
         };
+        let bin_op = self
+            .arena
+            .alloc(AstNode::new(self.gen_id(), AstKind::Ident(bin_op)));
         self.skip_spaces();
-        let rhs = self.parse_expr_prec(bin_op.precedence)?;
-        let mut lhs = Binary::new(self.gen_id(), bin_op, lhs, rhs).into();
+        let rhs = self.parse_expr_prec(bin_op_prec)?;
+        let mut lhs = Binary::new(bin_op, bin_op_prec, lhs, rhs);
 
         loop {
             self.skip_spaces();
-            let bin_op = match self.peek_binop() {
-                Some(op) if op.precedence >= last_prec => self.parse_binop().unwrap().clone(),
-                _ => return Ok(lhs),
+            let (bin_op, bin_op_prec) = match self.peek_binop() {
+                Some(op) if op.precedence >= last_prec => self.parse_binop().unwrap(),
+                _ => {
+                    return Ok(self.arena.alloc(AstNode::new(
+                        self.gen_id(),
+                        AstKind::Stmt(Stmt::Expr(Expr::Binary(lhs))),
+                    )))
+                }
             };
+            let bin_op = self
+                .arena
+                .alloc(AstNode::new(self.gen_id(), AstKind::Ident(bin_op)));
             self.skip_spaces();
-            let rhs = self.parse_expr_prec(bin_op.precedence)?;
-            lhs = Binary::new(self.gen_id(), bin_op, lhs, rhs).into();
+            let rhs = self.parse_expr_prec(bin_op_prec)?;
+            lhs = Binary::new(
+                bin_op,
+                bin_op_prec,
+                self.arena.alloc(AstNode::new(
+                    self.gen_id(),
+                    AstKind::Stmt(Stmt::Expr(Expr::Binary(lhs))),
+                )),
+                rhs,
+            );
         }
     }
 }

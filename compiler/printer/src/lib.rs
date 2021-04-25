@@ -103,12 +103,12 @@ impl Printer {
             hir::Expr::Binary(binary) => self
                 .begin_child(&format!("Binary::{:?}", ty))
                 .build_expr(&binary.lhs)
-                .add_empty_child(&binary.op.symbol)
+                .add_empty_child(&binary.op)
                 .build_expr(&binary.rhs)
                 .end_child(),
             hir::Expr::Unary(unary) => self
                 .begin_child(&format!("Unary::{:?}", ty))
-                .add_empty_child(&format!("{}", unary.op))
+                .add_empty_child(&format!("{:?}", unary.op))
                 .build_expr(&unary.expr)
                 .end_child(),
         }

@@ -1,189 +1,260 @@
 use crate::lex::IntBase;
 use error::Pos;
+use typed_arena::Arena;
 
-pub type NodeId = u32;
+pub type NodeID = usize;
 
-pub trait Node {
-    fn id(&self) -> NodeId;
+pub type AstArena<'a> = Arena<AstNode<'a>>;
+
+pub struct AstNode<'a> {
+    pub id: NodeID,
+    pub kind: AstKind<'a>,
 }
 
-macro_rules! impl_node {
-    ($name:ident) => {
-        impl Node for $name {
-            fn id(&self) -> NodeId {
-                self.id
-            }
+impl<'a> AstNode<'a> {
+    pub fn new(id: NodeID, kind: AstKind<'a>) -> Self {
+        Self { id, kind }
+    }
+
+    pub fn pos(&self) -> Pos {
+        self.kind.pos()
+    }
+}
+
+pub enum AstKind<'a> {
+    Fun(Fun<'a>),
+    Ident(Ident),
+    Block(Block<'a>),
+    Stmt(Stmt<'a>),
+    UnaryOp(UnaryOp),
+}
+
+impl<'a> AstKind<'a> {
+    pub fn pos(&self) -> Pos {
+        match self {
+            Self::Fun(fun) => fun.name.pos(),
+            Self::Ident(ident) => ident.pos,
+            Self::Block(block) => block.pos,
+            Self::Stmt(stmt) => stmt.pos(),
+            Self::UnaryOp(unary_op) => unary_op.pos,
         }
-    };
-}
-impl_node!(Fun);
-impl_node!(FunArg);
-impl_node!(Block);
-impl_node!(VarDecl);
-impl_node!(Lit);
-impl_node!(Ident);
-impl_node!(Binary);
-impl_node!(Unary);
-impl_node!(Ret);
+    }
 
-macro_rules! Enum {
-    ($name:ident [$(($Var:ident, $var:ident)),*]) => {
-        #[derive(Debug)]
-        pub enum $name {
-            $(
-                $Var($Var),
-            )*
-        }
-
-        impl Node for $name {
-            fn id(&self) -> NodeId {
-                match self {
-                    $(
-                        $name::$Var(v) => v.id(),
-                    )*
-                }
-            }
-        }
-
-        $(
-            impl Into<$name> for $Var {
-                fn into(self) -> $name {
-                    $name::$Var(self)
-                }
-            }
-
-            impl $name {
-                paste::item! {
-                    pub fn [<into_ $var >](self) -> $Var {
-                        if let $name::$Var(v) = self {
-                            return v;
-                        }
-                        panic!()
-                    }
-                }
-            }
-
-        )*
-    };
-}
-
-#[derive(Debug)]
-pub struct Fun {
-    pub id: NodeId,
-    pub name: Ident,
-    pub args: FunArgs,
-    pub ret_ty: Option<Ident>,
-    pub block: Block,
-    pub pos: Pos,
-}
-
-impl Fun {
-    pub fn new(
-        id: NodeId,
-        name: Ident,
-        args: FunArgs,
-        ret_ty: Option<Ident>,
-        block: Block,
-        pos: Pos,
+    pub fn new_fun(
+        name: &'a AstNode<'a>,
+        args: FunArgs<'a>,
+        ret_ty: Option<&'a AstNode<'a>>,
+        block: &'a AstNode<'a>,
     ) -> Self {
-        Fun {
-            id,
+        Self::Fun(Fun::new(name, args, ret_ty, block))
+    }
+
+    pub fn new_ident(raw: String, pos: Pos) -> Self {
+        Self::Ident(Ident::new(raw, pos))
+    }
+
+    pub fn new_block(stmts: Vec<&'a AstNode<'a>>, pos: Pos) -> Self {
+        Self::Block(Block::new(stmts, pos))
+    }
+
+    pub fn new_ret(expr: Option<&'a AstNode<'a>>, pos: Pos) -> Self {
+        Self::Stmt(Stmt::Ret(Ret::new(expr, pos)))
+    }
+
+    pub fn new_var_decl(name: &'a AstNode<'a>, expr: &'a AstNode<'a>) -> Self {
+        Self::Stmt(Stmt::VarDecl(VarDecl::new(name, expr)))
+    }
+
+    pub fn new_unary(op: &'a AstNode<'a>, expr: &'a AstNode<'a>) -> Self {
+        Self::Stmt(Stmt::Expr(Expr::Unary(Unary::new(op, expr))))
+    }
+
+    pub fn new_unary_op(kind: UnaryOpKind, pos: Pos) -> Self {
+        Self::UnaryOp(UnaryOp::new(kind, pos))
+    }
+
+    pub fn new_lit(kind: LitKind, literal: String, pos: Pos) -> Self {
+        Self::Stmt(Stmt::Expr(Expr::Lit(Lit::new(kind, literal, pos))))
+    }
+
+    pub fn as_fun(&self) -> &Fun {
+        match self {
+            Self::Fun(fun) => fun,
+            _ => panic!(),
+        }
+    }
+
+    pub fn as_ident(&self) -> &Ident {
+        match self {
+            Self::Ident(ident) => ident,
+            _ => panic!(),
+        }
+    }
+
+    pub fn as_block(&self) -> &Block {
+        match self {
+            Self::Block(block) => block,
+            _ => panic!(),
+        }
+    }
+
+    pub fn as_stmt(&self) -> &Stmt {
+        match self {
+            Self::Stmt(stmt) => stmt,
+            _ => panic!(),
+        }
+    }
+
+    pub fn as_expr(&self) -> &Expr {
+        match self {
+            Self::Stmt(Stmt::Expr(expr)) => expr,
+            _ => panic!(),
+        }
+    }
+
+    pub fn as_unary_op(&self) -> &UnaryOp {
+        match self {
+            Self::UnaryOp(unary_op) => unary_op,
+            _ => panic!(),
+        }
+    }
+}
+
+pub struct Fun<'a> {
+    // Ident
+    pub name: &'a AstNode<'a>,
+    // Vec FunArg
+    pub args: FunArgs<'a>,
+    // Ident
+    pub ret_ty: Option<&'a AstNode<'a>>,
+    // Block
+    pub block: &'a AstNode<'a>,
+}
+
+impl<'a> Fun<'a> {
+    pub fn new(
+        name: &'a AstNode<'a>,
+        args: FunArgs<'a>,
+        ret_ty: Option<&'a AstNode<'a>>,
+        block: &'a AstNode<'a>,
+    ) -> Self {
+        Self {
             name,
             args,
             ret_ty,
             block,
-            pos,
         }
     }
 }
 
-pub type FunArgs = Vec<FunArg>;
-
-#[derive(Debug)]
-pub struct FunArg {
-    pub id: NodeId,
-    pub name: Ident,
-    pub ty: Ident,
-}
-
-impl FunArg {
-    pub fn new(id: NodeId, name: Ident, ty: Ident) -> Self {
-        FunArg { id, name, ty }
-    }
-}
-
-#[derive(Debug)]
-pub struct Block {
-    pub id: NodeId,
-    pub stmts: Vec<Stmt>,
-}
-
-impl Block {
-    pub fn new(id: NodeId, stmts: Vec<Stmt>) -> Self {
-        Block { id, stmts }
-    }
-}
-
-Enum!(Stmt [
-    (VarDecl, var_decl),
-    (Expr, expr),
-    (Ret, ret)
-]);
-
-impl Stmt {
-    pub fn pos(&self) -> Pos {
-        match self {
-            Stmt::VarDecl(var_decl) => var_decl.pos,
-            Stmt::Expr(expr) => expr.pos(),
-            Stmt::Ret(ret) => ret.pos,
-        }
-    }
-}
-
-Enum!(Expr [
-    (Lit, lit),
-    (Ident, ident),
-    (Binary, binary),
-    (Unary, unary)
-]);
-
-impl Expr {
-    pub fn pos(&self) -> Pos {
-        match self {
-            Expr::Lit(lit) => lit.pos,
-            Expr::Ident(ident) => ident.pos,
-            Expr::Binary(binary) => binary.lhs.pos(),
-            Expr::Unary(unary) => unary.pos,
-        }
-    }
-}
-
-/// var <name> = <expr>;
-#[derive(Debug)]
-pub struct VarDecl {
-    pub id: NodeId,
-    pub name: Ident,
-    pub init: Box<Expr>,
+#[derive(Debug, Clone)]
+pub struct Ident {
+    pub raw: String,
     pub pos: Pos,
 }
 
-impl VarDecl {
-    pub fn new(id: NodeId, name: Ident, init: Expr, pos: Pos) -> Self {
-        VarDecl {
-            id,
-            name,
-            init: Box::new(init),
-            pos,
+impl Ident {
+    pub fn new(raw: String, pos: Pos) -> Self {
+        Self { raw, pos }
+    }
+}
+
+pub type FunArgs<'a> = Vec<FunArg<'a>>;
+
+pub struct FunArg<'a> {
+    // Ident
+    pub name: &'a AstNode<'a>,
+    // Ident
+    pub ty: &'a AstNode<'a>,
+}
+
+impl<'a> FunArg<'a> {
+    pub fn new(name: &'a AstNode<'a>, ty: &'a AstNode<'a>) -> Self {
+        Self { name, ty }
+    }
+}
+
+pub struct Block<'a> {
+    // Vec Stmt
+    pub stmts: Vec<&'a AstNode<'a>>,
+    pub pos: Pos,
+}
+
+impl<'a> Block<'a> {
+    pub fn new(stmts: Vec<&'a AstNode<'a>>, pos: Pos) -> Self {
+        Self { stmts, pos }
+    }
+}
+
+pub enum Stmt<'a> {
+    Expr(Expr<'a>),
+    Ret(Ret<'a>),
+    VarDecl(VarDecl<'a>),
+}
+
+impl<'a> Stmt<'a> {
+    pub fn pos(&self) -> Pos {
+        match self {
+            Self::Expr(expr) => expr.pos(),
+            Self::Ret(ret) => ret.pos,
+            Self::VarDecl(var_decl) => var_decl.name.pos(),
         }
     }
 }
 
-#[derive(Debug)]
+pub struct Ret<'a> {
+    // Expr
+    pub expr: Option<&'a AstNode<'a>>,
+    pub pos: Pos,
+}
+
+impl<'a> Ret<'a> {
+    pub fn new(expr: Option<&'a AstNode<'a>>, pos: Pos) -> Self {
+        Self { expr, pos }
+    }
+}
+
+pub struct VarDecl<'a> {
+    // Ident
+    pub name: &'a AstNode<'a>,
+    // Expr
+    pub expr: &'a AstNode<'a>,
+}
+
+impl<'a> VarDecl<'a> {
+    pub fn new(name: &'a AstNode<'a>, expr: &'a AstNode<'a>) -> Self {
+        Self { name, expr }
+    }
+}
+
+pub enum Expr<'a> {
+    Lit(Lit),
+    Ident(Ident),
+    Binary(Binary<'a>),
+    Unary(Unary<'a>),
+}
+
+impl<'a> Expr<'a> {
+    pub fn pos(&self) -> Pos {
+        match self {
+            Self::Lit(lit) => lit.pos,
+            Self::Ident(ident) => ident.pos,
+            Self::Binary(binary) => binary.lhs.pos(),
+            Self::Unary(unary) => unary.op.pos(),
+        }
+    }
+}
+
 pub struct Lit {
-    pub id: NodeId,
     pub kind: LitKind,
     pub literal: String,
     pub pos: Pos,
+}
+
+impl Lit {
+    pub fn new(kind: LitKind, literal: String, pos: Pos) -> Self {
+        Self { kind, literal, pos }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -194,113 +265,78 @@ pub enum LitKind {
     String,
 }
 
-impl Lit {
-    pub fn new(id: NodeId, kind: LitKind, literal: String, pos: Pos) -> Self {
-        Lit {
-            id,
-            kind,
-            literal,
-            pos,
+pub struct Binary<'a> {
+    // Ident
+    pub op: &'a AstNode<'a>,
+    pub precedence: u8,
+    // Expr
+    pub lhs: &'a AstNode<'a>,
+    // Expr
+    pub rhs: &'a AstNode<'a>,
+}
+
+impl<'a> Binary<'a> {
+    pub fn new(
+        op: &'a AstNode<'a>,
+        precedence: u8,
+        lhs: &'a AstNode<'a>,
+        rhs: &'a AstNode<'a>,
+    ) -> Self {
+        Self {
+            op,
+            precedence,
+            lhs,
+            rhs,
         }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct Ident {
-    pub id: NodeId,
-    pub raw: String,
-    pub pos: Pos,
-}
-
-impl Ident {
-    pub fn new(id: NodeId, raw: String, pos: Pos) -> Self {
-        Ident { id, raw, pos }
     }
 }
 
 #[derive(Debug)]
-pub struct Binary {
-    pub id: NodeId,
-    pub op: BinOp,
-    pub lhs: Box<Expr>,
-    pub rhs: Box<Expr>,
-}
-
-impl Binary {
-    pub fn new(id: NodeId, op: BinOp, lhs: Expr, rhs: Expr) -> Self {
-        Binary {
-            id,
-            op,
-            lhs: Box::new(lhs),
-            rhs: Box::new(rhs),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct BinOp {
     pub symbol: String,
     pub precedence: u8,
 }
 
 impl BinOp {
-    pub fn new(symbol: String, precedence: u8) -> Self {
-        Self { symbol, precedence }
-    }
-}
-
-#[derive(Debug)]
-pub struct Unary {
-    pub id: NodeId,
-    pub op: UnaryOp,
-    pub expr: Box<Expr>,
-    pub pos: Pos,
-}
-
-impl Unary {
-    pub fn new(id: NodeId, op: UnaryOp, expr: Expr, pos: Pos) -> Self {
-        Unary {
-            id,
-            op,
-            expr: Box::new(expr),
-            pos,
+    pub fn new<S: ToString>(symbol: S, precedence: u8) -> Self {
+        Self {
+            symbol: symbol.to_string(),
+            precedence,
         }
     }
 }
 
+pub struct Unary<'a> {
+    // UnaryOp
+    pub op: &'a AstNode<'a>,
+    // Expr
+    pub expr: &'a AstNode<'a>,
+}
+
+impl<'a> Unary<'a> {
+    pub fn new(op: &'a AstNode<'a>, expr: &'a AstNode<'a>) -> Self {
+        Self { op, expr }
+    }
+}
+
+#[derive(Debug)]
+pub struct UnaryOp {
+    pub kind: UnaryOpKind,
+    pub pos: Pos,
+}
+
+impl UnaryOp {
+    pub fn new(kind: UnaryOpKind, pos: Pos) -> Self {
+        Self { kind, pos }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum UnaryOp {
+pub enum UnaryOpKind {
     /// +
     Add,
     /// -
     Sub,
     /// !
     Not,
-}
-
-impl std::fmt::Display for UnaryOp {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                UnaryOp::Add => "+",
-                UnaryOp::Sub => "-",
-                UnaryOp::Not => "!",
-            }
-        )
-    }
-}
-
-#[derive(Debug)]
-pub struct Ret {
-    pub id: NodeId,
-    pub expr: Option<Expr>,
-    pub pos: Pos,
-}
-
-impl Ret {
-    pub fn new(id: NodeId, expr: Option<Expr>, pos: Pos) -> Self {
-        Self { id, expr, pos }
-    }
 }

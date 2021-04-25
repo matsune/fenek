@@ -8,7 +8,7 @@ pub trait Typed {
 
 #[derive(Debug)]
 pub struct Fun {
-    pub id: ast::NodeId,
+    pub id: ast::NodeID,
     pub name: Ident,
     pub args: FunArgs,
     pub ret_ty: ty::Type,
@@ -18,7 +18,7 @@ pub struct Fun {
 
 impl Fun {
     pub fn new(
-        id: ast::NodeId,
+        id: ast::NodeID,
         name: Ident,
         args: FunArgs,
         ret_ty: ty::Type,
@@ -40,12 +40,12 @@ pub type FunArgs = Vec<Ident>;
 
 #[derive(Debug)]
 pub struct Block {
-    pub id: ast::NodeId,
+    pub id: ast::NodeID,
     pub stmts: Vec<Stmt>,
 }
 
 impl Block {
-    pub fn new(id: ast::NodeId, stmts: Vec<Stmt>) -> Self {
+    pub fn new(id: ast::NodeID, stmts: Vec<Stmt>) -> Self {
         Block { id, stmts }
     }
 }
@@ -73,14 +73,14 @@ Enum!(Stmt [VarDecl, Ret, Expr]);
 
 #[derive(Debug)]
 pub struct VarDecl {
-    pub id: ast::NodeId,
+    pub id: ast::NodeID,
     pub name: ast::Ident,
     pub init: Box<Expr>,
     pub def: VarDef<ty::Type>,
 }
 
 impl VarDecl {
-    pub fn new(id: ast::NodeId, name: ast::Ident, init: Box<Expr>, def: VarDef<ty::Type>) -> Self {
+    pub fn new(id: ast::NodeID, name: ast::Ident, init: Box<Expr>, def: VarDef<ty::Type>) -> Self {
         Self {
             id,
             name,
@@ -92,12 +92,12 @@ impl VarDecl {
 
 #[derive(Debug)]
 pub struct Ret {
-    pub id: ast::NodeId,
+    pub id: ast::NodeID,
     pub expr: Option<Expr>,
 }
 
 impl Ret {
-    pub fn new(id: ast::NodeId, expr: Option<Expr>) -> Self {
+    pub fn new(id: ast::NodeID, expr: Option<Expr>) -> Self {
         Self { id, expr }
     }
 }
@@ -117,13 +117,13 @@ impl Typed for Expr {
 
 #[derive(Debug)]
 pub struct Lit {
-    pub id: ast::NodeId,
+    pub id: ast::NodeID,
     pub kind: LitKind,
     pub ty: ty::Type,
 }
 
 impl Lit {
-    pub fn new(id: ast::NodeId, kind: LitKind, ty: ty::Type) -> Self {
+    pub fn new(id: ast::NodeID, kind: LitKind, ty: ty::Type) -> Self {
         Self { id, kind, ty }
     }
 }
@@ -177,15 +177,15 @@ impl Typed for Ident {
 
 #[derive(Debug)]
 pub struct Binary {
-    pub id: ast::NodeId,
-    pub op: ast::BinOp,
+    pub id: ast::NodeID,
+    pub op: String,
     pub lhs: Box<Expr>,
     pub rhs: Box<Expr>,
     pub ty: ty::Type,
 }
 
 impl Binary {
-    pub fn new(id: ast::NodeId, op: ast::BinOp, lhs: Expr, rhs: Expr, ty: ty::Type) -> Self {
+    pub fn new(id: ast::NodeID, op: String, lhs: Expr, rhs: Expr, ty: ty::Type) -> Self {
         Binary {
             id,
             op,
@@ -204,13 +204,13 @@ impl Typed for Binary {
 
 #[derive(Debug)]
 pub struct Unary {
-    pub id: ast::NodeId,
-    pub op: ast::UnaryOp,
+    pub id: ast::NodeID,
+    pub op: ast::UnaryOpKind,
     pub expr: Box<Expr>,
 }
 
 impl Unary {
-    pub fn new(id: ast::NodeId, op: ast::UnaryOp, expr: Expr) -> Self {
+    pub fn new(id: ast::NodeID, op: ast::UnaryOpKind, expr: Expr) -> Self {
         Unary {
             id,
             op,

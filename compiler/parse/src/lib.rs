@@ -1,10 +1,15 @@
+pub use lex::IntBase;
+pub use syntax::ast;
+pub use syntax::parser;
+use typed_arena::Arena;
+
 mod lex;
 mod syntax;
 
-pub use lex::IntBase;
-pub use syntax::ast;
-
-pub fn parse(input: &str) -> Result<syntax::ast::Fun, error::CompileError> {
+pub fn parse<'a>(
+    input: &str,
+    arena: &'a Arena<ast::AstNode<'a>>,
+) -> Result<&'a ast::AstNode<'a>, error::CompileError> {
     let tokens = lex::lex(input)?;
-    syntax::parser::parse(tokens.into())
+    parser::parse(tokens.into(), arena)
 }

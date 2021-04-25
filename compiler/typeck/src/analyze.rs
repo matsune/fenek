@@ -6,9 +6,7 @@ use crate::ty;
 use error::{CompileError, Pos, TypeCkError};
 use num_traits::Num;
 use parse::ast;
-use parse::ast::Node;
 use parse::IntBase;
-use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -52,12 +50,15 @@ fn parse_int_literal<T: Num>(
     }
 }
 
-pub fn lower(fun: &ast::Fun) -> Result<hir::Fun> {
+pub fn lower<'ctx>(
+    ast_arena: &'ctx ast::AstArena<'ctx>,
+    fun: &'ctx ast::AstNode<'ctx>,
+) -> Result<hir::Fun> {
     let lower = {
         // infer types and return Lower instance
         let ty_arena = InferTyArena::default();
-        let mut analyzer = TyAnalyzer::new(&ty_arena);
-        analyzer.analyze_fun(&fun)?;
+        let mut analyzer = TyAnalyzer::new(&ty_arena, ast_arena);
+        analyzer.analyze(&fun)?;
 
         // Finalyze InferTy into ty::Type
         let mut node_ty_map = HashMap::with_capacity(analyzer.node_ty_map.len());
@@ -104,28 +105,30 @@ pub fn lower(fun: &ast::Fun) -> Result<hir::Fun> {
             }
             scopes.push(_scope);
         }
-        Lower::new(node_ty_map, analyzer.node_scope_map, scopes)
+        Lower::new(ast_arena, node_ty_map, analyzer.node_scope_map, scopes)
     };
-    lower.lower_fun(&fun)
+    lower.lower_fun(fun.id, fun.kind.as_fun())
 }
 
-struct TyAnalyzer<'a> {
+struct TyAnalyzer<'a, 'ctx> {
+    ast_arena: &'ctx ast::AstArena<'ctx>,
     ty_arena: &'a InferTyArena<'a>,
-    node_ty_map: HashMap<ast::NodeId, &'a InferTy<'a>>,
-    node_scope_map: HashMap<ast::NodeId, ArenaIdx>,
+    node_ty_map: HashMap<ast::NodeID, &'a InferTy<'a>>,
+    node_scope_map: HashMap<ast::NodeID, ArenaIdx>,
     scopes: Vec<ScopeTable<&'a InferTy<'a>>>,
     scope_idx: ArenaIdx,
     def_id: DefId,
     current_fn_ret_ty: Option<&'a InferTy<'a>>,
 }
 
-impl<'a> TyAnalyzer<'a> {
-    fn new(ty_arena: &'a InferTyArena<'a>) -> Self {
+impl<'a, 'ctx> TyAnalyzer<'a, 'ctx> {
+    fn new(ty_arena: &'a InferTyArena<'a>, ast_arena: &'ctx ast::AstArena<'ctx>) -> Self {
         let mut scopes = Vec::new();
         let scope_idx = scopes.len();
         // global scope
         scopes.push(ScopeTable::new(scope_idx, None));
         TyAnalyzer {
+            ast_arena,
             ty_arena,
             node_scope_map: HashMap::new(),
             node_ty_map: HashMap::new(),
@@ -160,62 +163,6 @@ impl<'a> TyAnalyzer<'a> {
         id
     }
 
-    fn analyze_fun(&mut self, fun: &ast::Fun) -> Result<()> {
-        let ret_ty = match &fun.ret_ty {
-            Some(ret_ty) => {
-                let ty = self.get_type_from_name(&ret_ty.raw).ok_or_else(|| {
-                    compile_error(ret_ty.pos, TypeCkError::UndefinedType(ret_ty.raw.clone()))
-                })?;
-                self.node_ty_map.insert(ret_ty.id(), ty);
-                ty
-            }
-            None => self.ty_arena.alloc_void(),
-        };
-        self.current_fn_ret_ty = Some(ret_ty);
-        self.push_scope();
-        self.node_scope_map.insert(fun.block.id(), self.scope_idx);
-
-        for arg in &fun.args {
-            if self.get_scope().lookup(&arg.name.raw).is_some() {
-                return Err(compile_error(
-                    arg.name.pos,
-                    TypeCkError::AlreadyDefinedVariable(arg.name.raw.clone()),
-                ));
-            }
-            let ty = self.get_type_from_name(&arg.ty.raw).ok_or_else(|| {
-                compile_error(arg.ty.pos, TypeCkError::UndefinedType(arg.ty.raw.clone()))
-            })?;
-            // void type can't be used as an arg type
-            if ty.is_void() {
-                return Err(compile_error(arg.ty.pos, TypeCkError::InvalidType));
-            }
-            let def = VarDef::new(self.gen_def_id(), ty, false);
-            self.get_scope_mut().insert_var(arg.name.raw.clone(), def);
-        }
-
-        for stmt in &fun.block.stmts {
-            self.analyze_stmt(&stmt)?;
-        }
-
-        let def = FunDef::new(
-            self.gen_def_id(),
-            ret_ty,
-            fun.args
-                .iter()
-                .map(|arg| {
-                    self.get_scope()
-                        .lookup(&arg.name.raw)
-                        .unwrap()
-                        .as_var_def()
-                        .ty
-                })
-                .collect(),
-        );
-        self.pop_scope();
-        self.get_scope_mut().insert_fun(fun.name.raw.clone(), def);
-        Ok(())
-    }
-
     fn get_type_from_name(&self, ty_name: &str) -> Option<&'a InferTy<'a>> {
         let ty = match ty_name {
             "i8" => self.ty_arena.alloc_i8(),
@@ -232,29 +179,109 @@ impl<'a> TyAnalyzer<'a> {
         Some(ty)
     }
 
-    fn analyze_stmt(&mut self, stmt: &ast::Stmt) -> Result<()> {
+    fn analyze(&mut self, node: &'ctx ast::AstNode<'ctx>) -> Result<()> {
+        match &node.kind {
+            ast::AstKind::Fun(fun) => self.analyze_fun(&fun),
+            ast::AstKind::Stmt(stmt) => self.analyze_stmt(node.id, &stmt),
+            ast::AstKind::Block(block) => {
+                for stmt in &block.stmts {
+                    self.analyze(&stmt)?;
+                }
+                Ok(())
+            }
+            _ => unimplemented!(),
+        }
+    }
+
+    fn analyze_fun(&mut self, fun: &ast::Fun<'ctx>) -> Result<()> {
+        let ret_ty = match &fun.ret_ty {
+            Some(ret_ty) => {
+                let ret_ty_id = ret_ty.id;
+                let ret_ty = ret_ty.kind.as_ident();
+                let ty = self.get_type_from_name(&ret_ty.raw).ok_or_else(|| {
+                    compile_error(ret_ty.pos, TypeCkError::UndefinedType(ret_ty.raw.clone()))
+                })?;
+                self.node_ty_map.insert(ret_ty_id, ty);
+                ty
+            }
+            None => self.ty_arena.alloc_void(),
+        };
+        self.current_fn_ret_ty = Some(ret_ty);
+        self.push_scope();
+        self.node_scope_map.insert(fun.block.id, self.scope_idx);
+
+        for arg in &fun.args {
+            // self.analyze(arg)?;
+            let arg_name = arg.name.kind.as_ident();
+            if self.get_scope().lookup(&arg_name.raw).is_some() {
+                return Err(compile_error(
+                    arg_name.pos,
+                    TypeCkError::AlreadyDefinedVariable(arg_name.raw.clone()),
+                ));
+            }
+            let arg_ty = arg.ty.kind.as_ident();
+            let ty = self.get_type_from_name(&arg_ty.raw).ok_or_else(|| {
+                compile_error(arg_ty.pos, TypeCkError::UndefinedType(arg_ty.raw.clone()))
+            })?;
+            // void type can't be used as an arg type
+            if ty.is_void() {
+                return Err(compile_error(arg_ty.pos, TypeCkError::InvalidType));
+            }
+            let def = VarDef::new(self.gen_def_id(), ty, false);
+            self.get_scope_mut().insert_var(arg_name.raw.clone(), def);
+        }
+
+        self.analyze(fun.block)?;
+
+        let def = FunDef::new(
+            self.gen_def_id(),
+            ret_ty,
+            fun.args
+                .iter()
+                .map(|arg| {
+                    self.get_scope()
+                        .lookup(&arg.name.kind.as_ident().raw)
+                        .unwrap()
+                        .as_var_def()
+                        .ty
+                })
+                .collect(),
+        );
+        self.pop_scope();
+        self.get_scope_mut()
+            .insert_fun(fun.name.kind.as_ident().raw.clone(), def);
+        Ok(())
+    }
+
+    fn analyze_stmt(&mut self, id: ast::NodeID, stmt: &'ctx ast::Stmt<'ctx>) -> Result<()> {
         match stmt {
             ast::Stmt::Expr(expr) => {
-                self.analyze_expr(expr)?;
+                self.analyze_expr(id, expr)?;
             }
             ast::Stmt::VarDecl(var_decl) => {
-                if self.get_scope().lookup(&var_decl.name.raw).is_some() {
+                if self
+                    .get_scope()
+                    .lookup(&var_decl.name.kind.as_ident().raw)
+                    .is_some()
+                {
                     return Err(compile_error(
-                        var_decl.name.pos,
-                        TypeCkError::AlreadyDefinedVariable(var_decl.name.raw.clone()),
+                        var_decl.name.kind.as_ident().pos,
+                        TypeCkError::AlreadyDefinedVariable(
+                            var_decl.name.kind.as_ident().raw.clone(),
+                        ),
                     ));
                 }
-                let expr_ty = self.analyze_expr(&var_decl.init)?;
+                let expr_ty = self.analyze_expr(var_decl.expr.id, &var_decl.expr.kind.as_expr())?;
                 let var_ty = self.ty_arena.alloc_var();
                 let def_id = self.gen_def_id();
                 expr_ty.set_prune(var_ty);
                 let def = VarDef::new(def_id, expr_ty, true);
                 self.get_scope_mut()
-                    .insert_var(var_decl.name.raw.clone(), def);
+                    .insert_var(var_decl.name.kind.as_ident().raw.clone(), def);
             }
             ast::Stmt::Ret(ret) => {
                 let ty = match &ret.expr {
-                    Some(expr) => self.analyze_expr(&expr)?,
+                    Some(expr) => self.analyze_expr(expr.id, &expr.kind.as_expr())?,
                     None => self.ty_arena.alloc_void(),
                 };
                 if let Some(ret_ty) = self.current_fn_ret_ty {
@@ -265,8 +292,11 @@ impl<'a> TyAnalyzer<'a> {
         Ok(())
     }
 
-    fn analyze_expr(&mut self, expr: &ast::Expr) -> Result<&'a InferTy<'a>> {
-        let id = expr.id();
+    fn analyze_expr(
+        &mut self,
+        id: ast::NodeID,
+        expr: &'ctx ast::Expr<'ctx>,
+    ) -> Result<&'a InferTy<'a>> {
         let ty = match expr {
             ast::Expr::Lit(lit) => match lit.kind {
                 ast::LitKind::Int(_) => self.ty_arena.alloc_int_lit(),
@@ -283,27 +313,35 @@ impl<'a> TyAnalyzer<'a> {
                     ))
                 }
             },
-            ast::Expr::Binary(binary) => self.analyze_binary(binary)?,
-            ast::Expr::Unary(unary) => self.analyze_unary(unary)?,
+            ast::Expr::Binary(binary) => self.analyze_binary(id, binary)?,
+            ast::Expr::Unary(unary) => self.analyze_unary(id, unary)?,
         };
         self.node_ty_map.insert(id, ty);
         Ok(ty)
     }
 
-    fn analyze_binary(&mut self, binary: &ast::Binary) -> Result<&'a InferTy<'a>> {
+    fn analyze_binary(
+        &mut self,
+        id: ast::NodeID,
+        binary: &'ctx ast::Binary<'ctx>,
+    ) -> Result<&'a InferTy<'a>> {
         let binary_ty = self.ty_arena.alloc_var();
-        self.node_ty_map.insert(binary.id(), binary_ty);
-        let lhs_ty = self.analyze_expr(&binary.lhs)?;
-        let rhs_ty = self.analyze_expr(&binary.rhs)?;
+        self.node_ty_map.insert(id, binary_ty);
+        let lhs_ty = self.analyze_expr(binary.lhs.id, &binary.lhs.kind.as_expr())?;
+        let rhs_ty = self.analyze_expr(binary.rhs.id, &binary.rhs.kind.as_expr())?;
         lhs_ty.set_prune(binary_ty);
         rhs_ty.set_prune(binary_ty);
         Ok(binary_ty)
     }
 
-    fn analyze_unary(&mut self, unary: &ast::Unary) -> Result<&'a InferTy<'a>> {
+    fn analyze_unary(
+        &mut self,
+        id: ast::NodeID,
+        unary: &'ctx ast::Unary<'ctx>,
+    ) -> Result<&'a InferTy<'a>> {
         let unary_ty = self.ty_arena.alloc_var();
-        self.node_ty_map.insert(unary.id(), unary_ty);
-        let expr_ty = self.analyze_expr(&unary.expr)?;
+        self.node_ty_map.insert(id, unary_ty);
+        let expr_ty = self.analyze_expr(unary.expr.id, &unary.expr.kind.as_expr())?;
         expr_ty.set_prune(unary_ty);
         Ok(unary_ty)
     }
@@ -376,19 +414,22 @@ fn unify<'a>(
     }
 }
 
-struct Lower {
-    ty_map: HashMap<ast::NodeId, ty::Type>,
-    node_scope_map: HashMap<ast::NodeId, ArenaIdx>,
+struct Lower<'ctx> {
+    ast_arena: &'ctx ast::AstArena<'ctx>,
+    ty_map: HashMap<ast::NodeID, ty::Type>,
+    node_scope_map: HashMap<ast::NodeID, ArenaIdx>,
     scopes: Vec<ScopeTable<ty::Type>>,
 }
 
-impl Lower {
+impl<'ctx> Lower<'ctx> {
     fn new(
-        ty_map: HashMap<ast::NodeId, ty::Type>,
-        node_scope_map: HashMap<ast::NodeId, ArenaIdx>,
+        ast_arena: &'ctx ast::AstArena<'ctx>,
+        ty_map: HashMap<ast::NodeID, ty::Type>,
+        node_scope_map: HashMap<ast::NodeID, ArenaIdx>,
         scopes: Vec<ScopeTable<ty::Type>>,
     ) -> Self {
         Self {
+            ast_arena,
             ty_map,
             scopes,
             node_scope_map,
@@ -410,30 +451,39 @@ impl Lower {
         }
     }
 
-    fn lower_fun(&self, fun: &ast::Fun) -> Result<hir::Fun> {
+    fn lower_fun(&self, id: ast::NodeID, fun: &ast::Fun) -> Result<hir::Fun> {
         let scope = self.scopes.get(0).unwrap();
-        let fun_def = scope.lookup(&fun.name.raw).unwrap();
+        let fun_def = scope.lookup(&fun.name.kind.as_ident().raw).unwrap();
         let ret_ty = match &fun.ret_ty {
-            Some(ty) => self.ty_map.get(&ty.id()).unwrap().clone(),
+            Some(ty) => self.ty_map.get(&ty.id).unwrap().clone(),
             None => ty::Type::Void,
         };
         let scope: &ScopeTable<ty::Type> = self
             .scopes
-            .get(*self.node_scope_map.get(&fun.block.id()).unwrap())
+            .get(*self.node_scope_map.get(&fun.block.id).unwrap())
             .unwrap();
         let mut args = Vec::new();
         for arg in &fun.args {
-            let def = scope.lookup(&arg.name.raw).unwrap().as_var_def();
+            let def = scope
+                .lookup(&arg.name.kind.as_ident().raw)
+                .unwrap()
+                .as_var_def();
             args.push(hir::Ident::new(
-                arg.name.raw.clone(),
-                VarDef::new(def.id, self.get_type_from_name(&arg.name.raw), def.is_mut).into(),
+                arg.name.kind.as_ident().raw.clone(),
+                VarDef::new(
+                    def.id,
+                    self.get_type_from_name(&arg.name.kind.as_ident().raw),
+                    def.is_mut,
+                )
+                .into(),
             ));
         }
         let mut stmts = Vec::new();
-        for (idx, stmt) in fun.block.stmts.iter().enumerate() {
+        let block = fun.block.kind.as_block();
+        for (idx, stmt) in block.stmts.iter().enumerate() {
             let pos = stmt.pos();
-            let stmt = self.lower_stmt(scope, &stmt)?;
-            let is_last = idx == fun.block.stmts.len() - 1;
+            let stmt = self.lower_stmt(scope, stmt.id, &stmt.kind.as_stmt())?;
+            let is_last = idx == block.stmts.len() - 1;
             match &stmt {
                 hir::Stmt::Ret(ret) if is_last => {
                     let expr_ty = match &ret.expr {
@@ -461,9 +511,9 @@ impl Lower {
             ret_ty.clone(),
             args.iter().map(|v| v.def.as_var_def().ty.clone()).collect(),
         );
-        let name = hir::Ident::new(fun.name.raw.clone(), def.clone().into());
+        let name = hir::Ident::new(fun.name.kind.as_ident().raw.clone(), def.clone().into());
         Ok(hir::Fun::new(
-            fun.id,
+            id,
             name,
             args,
             ret_ty,
@@ -472,16 +522,25 @@ impl Lower {
         ))
     }
 
-    fn lower_stmt(&self, scope: &ScopeTable<ty::Type>, stmt: &ast::Stmt) -> Result<hir::Stmt> {
+    fn lower_stmt(
+        &self,
+        scope: &ScopeTable<ty::Type>,
+        id: ast::NodeID,
+        stmt: &ast::Stmt,
+    ) -> Result<hir::Stmt> {
         let stmt = match stmt {
-            ast::Stmt::Expr(expr) => self.lower_expr(scope, expr)?.into(),
+            ast::Stmt::Expr(expr) => self.lower_expr(scope, id, expr)?.into(),
             ast::Stmt::VarDecl(var_decl) => {
-                let expr = self.lower_expr(scope, &var_decl.init)?;
+                let expr =
+                    self.lower_expr(scope, var_decl.expr.id, &var_decl.expr.kind.as_expr())?;
                 let ty = expr.get_type().clone();
-                let def = scope.lookup(&var_decl.name.raw).unwrap().as_var_def();
+                let def = scope
+                    .lookup(&var_decl.name.kind.as_ident().raw)
+                    .unwrap()
+                    .as_var_def();
                 hir::VarDecl::new(
-                    var_decl.id,
-                    var_decl.name.clone(),
+                    id,
+                    var_decl.name.kind.as_ident().clone(),
                     Box::new(expr),
                     VarDef::new(def.id, ty, def.is_mut),
                 )
@@ -489,17 +548,16 @@ impl Lower {
             }
             ast::Stmt::Ret(ret) => {
                 let expr = match &ret.expr {
-                    Some(expr) => Some(self.lower_expr(scope, &expr)?),
+                    Some(expr) => Some(self.lower_expr(scope, expr.id, &expr.kind.as_expr())?),
                     None => None,
                 };
-                hir::Ret::new(ret.id, expr).into()
+                hir::Ret::new(id, expr).into()
             }
         };
         Ok(stmt)
     }
 
-    fn lower_lit(&self, lit: &ast::Lit) -> Result<hir::Lit> {
-        let id = lit.id;
+    fn lower_lit(&self, id: ast::NodeID, lit: &ast::Lit) -> Result<hir::Lit> {
         let ty = self.ty_map.get(&id).unwrap();
         let lit_kind = self
             .lower_literal(ty, lit.kind.clone(), &lit.literal)
@@ -621,10 +679,15 @@ impl Lower {
         Ok(kind)
     }
 
-    fn lower_expr(&self, scope: &ScopeTable<ty::Type>, expr: &ast::Expr) -> Result<hir::Expr> {
-        let ty = self.ty_map.get(&expr.id()).unwrap().clone();
+    fn lower_expr(
+        &self,
+        scope: &ScopeTable<ty::Type>,
+        id: ast::NodeID,
+        expr: &ast::Expr,
+    ) -> Result<hir::Expr> {
+        let ty = self.ty_map.get(&id).unwrap().clone();
         match expr {
-            ast::Expr::Lit(lit) => self.lower_lit(lit).map(|v| v.into()),
+            ast::Expr::Lit(lit) => self.lower_lit(id, lit).map(|v| v.into()),
             ast::Expr::Ident(ident) => {
                 let def = scope.lookup(&ident.raw).unwrap().as_var_def();
                 Ok(hir::Ident::new(
@@ -633,45 +696,47 @@ impl Lower {
                 )
                 .into())
             }
-            ast::Expr::Binary(binary) => self.lower_binary(scope, binary),
+            ast::Expr::Binary(binary) => self.lower_binary(scope, id, binary),
             ast::Expr::Unary(unary) => {
-                match unary.expr.borrow() {
+                match unary.expr.kind.as_expr() {
                     ast::Expr::Lit(lit) => {
-                        match unary.op {
-                            ast::UnaryOp::Add => {
+                        match unary.op.kind.as_unary_op().kind {
+                            ast::UnaryOpKind::Add => {
                                 // + should have number
                                 if !ty.is_int() && !ty.is_float() {
                                     return Err(compile_error(
-                                        unary.expr.pos(),
+                                        lit.pos,
                                         TypeCkError::InvalidUnaryTypes,
                                     ));
                                 }
-                                self.lower_lit(&lit).map(|v| v.into())
+                                self.lower_lit(unary.expr.id, &lit).map(|v| v.into())
                             }
-                            ast::UnaryOp::Sub => {
+                            ast::UnaryOpKind::Sub => {
                                 // - should have number
                                 if !ty.is_int() && !ty.is_float() {
                                     return Err(compile_error(
-                                        unary.expr.pos(),
+                                        lit.pos,
                                         TypeCkError::InvalidUnaryTypes,
                                     ));
                                 }
                                 let mut literal = String::from("-");
                                 literal.push_str(&lit.literal);
                                 self.lower_literal(&ty, lit.kind.clone(), &literal)
-                                    .map(|lit_kind| hir::Lit::new(lit.id, lit_kind, ty).into())
+                                    .map(|lit_kind| {
+                                        hir::Lit::new(unary.expr.id, lit_kind, ty).into()
+                                    })
                                     .map_err(|err| compile_error(lit.pos, err))
                             }
-                            ast::UnaryOp::Not => {
+                            ast::UnaryOpKind::Not => {
                                 // ! should have bool
                                 if !ty.is_bool() {
                                     return Err(compile_error(
-                                        unary.expr.pos(),
+                                        lit.pos,
                                         TypeCkError::InvalidUnaryTypes,
                                     ));
                                 }
-                                self.lower_lit(&lit).map(|v| {
-                                    // invert bool value
+                                self.lower_lit(unary.expr.id, &lit).map(|v| {
+                                    // toggle bool value
                                     let mut v = v;
                                     v.kind = hir::LitKind::Bool(!v.kind.as_bool());
                                     v.into()
@@ -680,10 +745,11 @@ impl Lower {
                         }
                     }
                     _ => {
-                        let expr = self.lower_expr(scope, &unary.expr)?;
+                        let expr =
+                            self.lower_expr(scope, unary.expr.id, &unary.expr.kind.as_expr())?;
                         let expr_ty = expr.get_type();
-                        match unary.op {
-                            ast::UnaryOp::Add | ast::UnaryOp::Sub => {
+                        match unary.op.kind.as_unary_op().kind {
+                            ast::UnaryOpKind::Add | ast::UnaryOpKind::Sub => {
                                 // + and - should have number
                                 if !expr_ty.is_int() && !expr_ty.is_float() {
                                     return Err(compile_error(
@@ -692,7 +758,7 @@ impl Lower {
                                     ));
                                 }
                             }
-                            ast::UnaryOp::Not => {
+                            ast::UnaryOpKind::Not => {
                                 // ! should have bool
                                 if !expr_ty.is_bool() {
                                     return Err(compile_error(
@@ -702,7 +768,10 @@ impl Lower {
                                 }
                             }
                         }
-                        Ok(hir::Unary::new(unary.id, unary.op, expr).into())
+                        Ok(
+                            hir::Unary::new(id, unary.op.kind.as_unary_op().kind.clone(), expr)
+                                .into(),
+                        )
                     }
                 }
             }
@@ -712,11 +781,12 @@ impl Lower {
     fn lower_binary(
         &self,
         scope: &ScopeTable<ty::Type>,
+        id: ast::NodeID,
         binary: &ast::Binary,
     ) -> Result<hir::Expr> {
-        let lhs = self.lower_expr(scope, &binary.lhs)?;
-        let rhs = self.lower_expr(scope, &binary.rhs)?;
-        match binary.op.symbol.as_str() {
+        let lhs = self.lower_expr(scope, binary.lhs.id, &binary.lhs.kind.as_expr())?;
+        let rhs = self.lower_expr(scope, binary.rhs.id, &binary.rhs.kind.as_expr())?;
+        match binary.op.kind.as_ident().raw.as_str() {
             "+" | "-" | "*" | "/" => match (lhs.get_type(), rhs.get_type()) {
                 (ty::Type::Int(lty), ty::Type::Int(rty)) if lty == rty => {}
                 (ty::Type::Float(lty), ty::Type::Float(rty)) if lty == rty => {}
@@ -730,11 +800,11 @@ impl Lower {
             _ => unimplemented!(),
         };
         Ok(hir::Binary::new(
-            binary.id,
-            binary.op.clone(),
+            id,
+            binary.op.kind.as_ident().raw.clone(),
             lhs,
             rhs,
-            self.ty_map.get(&binary.id).unwrap().clone(),
+            self.ty_map.get(&id).unwrap().clone(),
         )
         .into())
     }
