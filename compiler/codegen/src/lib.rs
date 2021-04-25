@@ -4,19 +4,17 @@ use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
 use inkwell::support::LLVMString;
-use inkwell::types::{AnyType, AnyTypeEnum, BasicType, BasicTypeEnum, FunctionType};
-use inkwell::values::{
-    AnyValueEnum, BasicValueEnum, FunctionValue, IntMathValue, IntValue, PointerValue,
-};
+use inkwell::types::{BasicType, BasicTypeEnum, FunctionType};
+use inkwell::values::{BasicValueEnum, FunctionValue, IntMathValue, IntValue, PointerValue};
 use inkwell::AddressSpace;
 use parse::ast;
 use std::collections::HashMap;
-use std::error::Error;
-use typeck::mir;
-use typeck::mir::Typed;
-use typeck::scope::{Def, DefId};
+use typeck::hir;
+use typeck::hir::Typed;
+use typeck::scope::DefId;
+use typeck::ty;
 
-fn llvm_intrinsic_type_name<'a>(ty: BasicTypeEnum<'a>) -> String {
+fn llvm_intrinsic_type_name(ty: BasicTypeEnum) -> String {
     match ty {
         BasicTypeEnum::ArrayType(_) => unimplemented!(),
         BasicTypeEnum::IntType(ty) => format!("i{}", ty.get_bit_width()),
@@ -35,11 +33,7 @@ fn llvm_intrinsic_type_name<'a>(ty: BasicTypeEnum<'a>) -> String {
 struct Function<'ctx> {
     fn_value: FunctionValue<'ctx>,
     builder: Builder<'ctx>,
-    // ret_type: mir::Type,
-    // ret_value_ptr: Option<PointerValue<'static>>,
     var_map: HashMap<DefId, Variable<'ctx>>,
-    // arg_names: Vec<Arc<String>>,
-    // vars_by_name: HashMap<String, Variable>,
 }
 
 impl<'ctx> Function<'ctx> {
@@ -55,13 +49,13 @@ impl<'ctx> Function<'ctx> {
 #[derive(Debug, PartialEq)]
 pub struct Variable<'ctx> {
     pub name: String,
-    pub ty: mir::Type,
+    pub ty: ty::Type,
     pub is_arg: bool,
     pub ptr: PointerValue<'ctx>,
 }
 
 impl<'ctx> Variable<'ctx> {
-    fn new(name: String, ty: mir::Type, is_arg: bool, ptr: PointerValue<'ctx>) -> Self {
+    fn new(name: String, ty: ty::Type, is_arg: bool, ptr: PointerValue<'ctx>) -> Self {
         Self {
             name,
             ty,
@@ -71,42 +65,42 @@ impl<'ctx> Variable<'ctx> {
     }
 }
 
-pub trait PhiMergeable<'ctx>: Sized {
-    fn merge(
-        self,
-        other: Self,
-        self_bb: BasicBlock<'ctx>,
-        other_bb: BasicBlock<'ctx>,
-        codegen: &mut Codegen<'ctx>,
-    ) -> Self;
-}
+// pub trait PhiMergeable<'ctx>: Sized {
+//     fn merge(
+//         self,
+//         other: Self,
+//         self_bb: BasicBlock<'ctx>,
+//         other_bb: BasicBlock<'ctx>,
+//         codegen: &mut Codegen<'ctx>,
+//     ) -> Self;
+// }
 
-impl<'ctx> PhiMergeable<'ctx> for () {
-    fn merge(
-        self,
-        other: Self,
-        self_bb: BasicBlock<'ctx>,
-        other_bb: BasicBlock<'ctx>,
-        codegen: &mut Codegen<'ctx>,
-    ) -> Self {
-    }
-}
+// impl<'ctx> PhiMergeable<'ctx> for () {
+//     fn merge(
+//         self,
+//         other: Self,
+//         self_bb: BasicBlock<'ctx>,
+//         other_bb: BasicBlock<'ctx>,
+//         codegen: &mut Codegen<'ctx>,
+//     ) -> Self {
+//     }
+// }
 
-impl<'ctx> PhiMergeable<'ctx> for BasicValueEnum<'ctx> {
-    fn merge(
-        self,
-        other: Self,
-        self_bb: BasicBlock<'ctx>,
-        other_bb: BasicBlock<'ctx>,
-        codegen: &mut Codegen<'ctx>,
-    ) -> Self {
-        let phi = codegen
-            .builder()
-            .build_phi(self.get_type(), "mergeValuesEndIf");
-        phi.add_incoming(&[(&self, self_bb), (&other, other_bb)]);
-        phi.as_basic_value()
-    }
-}
+// impl<'ctx> PhiMergeable<'ctx> for BasicValueEnum<'ctx> {
+//     fn merge(
+//         self,
+//         other: Self,
+//         self_bb: BasicBlock<'ctx>,
+//         other_bb: BasicBlock<'ctx>,
+//         codegen: &mut Codegen<'ctx>,
+//     ) -> Self {
+//         let phi = codegen
+//             .builder()
+//             .build_phi(self.get_type(), "mergeValuesEndIf");
+//         phi.add_incoming(&[(&self, self_bb), (&other, other_bb)]);
+//         phi.as_basic_value()
+//     }
+// }
 
 pub struct Codegen<'ctx> {
     context: &'ctx Context,
@@ -177,21 +171,21 @@ impl<'ctx> Codegen<'ctx> {
         }
     }
 
-    fn llvm_basic_ty(&self, ty: &mir::Type) -> BasicTypeEnum<'ctx> {
+    fn llvm_basic_ty(&self, ty: &ty::Type) -> BasicTypeEnum<'ctx> {
         match ty {
-            mir::Type::Int(int_ty) => match int_ty {
-                mir::IntTy::I8 => self.context.i8_type(),
-                mir::IntTy::I16 => self.context.i16_type(),
-                mir::IntTy::I32 => self.context.i32_type(),
-                mir::IntTy::I64 => self.context.i64_type(),
+            ty::Type::Int(int_ty) => match int_ty {
+                ty::IntKind::I8 => self.context.i8_type(),
+                ty::IntKind::I16 => self.context.i16_type(),
+                ty::IntKind::I32 => self.context.i32_type(),
+                ty::IntKind::I64 => self.context.i64_type(),
             }
             .into(),
-            mir::Type::Float(float_ty) => match float_ty {
-                mir::FloatTy::F32 => self.context.f32_type(),
-                mir::FloatTy::F64 => self.context.f64_type(),
+            ty::Type::Float(float_ty) => match float_ty {
+                ty::FloatKind::F32 => self.context.f32_type(),
+                ty::FloatKind::F64 => self.context.f64_type(),
             }
             .into(),
-            mir::Type::Bool => self.context.bool_type().into(),
+            ty::Type::Bool => self.context.bool_type().into(),
             _ => unimplemented!(),
         }
     }
@@ -199,28 +193,28 @@ impl<'ctx> Codegen<'ctx> {
     fn build_function(
         &mut self,
         name: &str,
-        ret_ty: mir::Type,
-        arg_tys: &[mir::Type],
+        ret_ty: &ty::Type,
+        arg_tys: &[ty::Type],
     ) -> Function<'ctx> {
         let param_types: Vec<BasicTypeEnum<'ctx>> = arg_tys
             .iter()
             .map(|arg_ty| self.llvm_basic_ty(arg_ty))
             .collect();
         let fn_type = match ret_ty {
-            mir::Type::Int(int_ty) => match int_ty {
-                mir::IntTy::I8 => self.context.i8_type(),
-                mir::IntTy::I16 => self.context.i16_type(),
-                mir::IntTy::I32 => self.context.i32_type(),
-                mir::IntTy::I64 => self.context.i64_type(),
+            ty::Type::Int(int_ty) => match int_ty {
+                ty::IntKind::I8 => self.context.i8_type(),
+                ty::IntKind::I16 => self.context.i16_type(),
+                ty::IntKind::I32 => self.context.i32_type(),
+                ty::IntKind::I64 => self.context.i64_type(),
             }
             .fn_type(&param_types, false),
-            mir::Type::Float(float_ty) => match float_ty {
-                mir::FloatTy::F32 => self.context.f32_type(),
-                mir::FloatTy::F64 => self.context.f64_type(),
+            ty::Type::Float(float_ty) => match float_ty {
+                ty::FloatKind::F32 => self.context.f32_type(),
+                ty::FloatKind::F64 => self.context.f64_type(),
             }
             .fn_type(&param_types, false),
-            mir::Type::Bool => self.context.bool_type().fn_type(&param_types, false),
-            mir::Type::Void => self.context.void_type().fn_type(&param_types, false),
+            ty::Type::Bool => self.context.bool_type().fn_type(&param_types, false),
+            ty::Type::Void => self.context.void_type().fn_type(&param_types, false),
             _ => unimplemented!(),
         };
         Function::new(
@@ -229,8 +223,8 @@ impl<'ctx> Codegen<'ctx> {
         )
     }
 
-    pub fn build_fun(&mut self, fun: &mir::Fun) {
-        self.function = Some(self.build_function(&fun.name.raw, fun.ret_ty, &fun.def.arg_tys));
+    pub fn build_fun(&mut self, fun: &hir::Fun) {
+        self.function = Some(self.build_function(&fun.name.raw, &fun.ret_ty, &fun.def.arg_tys));
         // append and set basic block
         let start_bb = self.append_basic_block("start");
         self.set_basic_block(start_bb);
@@ -242,21 +236,22 @@ impl<'ctx> Codegen<'ctx> {
         }
     }
 
-    fn build_fun_args(&mut self, fun: &mir::Fun) {
+    fn build_fun_args(&mut self, fun: &hir::Fun) {
         for (idx, ty) in fun.def.arg_tys.iter().enumerate() {
             let name = fun.args[idx].raw.clone();
             let param = self.function().fn_value.get_nth_param(idx as u32).unwrap();
             let ptr = self.builder().build_alloca(param.get_type(), &name);
             self.builder().build_store(ptr, param);
-            self.function_mut()
-                .var_map
-                .insert(fun.args[idx].def.id(), Variable::new(name, *ty, true, ptr));
+            self.function_mut().var_map.insert(
+                fun.args[idx].def.id(),
+                Variable::new(name, ty.clone(), true, ptr),
+            );
         }
     }
 
-    fn build_stmt(&mut self, stmt: &mir::Stmt) {
+    fn build_stmt(&mut self, stmt: &hir::Stmt) {
         match stmt {
-            mir::Stmt::VarDecl(var_decl) => {
+            hir::Stmt::VarDecl(var_decl) => {
                 let name = &var_decl.name.raw;
                 let val = self.build_expr(&var_decl.init);
                 let ptr = self
@@ -265,10 +260,10 @@ impl<'ctx> Codegen<'ctx> {
                 self.builder().build_store(ptr, val);
                 self.function_mut().var_map.insert(
                     var_decl.def.id,
-                    Variable::new(name.clone(), var_decl.def.ty, false, ptr),
+                    Variable::new(name.clone(), var_decl.def.ty.clone(), false, ptr),
                 );
             }
-            mir::Stmt::Ret(ret) => match &ret.expr {
+            hir::Stmt::Ret(ret) => match &ret.expr {
                 Some(expr) => {
                     let val = self.build_expr(&expr);
                     self.builder().build_return(Some(match val {
@@ -284,41 +279,54 @@ impl<'ctx> Codegen<'ctx> {
                     self.builder().build_return(None);
                 }
             },
-            mir::Stmt::Expr(expr) => {
+            hir::Stmt::Expr(expr) => {
                 self.build_expr(&expr);
             }
         }
     }
 
-    fn build_expr(&mut self, expr: &mir::Expr) -> BasicValueEnum<'ctx> {
+    fn build_expr(&mut self, expr: &hir::Expr) -> BasicValueEnum<'ctx> {
         match expr {
-            mir::Expr::Lit(lit) => {
-                let ty = lit.get_type();
-                let basic_ty = self.llvm_basic_ty(&ty);
+            hir::Expr::Lit(lit) => {
+                let basic_ty = self.llvm_basic_ty(&lit.ty);
                 match &lit.kind {
-                    ast::LitKind::Int(v) => basic_ty.into_int_type().const_int(*v, true).into(),
-                    ast::LitKind::Float(v) => basic_ty.into_float_type().const_float(*v).into(),
-                    ast::LitKind::Bool(v) => basic_ty
+                    hir::LitKind::I8(v) => {
+                        basic_ty.into_int_type().const_int(*v as u64, true).into()
+                    }
+                    hir::LitKind::I16(v) => {
+                        basic_ty.into_int_type().const_int(*v as u64, true).into()
+                    }
+                    hir::LitKind::I32(v) => {
+                        basic_ty.into_int_type().const_int(*v as u64, true).into()
+                    }
+                    hir::LitKind::I64(v) => {
+                        basic_ty.into_int_type().const_int(*v as u64, true).into()
+                    }
+                    hir::LitKind::F32(v) => {
+                        basic_ty.into_float_type().const_float(*v as f64).into()
+                    }
+                    hir::LitKind::F64(v) => basic_ty.into_float_type().const_float(*v).into(),
+                    hir::LitKind::Bool(v) => basic_ty
                         .into_int_type()
                         .const_int(if *v { 1 } else { 0 }, true)
                         .into(),
-                    ast::LitKind::String(v) => {
-                        unimplemented!()
-                    }
+                    // ast::LitKind::String(v) => {
+                    //     unimplemented!()
+                    // }
                 }
             }
-            mir::Expr::Ident(ident) => self.builder().build_load(
+            hir::Expr::Ident(ident) => self.builder().build_load(
                 self.function().var_map.get(&ident.def.id()).unwrap().ptr,
                 &ident.raw,
             ),
-            mir::Expr::Binary(binary) => {
+            hir::Expr::Binary(binary) => {
                 let lhs = self.build_expr(&binary.lhs);
                 let rhs = self.build_expr(&binary.rhs);
-                match binary.get_type() {
-                    mir::Type::Int(_) => {
+                match binary.ty {
+                    ty::Type::Int(_) => {
                         let lhs = lhs.into_int_value();
                         let rhs = rhs.into_int_value();
-                        match binary.op.symbol.as_str() {
+                        match binary.op.as_str() {
                             "+" => self.build_checked_int_arithmetic(lhs, rhs, "sadd"),
                             "-" => self.build_checked_int_arithmetic(lhs, rhs, "ssub"),
                             "*" => self.build_checked_int_arithmetic(lhs, rhs, "smul"),
@@ -326,10 +334,10 @@ impl<'ctx> Codegen<'ctx> {
                             _ => unimplemented!(),
                         }
                     }
-                    mir::Type::Float(_) => {
+                    ty::Type::Float(_) => {
                         let lhs = lhs.into_float_value();
                         let rhs = rhs.into_float_value();
-                        match binary.op.symbol.as_str() {
+                        match binary.op.as_str() {
                             "+" => self.builder().build_float_add(lhs, rhs, "fadd").into(),
                             "-" => self.builder().build_float_sub(lhs, rhs, "fsub").into(),
                             "*" => self.builder().build_float_mul(lhs, rhs, "fmul").into(),
@@ -340,26 +348,26 @@ impl<'ctx> Codegen<'ctx> {
                     _ => unimplemented!(),
                 }
             }
-            mir::Expr::Unary(unary) => match unary.op {
-                ast::UnaryOp::Add => self.build_expr(&unary.expr),
-                ast::UnaryOp::Sub => {
+            hir::Expr::Unary(unary) => match unary.op {
+                ast::UnaryOpKind::Add => self.build_expr(&unary.expr),
+                ast::UnaryOpKind::Sub => {
                     let expr = self.build_expr(&unary.expr);
                     match unary.get_type() {
-                        mir::Type::Int(_) => self
+                        ty::Type::Int(_) => self
                             .builder()
                             .build_int_neg(expr.into_int_value(), "neg")
                             .into(),
-                        mir::Type::Float(_) => self
+                        ty::Type::Float(_) => self
                             .builder()
                             .build_float_neg(expr.into_float_value(), "neg")
                             .into(),
                         _ => unimplemented!(),
                     }
                 }
-                ast::UnaryOp::Not => {
+                ast::UnaryOpKind::Not => {
                     let expr = self.build_expr(&unary.expr);
                     match unary.get_type() {
-                        mir::Type::Bool => self
+                        ty::Type::Bool => self
                             .builder()
                             .build_int_neg(expr.into_int_value(), "neg")
                             .into(),
