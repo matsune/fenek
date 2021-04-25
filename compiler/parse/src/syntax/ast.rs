@@ -23,7 +23,6 @@ impl<'a> AstNode<'a> {
 
 pub enum AstKind<'a> {
     Fun(Fun<'a>),
-    Ident(Ident),
     Block(Block<'a>),
     Stmt(Stmt<'a>),
     UnaryOp(UnaryOp),
@@ -33,7 +32,6 @@ impl<'a> AstKind<'a> {
     pub fn pos(&self) -> Pos {
         match self {
             Self::Fun(fun) => fun.name.pos(),
-            Self::Ident(ident) => ident.pos,
             Self::Block(block) => block.pos,
             Self::Stmt(stmt) => stmt.pos(),
             Self::UnaryOp(unary_op) => unary_op.pos,
@@ -50,7 +48,7 @@ impl<'a> AstKind<'a> {
     }
 
     pub fn new_ident(raw: String, pos: Pos) -> Self {
-        Self::Ident(Ident::new(raw, pos))
+        Self::Stmt(Stmt::Expr(Expr::Ident(Ident::new(raw, pos))))
     }
 
     pub fn new_block(stmts: Vec<&'a AstNode<'a>>, pos: Pos) -> Self {
@@ -86,7 +84,7 @@ impl<'a> AstKind<'a> {
 
     pub fn as_ident(&self) -> &Ident {
         match self {
-            Self::Ident(ident) => ident,
+            Self::Stmt(Stmt::Expr(Expr::Ident(ident))) => ident,
             _ => panic!(),
         }
     }

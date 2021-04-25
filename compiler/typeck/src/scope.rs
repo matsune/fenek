@@ -1,3 +1,4 @@
+use parse::ast;
 use std::collections::HashMap;
 
 pub type ArenaIdx = usize;

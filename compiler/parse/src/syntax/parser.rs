@@ -353,9 +353,10 @@ impl<'ctx> Parser<'ctx> {
             Some(op) if op.precedence >= last_prec => self.parse_binop().unwrap(),
             _ => return Ok(lhs),
         };
-        let bin_op = self
-            .arena
-            .alloc(AstNode::new(self.gen_id(), AstKind::Ident(bin_op)));
+        let bin_op = self.arena.alloc(AstNode::new(
+            self.gen_id(),
+            AstKind::Stmt(Stmt::Expr(Expr::Ident(bin_op))),
+        ));
         self.skip_spaces();
         let rhs = self.parse_expr_prec(bin_op_prec)?;
         let mut lhs = Binary::new(bin_op, bin_op_prec, lhs, rhs);
@@ -371,9 +372,10 @@ impl<'ctx> Parser<'ctx> {
                     )))
                 }
             };
-            let bin_op = self
-                .arena
-                .alloc(AstNode::new(self.gen_id(), AstKind::Ident(bin_op)));
+            let bin_op = self.arena.alloc(AstNode::new(
+                self.gen_id(),
+                AstKind::Stmt(Stmt::Expr(Expr::Ident(bin_op))),
+            ));
             self.skip_spaces();
             let rhs = self.parse_expr_prec(bin_op_prec)?;
             lhs = Binary::new(

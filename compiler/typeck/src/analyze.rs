@@ -62,8 +62,7 @@ pub fn lower<'ctx>(fun: &'ctx ast::AstNode<'ctx>) -> Result<hir::Fun> {
         for (node_id, infer_ty) in analyzer.node_ty_map.iter() {
             let final_ty = analyzer
                 .get_final_type(infer_ty)
-                // FIXME: pos
-                .map_err(|err| compile_error(Pos::default(), err))?;
+                .map_err(|err| compile_error(*analyzer.node_pos_map.get(node_id).unwrap(), err))?;
             node_ty_map.insert(*node_id, final_ty);
         }
 
@@ -75,25 +74,14 @@ pub fn lower<'ctx>(fun: &'ctx ast::AstNode<'ctx>) -> Result<hir::Fun> {
                     Def::Fun(fun_def) => {
                         let mut arg_tys = Vec::new();
                         for arg_ty in fun_def.arg_tys.iter() {
-                            arg_tys.push(
-                                analyzer
-                                    .get_final_type(arg_ty)
-                                    // FIXME: pos
-                                    .map_err(|err| compile_error(Pos::default(), err))?,
-                            );
+                            arg_tys.push(analyzer.get_final_type(arg_ty).unwrap());
                         }
-                        let ret_ty = analyzer
-                            .get_final_type(fun_def.ret_ty)
-                            // FIXME: pos
-                            .map_err(|err| compile_error(Pos::default(), err))?;
+                        let ret_ty = analyzer.get_final_type(fun_def.ret_ty).unwrap();
                         FunDef::new(fun_def.id, ret_ty, arg_tys).into()
                     }
                     Def::Var(var_def) => VarDef::new(
                         var_def.id,
-                        analyzer
-                            .get_final_type(var_def.ty)
-                            // FIXME: pos
-                            .map_err(|err| compile_error(Pos::default(), err))?,
+                        analyzer.get_final_type(var_def.ty).unwrap(),
                         var_def.is_mut,
                     )
                     .into(),
@@ -109,6 +97,7 @@ pub fn lower<'ctx>(fun: &'ctx ast::AstNode<'ctx>) -> Result<hir::Fun> {
 
 struct TyAnalyzer<'a> {
     ty_arena: &'a InferTyArena<'a>,
+    node_pos_map: HashMap<ast::NodeID, Pos>,
     node_ty_map: HashMap<ast::NodeID, &'a InferTy<'a>>,
     node_scope_map: HashMap<ast::NodeID, ArenaIdx>,
     scopes: Vec<ScopeTable<&'a InferTy<'a>>>,
@@ -125,6 +114,7 @@ impl<'a> TyAnalyzer<'a> {
         scopes.push(ScopeTable::new(scope_idx, None));
         TyAnalyzer {
             ty_arena,
+            node_pos_map: HashMap::new(),
             node_scope_map: HashMap::new(),
             node_ty_map: HashMap::new(),
             scopes,
@@ -197,6 +187,7 @@ impl<'a> TyAnalyzer<'a> {
                     compile_error(ret_ty.pos, TypeCkError::UndefinedType(ret_ty.raw.clone()))
                 })?;
                 self.node_ty_map.insert(ret_ty_id, ty);
+                self.node_pos_map.insert(ret_ty_id, ret_ty.pos);
                 ty
             }
             None => self.ty_arena.alloc_void(),
@@ -206,7 +197,6 @@ impl<'a> TyAnalyzer<'a> {
         self.node_scope_map.insert(fun.block.id, self.scope_idx);
 
         for arg in &fun.args {
-            // self.analyze(arg)?;
             let arg_name = arg.name.kind.as_ident();
             if self.get_scope().lookup(&arg_name.raw).is_some() {
                 return Err(compile_error(
@@ -308,12 +298,14 @@ impl<'a> TyAnalyzer<'a> {
             ast::Expr::Unary(unary) => self.analyze_unary(id, unary)?,
         };
         self.node_ty_map.insert(id, ty);
+        self.node_pos_map.insert(id, expr.pos());
         Ok(ty)
     }
 
     fn analyze_binary(&mut self, id: ast::NodeID, binary: &ast::Binary) -> Result<&'a InferTy<'a>> {
         let binary_ty = self.ty_arena.alloc_var();
         self.node_ty_map.insert(id, binary_ty);
+        self.node_pos_map.insert(id, binary.lhs.pos());
         let lhs_ty = self.analyze_expr(binary.lhs.id, &binary.lhs.kind.as_expr())?;
         let rhs_ty = self.analyze_expr(binary.rhs.id, &binary.rhs.kind.as_expr())?;
         lhs_ty.set_prune(binary_ty);
@@ -324,6 +316,7 @@ impl<'a> TyAnalyzer<'a> {
     fn analyze_unary(&mut self, id: ast::NodeID, unary: &ast::Unary) -> Result<&'a InferTy<'a>> {
         let unary_ty = self.ty_arena.alloc_var();
         self.node_ty_map.insert(id, unary_ty);
+        self.node_pos_map.insert(id, unary.op.pos());
         let expr_ty = self.analyze_expr(unary.expr.id, &unary.expr.kind.as_expr())?;
         expr_ty.set_prune(unary_ty);
         Ok(unary_ty)
