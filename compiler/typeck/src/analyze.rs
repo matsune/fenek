@@ -62,7 +62,10 @@ pub fn lower(fun: &ast::Fun) -> Result<hir::Fun> {
         // Finalyze InferTy into ty::Type
         let mut node_ty_map = HashMap::with_capacity(analyzer.node_ty_map.len());
         for (node_id, infer_ty) in analyzer.node_ty_map.iter() {
-            let final_ty = analyzer.get_final_type(infer_ty)?;
+            let final_ty = analyzer
+                .get_final_type(infer_ty)
+                // FIXME: pos
+                .map_err(|err| compile_error(Pos::default(), err))?;
             node_ty_map.insert(*node_id, final_ty);
         }
 
@@ -74,14 +77,25 @@ pub fn lower(fun: &ast::Fun) -> Result<hir::Fun> {
                     Def::Fun(fun_def) => {
                         let mut arg_tys = Vec::new();
                         for arg_ty in fun_def.arg_tys.iter() {
-                            arg_tys.push(analyzer.get_final_type(arg_ty)?);
+                            arg_tys.push(
+                                analyzer
+                                    .get_final_type(arg_ty)
+                                    // FIXME: pos
+                                    .map_err(|err| compile_error(Pos::default(), err))?,
+                            );
                         }
-                        let ret_ty = analyzer.get_final_type(fun_def.ret_ty)?;
+                        let ret_ty = analyzer
+                            .get_final_type(fun_def.ret_ty)
+                            // FIXME: pos
+                            .map_err(|err| compile_error(Pos::default(), err))?;
                         FunDef::new(fun_def.id, ret_ty, arg_tys).into()
                     }
                     Def::Var(var_def) => VarDef::new(
                         var_def.id,
-                        analyzer.get_final_type(var_def.ty)?,
+                        analyzer
+                            .get_final_type(var_def.ty)
+                            // FIXME: pos
+                            .map_err(|err| compile_error(Pos::default(), err))?,
                         var_def.is_mut,
                     )
                     .into(),
@@ -294,7 +308,7 @@ impl<'a> TyAnalyzer<'a> {
         Ok(unary_ty)
     }
 
-    fn unify_ty(&self, ty: &'a InferTy<'a>) -> Result<&'a InferTy<'a>> {
+    fn unify_ty(&self, ty: &'a InferTy<'a>) -> std::result::Result<&'a InferTy<'a>, TypeCkError> {
         let mut ty = ty;
         for r_ty in ty.borrow_from_nodes().iter() {
             ty = unify(ty, self.unify_ty(r_ty)?)?;
@@ -302,13 +316,12 @@ impl<'a> TyAnalyzer<'a> {
         Ok(ty)
     }
 
-    fn get_final_type(&self, ty: &'a InferTy<'a>) -> Result<ty::Type> {
+    fn get_final_type(&self, ty: &'a InferTy<'a>) -> std::result::Result<ty::Type, TypeCkError> {
         let top_ty = ty.prune();
         let final_kind = self.unify_ty(top_ty)?.kind;
         let final_ty = match &final_kind {
             InferTyKind::Var => {
-                // FIXME: pos
-                return Err(compile_error(Pos::default(), TypeCkError::UnresolvedType));
+                return Err(TypeCkError::UnresolvedType);
             }
             InferTyKind::Int(int_kind) => match int_kind {
                 IntKind::I8 => ty::Type::Int(ty::IntKind::I8),
@@ -329,7 +342,10 @@ impl<'a> TyAnalyzer<'a> {
     }
 }
 
-fn unify<'a>(a: &'a InferTy<'a>, b: &'a InferTy<'a>) -> Result<&'a InferTy<'a>> {
+fn unify<'a>(
+    a: &'a InferTy<'a>,
+    b: &'a InferTy<'a>,
+) -> std::result::Result<&'a InferTy<'a>, TypeCkError> {
     match (&a.kind, &b.kind) {
         // Var
         (InferTyKind::Var, _) => Ok(b),
@@ -351,13 +367,9 @@ fn unify<'a>(a: &'a InferTy<'a>, b: &'a InferTy<'a>) -> Result<&'a InferTy<'a>> 
             if a_kind == b_kind {
                 Ok(a)
             } else {
-                Err(CompileError::new(
-                    // FIXME: pos
-                    Pos::default(),
-                    Box::new(TypeCkError::ConflictTypes(
-                        a_kind.to_string(),
-                        b_kind.to_string(),
-                    )),
+                Err(TypeCkError::ConflictTypes(
+                    a_kind.to_string(),
+                    b_kind.to_string(),
                 ))
             }
         }
@@ -604,7 +616,7 @@ impl Lower {
                 // bool can't be other types
                 _ => return Err(TypeCkError::InvalidType),
             },
-            _ => unimplemented!(),
+            ast::LitKind::String => unimplemented!(),
         };
         Ok(kind)
     }
