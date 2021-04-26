@@ -1,6 +1,7 @@
 use super::scanner::*;
 use super::token::*;
-use error::{CompileError, LexerError, LitError, Pos};
+use error::{CompileError, LexerError, LitError};
+use pos::Pos;
 use std::convert::TryInto;
 use std::str::Chars;
 

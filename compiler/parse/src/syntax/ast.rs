@@ -1,5 +1,5 @@
 use crate::lex::IntBase;
-use error::Pos;
+use pos::Pos;
 use typed_arena::Arena;
 
 pub type NodeID = usize;

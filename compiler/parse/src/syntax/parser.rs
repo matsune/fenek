@@ -1,6 +1,7 @@
 use crate::lex::{Token, TokenKind};
 use crate::syntax::ast::*;
-use error::{CompileError, ParseError, Pos};
+use error::{CompileError, ParseError};
+use pos::Pos;
 use std::collections::{HashMap, VecDeque};
 use typed_arena::Arena;
 

@@ -1,7 +1,5 @@
-pub use pos::Pos;
+use pos::Pos;
 use thiserror::Error;
-
-mod pos;
 
 #[derive(Error, Debug)]
 pub struct CompileError {

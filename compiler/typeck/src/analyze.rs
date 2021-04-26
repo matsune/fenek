@@ -3,10 +3,11 @@ use crate::hir::Typed;
 use crate::infer_ty::*;
 use crate::scope::*;
 use crate::ty;
-use error::{CompileError, Pos, TypeCkError};
+use error::{CompileError, TypeCkError};
 use num_traits::Num;
 use parse::ast;
 use parse::IntBase;
+use pos::Pos;
 use std::collections::HashMap;
 use std::str::FromStr;
 

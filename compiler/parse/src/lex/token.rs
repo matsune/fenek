@@ -1,4 +1,4 @@
-use error::Pos;
+use pos::Pos;
 
 #[derive(Debug, PartialEq)]
 pub struct Token {

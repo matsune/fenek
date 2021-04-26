@@ -8,3 +8,4 @@ edition = "2018"
 paste = "1.0"
 typed-arena = "2.0.1"
 error = { path = "../error" }
+pos = { path = "../pos" }

@@ -187,6 +187,7 @@ checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 name = "error"
 version = "0.1.0"
 dependencies = [
+ "pos",
  "thiserror",
 ]
 
@@ -449,6 +450,7 @@ version = "0.1.0"
 dependencies = [
  "error",
  "paste",
+ "pos",
  "typed-arena",
 ]
 
@@ -476,6 +478,10 @@ dependencies = [
  "fixedbitset",
  "indexmap",
 ]
+
+[[package]]
+name = "pos"
+version = "0.1.0"
 
 [[package]]
 name = "printer"
@@ -796,6 +802,7 @@ dependencies = [
  "error",
  "num-traits 0.2.14",
  "parse",
+ "pos",
  "typed-arena",
 ]
 
