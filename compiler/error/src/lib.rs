@@ -1,4 +1,4 @@
-use pos::Pos;
+use span::Pos;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -6,6 +6,8 @@ pub struct CompileError {
     pos: Pos,
     err: Box<dyn std::error::Error>,
 }
+
+pub type Result<T> = std::result::Result<T, CompileError>;
 
 impl std::fmt::Display for CompileError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
