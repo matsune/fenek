@@ -11,6 +11,14 @@ impl Token {
     pub fn new(kind: TokenKind, raw: String, offset: Offset) -> Self {
         Token { kind, raw, offset }
     }
+
+    pub fn try_as_keyword(&self) -> Option<Keyword> {
+        Keyword::try_from(&self.raw)
+    }
+
+    pub fn is_keyword(&self) -> bool {
+        self.try_as_keyword().is_some()
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -108,5 +116,23 @@ impl TokenKind {
     pub fn is_bin_op(&self) -> bool {
         use TokenKind::*;
         matches!(self, Plus | Minus | Star | Slash)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Keyword {
+    Var,
+    Ret,
+    Fun,
+}
+
+impl Keyword {
+    pub fn try_from(s: &str) -> Option<Self> {
+        match s {
+            "var" => Some(Self::Var),
+            "ret" => Some(Self::Ret),
+            "fun" => Some(Self::Fun),
+            _ => None,
+        }
     }
 }

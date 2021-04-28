@@ -312,7 +312,16 @@ impl<'src> Parser<'src> {
             token::TokenKind::Lit(kind) => {
                 Ok(Expr::new_lit(self.gen_id(), LitKind::from(kind), tok))
             }
-            token::TokenKind::Ident => Ok(Expr::new_var(self.gen_id(), tok)),
+            token::TokenKind::Ident => {
+                if tok.is_keyword() {
+                    Err(CompileError::new(
+                        self.src.pos_from_offset(tok.offset),
+                        ParseError::CannotUseKeyword(tok.raw).into(),
+                    ))
+                } else {
+                    Ok(Expr::new_var(self.gen_id(), tok))
+                }
+            }
             token::TokenKind::LParen => {
                 self.skip_spaces();
                 let expr = self.parse_expr()?;
@@ -326,108 +335,4 @@ impl<'src> Parser<'src> {
             _ => unreachable!(),
         })
     }
-
-    // fn peek_binop(&mut self) -> Option<&BinOp> {
-    //     let mut idx = 0;
-    //     let mut symbol = String::new();
-    //     loop {
-    //         match self.tokens.get(idx) {
-    //             Some(tok)
-    //                 if matches!(
-    //                     tok.kind,
-    //                     token::TokenKind::Plus | token::TokenKind::Minus | token::TokenKind::Star | token::TokenKind::Slash
-    //                 ) =>
-    //             {
-    //                 symbol.push_str(&tok.raw);
-    //                 idx += 1;
-    //             }
-    //             _ => break,
-    //         }
-    //     }
-    //     self.binop_map.get(&symbol)
-    // }
-
-    // // BinOp and precedence
-    // fn parse_binop(&mut self) -> Option<(Ident, u8)> {
-    //     let pos = self.peek()?.pos;
-    //     let mut raw = String::new();
-    //     while let Some(tok) = self.bump_if(|tok| {
-    //         matches!(
-    //             tok.kind,
-    //             token::TokenKind::Plus | token::TokenKind::Minus | token::TokenKind::Star | token::TokenKind::Slash
-    //         )
-    //     }) {
-    //         raw.push_str(&tok.raw);
-    //     }
-    //     let prec = self.binop_map.get(&raw)?.precedence;
-    //     Some((Ident::new(raw, pos), prec))
-    // }
-
-    // fn parse_expr_prec(&mut self, last_prec: u8) -> Result<&'src AstNode<'src>> {
-    //     let tok = self
-    //         .peek()
-    //         .ok_or_else(|| self.compile_error(ParseError::UnexpectedEof))?;
-    //     let lhs = match tok.kind {
-    //         token::TokenKind::Not | token::TokenKind::Plus | token::TokenKind::Minus => {
-    //             let pos = tok.pos;
-    //             let unary_op_kind = match self.bump().unwrap().kind {
-    //                 token::TokenKind::Not => UnaryOpKind::Not,
-    //                 token::TokenKind::Plus => UnaryOpKind::Add,
-    //                 token::TokenKind::Minus => UnaryOpKind::Sub,
-    //                 _ => unreachable!(),
-    //             };
-    //             let unary_op = self.arena.alloc(AstNode::new(
-    //                 self.gen_id(),
-    //                 AstKind::new_unary_op(unary_op_kind, pos),
-    //             ));
-    //             self.skip_spaces();
-    //             let expr = self.parse_expr()?;
-    //             self.arena.alloc(AstNode::new(
-    //                 self.gen_id(),
-    //                 AstKind::new_unary(unary_op, expr),
-    //             ))
-    //         }
-    //         _ => self.parse_primary_expr()?,
-    //     };
-    //     self.skip_spaces();
-    //     let (bin_op, bin_op_prec) = match self.peek_binop() {
-    //         Some(op) if op.precedence >= last_prec => self.parse_binop().unwrap(),
-    //         _ => return Ok(lhs),
-    //     };
-    //     let bin_op = self.arena.alloc(AstNode::new(
-    //         self.gen_id(),
-    //         AstKind::Stmt(Stmt::Expr(Expr::Ident(bin_op))),
-    //     ));
-    //     self.skip_spaces();
-    //     let rhs = self.parse_expr_prec(bin_op_prec)?;
-    //     let mut lhs = Binary::new(bin_op, bin_op_prec, lhs, rhs);
-
-    //     loop {
-    //         self.skip_spaces();
-    //         let (bin_op, bin_op_prec) = match self.peek_binop() {
-    //             Some(op) if op.precedence >= last_prec => self.parse_binop().unwrap(),
-    //             _ => {
-    //                 return Ok(self.arena.alloc(AstNode::new(
-    //                     self.gen_id(),
-    //                     AstKind::Stmt(Stmt::Expr(Expr::Binary(lhs))),
-    //                 )))
-    //             }
-    //         };
-    //         let bin_op = self.arena.alloc(AstNode::new(
-    //             self.gen_id(),
-    //             AstKind::Stmt(Stmt::Expr(Expr::Ident(bin_op))),
-    //         ));
-    //         self.skip_spaces();
-    //         let rhs = self.parse_expr_prec(bin_op_prec)?;
-    //         lhs = Binary::new(
-    //             bin_op,
-    //             bin_op_prec,
-    //             self.arena.alloc(AstNode::new(
-    //                 self.gen_id(),
-    //                 AstKind::Stmt(Stmt::Expr(Expr::Binary(lhs))),
-    //             )),
-    //             rhs,
-    //         );
-    //     }
-    // }
 }

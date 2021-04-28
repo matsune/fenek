@@ -66,6 +66,8 @@ pub enum ParseError {
     UnclosedParenExpr,
     #[error("invalid binary op {0}")]
     InvalidBinOp(String),
+    #[error("cannot use keyword {0}")]
+    CannotUseKeyword(String),
 }
 
 #[derive(Error, Debug)]

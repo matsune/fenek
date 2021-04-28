@@ -2,23 +2,6 @@ use lex::token;
 
 pub type NodeId = usize;
 
-// pub type AstArena<'a> = Arena<AstNode<'a>>;
-
-// pub struct AstNode<'a> {
-//     pub id: NodeID,
-//     pub kind: AstKind<'a>,
-// }
-
-// impl<'a> AstNode<'a> {
-//     pub fn new(id: NodeID, kind: AstKind<'a>) -> Self {
-//         Self { id, kind }
-//     }
-
-//     pub fn pos(&self) -> Pos {
-//         self.kind.pos()
-//     }
-// }
-
 // pub enum AstKind<'a> {
 //     Fun(Fun<'a>),
 //     Block(Block<'a>),
@@ -182,27 +165,16 @@ pub type NodeId = usize;
 //     }
 // }
 
-// pub enum Stmt<'a> {
-//     Expr(Expr<'a>),
-//     Ret(Ret<'a>),
-//     VarDecl(VarDecl<'a>),
-// }
+pub struct Stmt {
+    pub id: NodeId,
+    pub kind: StmtKind,
+}
 
-// impl<'a> Stmt<'a> {
-//     pub fn pos(&self) -> Pos {
-//         match self {
-//             Self::Expr(expr) => expr.pos(),
-//             Self::Ret(ret) => ret.pos,
-//             Self::VarDecl(var_decl) => var_decl.name.pos(),
-//         }
-//     }
-// }
-
-// pub struct Ret<'a> {
-//     // Expr
-//     pub expr: Option<&'a AstNode<'a>>,
-//     pub pos: Pos,
-// }
+pub enum StmtKind {
+    Expr(Expr),
+    Ret(Option<Expr>),
+    VarDecl(token::Token, Expr),
+}
 
 // impl<'a> Ret<'a> {
 //     pub fn new(expr: Option<&'a AstNode<'a>>, pos: Pos) -> Self {
