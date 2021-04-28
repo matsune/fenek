@@ -3,8 +3,45 @@ use serde::{Serialize, Serializer};
 use serde_json::Result;
 
 #[derive(Serialize)]
+pub struct Stmt {
+    id: ast::NodeId,
+    #[serde(rename(serialize = "stmt_kind"))]
+    kind: StmtKind,
+}
+
+impl From<&ast::Stmt> for Stmt {
+    fn from(k: &ast::Stmt) -> Self {
+        let kind = StmtKind::from(&k.kind);
+        Self { id: k.id, kind }
+    }
+}
+
+#[derive(Serialize)]
+enum StmtKind {
+    Expr(Expr),
+    Ret(Option<Expr>),
+    VarDecl { name: String, init: Expr },
+    Empty,
+}
+
+impl From<&ast::StmtKind> for StmtKind {
+    fn from(k: &ast::StmtKind) -> Self {
+        match k {
+            ast::StmtKind::Expr(expr) => Self::Expr(expr.into()),
+            ast::StmtKind::Ret(expr) => Self::Ret(expr.as_ref().map(|e| e.into())),
+            ast::StmtKind::VarDecl(tok, expr) => Self::VarDecl {
+                name: tok.raw.clone(),
+                init: expr.into(),
+            },
+            ast::StmtKind::Empty => Self::Empty,
+        }
+    }
+}
+
+#[derive(Serialize)]
 pub struct Expr {
     id: ast::NodeId,
+    #[serde(rename(serialize = "expr_kind"))]
     kind: ExprKind,
 }
 
@@ -17,7 +54,9 @@ impl From<&ast::Expr> for Expr {
 
 #[derive(Serialize)]
 enum ExprKind {
-    Var(String),
+    Var {
+        raw: String,
+    },
     Lit(Lit),
     Binary {
         bin_op: BinOp,
@@ -33,7 +72,9 @@ enum ExprKind {
 impl From<&ast::ExprKind> for ExprKind {
     fn from(k: &ast::ExprKind) -> Self {
         match k {
-            ast::ExprKind::Var(tok) => Self::Var(tok.raw.clone()),
+            ast::ExprKind::Var(tok) => Self::Var {
+                raw: tok.raw.clone(),
+            },
             ast::ExprKind::Lit(lit) => Self::Lit(lit.into()),
             ast::ExprKind::Binary(op, lhs, rhs) => {
                 let lhs: &ast::Expr = &lhs;

@@ -12,12 +12,20 @@ impl Token {
         Token { kind, raw, offset }
     }
 
+    pub fn is_kind(&self, kind: TokenKind) -> bool {
+        self.kind == kind
+    }
+
     pub fn try_as_keyword(&self) -> Option<Keyword> {
         Keyword::try_from(&self.raw)
     }
 
     pub fn is_keyword(&self) -> bool {
         self.try_as_keyword().is_some()
+    }
+
+    pub fn is_ident(&self) -> bool {
+        self.kind == TokenKind::Ident
     }
 }
 

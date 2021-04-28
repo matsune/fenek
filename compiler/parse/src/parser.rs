@@ -4,8 +4,8 @@ use lex::token;
 use span::{Offset, Pos, SrcFile};
 use std::collections::{HashMap, VecDeque};
 
-pub fn parse(src: &SrcFile, tokens: VecDeque<token::Token>) -> Result<Expr> {
-    Parser::new(src, tokens).parse_expr() //.parse_fun()
+pub fn parse(src: &SrcFile, tokens: VecDeque<token::Token>) -> Result<Stmt> {
+    Parser::new(src, tokens).parse_stmt() //.parse_fun()
 }
 
 struct Parser<'src> {
@@ -80,12 +80,12 @@ impl<'src> Parser<'src> {
         }
     }
 
-    // fn expected_err<T: std::string::ToString>(&self, expected: T) -> CompileError {
-    //     CompileError::new(
-    //         self.current_pos(),
-    //         Box::new(ParseError::Expected(expected.to_string())),
-    //     )
-    // }
+    fn expected_err<T: std::string::ToString>(&self, expected: T) -> CompileError {
+        CompileError::new(
+            self.current_pos(),
+            Box::new(ParseError::Expected(expected.to_string())),
+        )
+    }
 
     fn compile_error(&self, error: ParseError) -> CompileError {
         CompileError::new(self.current_pos(), error.into())
@@ -94,6 +94,15 @@ impl<'src> Parser<'src> {
     fn is_next_kind(&self, kind: token::TokenKind) -> bool {
         matches!(self.peek(), Some(tok) if tok.kind == kind)
     }
+
+    // fn expect<F>(&mut self, pred: F) -> Result<token::Token>
+    // where
+    //     F: Fn(token::Token) -> bool,
+    // {
+    //     let expect = kind.to_string();
+    //     self.bump_if(|tok| tok.kind == kind)
+    //         .ok_or_else(|| self.expected_err(expect.as_str()))
+    // }
 
     // fn expect_kind(&mut self, kind: token::TokenKind) -> Result<token::Token> {
     //     let expect = kind.to_string();
@@ -200,50 +209,60 @@ impl<'src> Parser<'src> {
     //     Ok(args)
     // }
 
-    // pub fn parse_var_decl(&mut self) -> Result<&'src AstNode<'src>> {
-    //     self.expect_kind(token::TokenKind::KwVar)?;
-    //     self.skip_spaces();
-    //     let name = self.parse_ident()?;
-    //     self.skip_spaces();
-    //     self.expect_kind(token::TokenKind::Eq)?;
-    //     self.skip_spaces();
-    //     let expr = self.parse_expr()?;
-    //     Ok(self.arena.alloc(AstNode::new(
-    //         self.gen_id(),
-    //         AstKind::new_var_decl(name, expr),
-    //     )))
-    // }
+    fn parse_var_decl(&mut self) -> Result<Stmt> {
+        self.bump_if(|tok| matches!(tok.try_as_keyword(), Some(token::Keyword::Var)))
+            .ok_or_else(|| self.expected_err("var"))?;
+        self.skip_spaces();
+        let name = self
+            .bump_if(|tok| tok.is_ident() && !tok.is_keyword())
+            .ok_or_else(|| self.compile_error(ParseError::InvalidVarDecl))?;
+        self.skip_spaces();
+        self.bump_if(|tok| tok.is_kind(token::TokenKind::Eq))
+            .ok_or_else(|| self.expected_err("="))?;
+        self.skip_spaces();
+        let expr = self.parse_expr()?;
+        Ok(Stmt::new(self.gen_id(), StmtKind::VarDecl(name, expr)))
+    }
 
-    // pub fn parse_ret(&mut self) -> Result<&'src AstNode<'src>> {
-    //     let ret = self.expect_kind(token::TokenKind::KwRet)?;
-    //     self.skip_spaces();
-    //     if self.is_next_kind(token::TokenKind::Semi) {
-    //         return Ok(self
-    //             .arena
-    //             .alloc(AstNode::new(self.gen_id(), AstKind::new_ret(None, ret.pos))));
-    //     }
-    //     let expr = self.parse_expr()?;
-    //     Ok(self.arena.alloc(AstNode::new(
-    //         self.gen_id(),
-    //         AstKind::new_ret(Some(expr), ret.pos),
-    //     )))
-    // }
+    fn parse_ret(&mut self) -> Result<Stmt> {
+        self.bump_if(|tok| matches!(tok.try_as_keyword(), Some(token::Keyword::Ret)))
+            .ok_or_else(|| self.expected_err("ret"))?;
+        self.skip_spaces();
+        let tok = self
+            .peek()
+            .ok_or_else(|| self.compile_error(ParseError::UnexpectedEof))?;
+        let expr = match tok.kind {
+            token::TokenKind::Semi => None,
+            _ => Some(self.parse_expr()?),
+        };
+        Ok(Stmt::new(self.gen_id(), StmtKind::Ret(expr)))
+    }
 
-    // pub fn parse_stmt(&mut self) -> Result<&'src AstNode<'src>> {
-    //     let tok = self
-    //         .peek()
-    //         .ok_or_else(|| self.compile_error(ParseError::UnexpectedEof))?;
-    //     let stmt = match tok.kind {
-    //         token::TokenKind::KwVar => self.parse_var_decl()?,
-    //         token::TokenKind::KwRet => self.parse_ret()?,
-    //         _ => self.parse_expr()?,
-    //     };
-    //     self.expect_kind(token::TokenKind::Semi)?;
-    //     Ok(stmt)
-    // }
+    pub fn parse_stmt(&mut self) -> Result<Stmt> {
+        self.skip_spaces();
+        let tok = self
+            .peek()
+            .ok_or_else(|| self.compile_error(ParseError::UnexpectedEof))?;
+        let stmt = match tok.kind {
+            token::TokenKind::Semi => Stmt::new_empty(self.gen_id()),
+            token::TokenKind::Ident if tok.is_keyword() => match tok.try_as_keyword().unwrap() {
+                token::Keyword::Ret => self.parse_ret()?,
+                token::Keyword::Var => self.parse_var_decl()?,
+                token::Keyword::Fun => {
+                    return Err(CompileError::new(
+                        self.src.pos_from_offset(tok.offset),
+                        ParseError::InvalidStmt.into(),
+                    ))
+                }
+            },
+            _ => Stmt::new(self.gen_id(), StmtKind::Expr(self.parse_expr()?)),
+        };
+        self.bump_if(|tok| tok.kind == token::TokenKind::Semi)
+            .ok_or_else(|| self.expected_err(";"))?;
+        Ok(stmt)
+    }
 
-    pub fn parse_expr(&mut self) -> Result<Expr> {
-        // self.parse_expr_prec(0)
+    fn parse_expr(&mut self) -> Result<Expr> {
         self.parse_assoc_expr_with(0)
     }
 

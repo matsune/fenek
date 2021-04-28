@@ -170,10 +170,24 @@ pub struct Stmt {
     pub kind: StmtKind,
 }
 
+impl Stmt {
+    pub fn new(id: NodeId, kind: StmtKind) -> Self {
+        Self { id, kind }
+    }
+
+    pub fn new_empty(id: NodeId) -> Self {
+        Self {
+            id,
+            kind: StmtKind::Empty,
+        }
+    }
+}
+
 pub enum StmtKind {
     Expr(Expr),
     Ret(Option<Expr>),
     VarDecl(token::Token, Expr),
+    Empty,
 }
 
 // impl<'a> Ret<'a> {

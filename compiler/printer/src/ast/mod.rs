@@ -1,8 +1,8 @@
 mod json;
 
-pub fn print_expr(expr: &ast::Expr) -> serde_json::Result<()> {
-    let expr: json::Expr = expr.into();
-    let json = serde_json::to_string(&expr)?;
+pub fn print_stmt(stmt: &ast::Stmt) -> serde_json::Result<()> {
+    let stmt: json::Stmt = stmt.into();
+    let json = serde_json::to_string(&stmt)?;
     println!("{}", json);
     Ok(())
 }
