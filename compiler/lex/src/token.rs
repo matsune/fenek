@@ -103,3 +103,10 @@ impl std::fmt::Display for TokenKind {
         write!(f, "{}", s)
     }
 }
+
+impl TokenKind {
+    pub fn is_bin_op(&self) -> bool {
+        use TokenKind::*;
+        matches!(self, Plus | Minus | Star | Slash)
+    }
+}

@@ -244,8 +244,45 @@ impl<'src> Parser<'src> {
 
     pub fn parse_expr(&mut self) -> Result<Expr> {
         // self.parse_expr_prec(0)
-        // unimplemented!()
-        self.parse_prefix_expr()
+        self.parse_assoc_expr_with(0)
+    }
+
+    fn parse_assoc_expr_with(&mut self, prec: u8) -> Result<Expr> {
+        let mut lhs = self.parse_prefix_expr()?;
+        self.skip_spaces();
+        let mut bin_op = match self.peek() {
+            Some(tok) if tok.kind.is_bin_op() => {
+                let bin_op = BinOp::from(tok.kind);
+                if bin_op.precedence() < prec
+                    || bin_op.precedence() == prec && bin_op.assoc().is_left()
+                {
+                    return Ok(lhs);
+                }
+                self.bump();
+                bin_op
+            }
+            _ => return Ok(lhs),
+        };
+        self.skip_spaces();
+        let mut rhs = self.parse_assoc_expr_with(bin_op.precedence())?;
+        loop {
+            lhs = Expr::new_binary(self.gen_id(), bin_op, Box::new(lhs), Box::new(rhs));
+            bin_op = match self.peek() {
+                Some(tok) if tok.kind.is_bin_op() => {
+                    let bin_op = BinOp::from(tok.kind);
+                    if bin_op.precedence() < prec
+                        || bin_op.precedence() == prec && bin_op.assoc().is_left()
+                    {
+                        return Ok(lhs);
+                    }
+                    self.bump();
+                    bin_op
+                }
+                _ => return Ok(lhs),
+            };
+            self.skip_spaces();
+            rhs = self.parse_assoc_expr_with(bin_op.precedence())?;
+        }
     }
 
     fn parse_prefix_expr(&mut self) -> Result<Expr> {

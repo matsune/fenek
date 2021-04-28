@@ -247,6 +247,13 @@ impl Expr {
         }
     }
 
+    pub fn new_binary(id: NodeId, bin_op: BinOp, lhs: Box<Expr>, rhs: Box<Expr>) -> Self {
+        Self {
+            id,
+            kind: ExprKind::Binary(bin_op, lhs, rhs),
+        }
+    }
+
     pub fn new_unary(id: NodeId, unary_op: UnaryOp, expr: Box<Expr>) -> Self {
         Self {
             id,
@@ -300,6 +307,44 @@ pub enum BinOp {
     Div,
 }
 
+impl From<token::TokenKind> for BinOp {
+    fn from(k: token::TokenKind) -> Self {
+        match k {
+            token::TokenKind::Plus => BinOp::Add,
+            token::TokenKind::Minus => BinOp::Sub,
+            token::TokenKind::Star => BinOp::Mul,
+            token::TokenKind::Slash => BinOp::Div,
+            _ => panic!(),
+        }
+    }
+}
+
+impl BinOp {
+    pub fn precedence(&self) -> u8 {
+        match self {
+            Self::Add => 10,
+            Self::Sub => 10,
+            Self::Mul => 20,
+            Self::Div => 20,
+        }
+    }
+
+    pub fn assoc(&self) -> Assoc {
+        Assoc::Left
+    }
+}
+
+pub enum Assoc {
+    Left,
+    Right,
+}
+
+impl Assoc {
+    pub fn is_left(&self) -> bool {
+        matches!(self, Self::Left)
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum UnaryOp {
     Minus,
@@ -311,7 +356,7 @@ impl From<token::TokenKind> for UnaryOp {
         match k {
             token::TokenKind::Minus => Self::Minus,
             token::TokenKind::Not => Self::Not,
-            _ => unreachable!(),
+            _ => panic!(),
         }
     }
 }
