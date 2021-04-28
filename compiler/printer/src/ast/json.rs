@@ -19,8 +19,15 @@ impl From<&ast::Expr> for Expr {
 enum ExprKind {
     Var(String),
     Lit(Lit),
-    // Binary(BinOp, Box<Expr>, Box<Expr>),
-    // Unary(UnaryOp, Box<Expr>),
+    Binary {
+        bin_op: BinOp,
+        lhs: Box<Expr>,
+        rhs: Box<Expr>,
+    },
+    Unary {
+        unary_op: UnaryOp,
+        expr: Box<Expr>,
+    },
 }
 
 impl From<&ast::ExprKind> for ExprKind {
@@ -28,7 +35,22 @@ impl From<&ast::ExprKind> for ExprKind {
         match k {
             ast::ExprKind::Var(tok) => Self::Var(tok.raw.clone()),
             ast::ExprKind::Lit(lit) => Self::Lit(lit.into()),
-            _ => unimplemented!(),
+            ast::ExprKind::Binary(op, lhs, rhs) => {
+                let lhs: &ast::Expr = &lhs;
+                let rhs: &ast::Expr = &rhs;
+                Self::Binary {
+                    bin_op: op.into(),
+                    lhs: Box::new(Expr::from(lhs)),
+                    rhs: Box::new(Expr::from(rhs)),
+                }
+            }
+            ast::ExprKind::Unary(op, expr) => {
+                let expr: &ast::Expr = &expr;
+                Self::Unary {
+                    unary_op: op.into(),
+                    expr: Box::new(Expr::from(expr)),
+                }
+            }
         }
     }
 }
@@ -83,6 +105,65 @@ impl From<&token::IntBase> for IntBase {
             token::IntBase::Octal => Self::Octal,
             token::IntBase::Decimal => Self::Decimal,
             token::IntBase::Hex => Self::Hex,
+        }
+    }
+}
+
+pub enum BinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+impl Serialize for BinOp {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(match *self {
+            Self::Add => "+",
+            Self::Sub => "-",
+            Self::Mul => "*",
+            Self::Div => "/",
+        })
+    }
+}
+
+impl From<&ast::BinOp> for BinOp {
+    fn from(op: &ast::BinOp) -> Self {
+        match op {
+            ast::BinOp::Add => Self::Add,
+            ast::BinOp::Sub => Self::Sub,
+            ast::BinOp::Mul => Self::Mul,
+            ast::BinOp::Div => Self::Div,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum UnaryOp {
+    Minus,
+    Not,
+}
+
+impl Serialize for UnaryOp {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(match *self {
+            Self::Minus => "-",
+            Self::Not => "!",
+        })
+    }
+}
+
+impl From<&ast::UnaryOp> for UnaryOp {
+    fn from(op: &ast::UnaryOp) -> Self {
+        match op {
+            ast::UnaryOp::Minus => Self::Minus,
+            ast::UnaryOp::Not => Self::Not,
         }
     }
 }

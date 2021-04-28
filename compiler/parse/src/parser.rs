@@ -4,7 +4,7 @@ use lex::token;
 use span::{Offset, Pos, SrcFile};
 use std::collections::{HashMap, VecDeque};
 
-pub fn parse<'src>(src: &'src SrcFile, tokens: VecDeque<token::Token>) -> Result<Expr> {
+pub fn parse(src: &SrcFile, tokens: VecDeque<token::Token>) -> Result<Expr> {
     Parser::new(src, tokens).parse_expr() //.parse_fun()
 }
 
@@ -245,7 +245,22 @@ impl<'src> Parser<'src> {
     pub fn parse_expr(&mut self) -> Result<Expr> {
         // self.parse_expr_prec(0)
         // unimplemented!()
-        self.parse_primary_expr()
+        self.parse_prefix_expr()
+    }
+
+    fn parse_prefix_expr(&mut self) -> Result<Expr> {
+        let tok = self
+            .peek()
+            .ok_or_else(|| self.compile_error(ParseError::UnexpectedEof))?;
+        match tok.kind {
+            token::TokenKind::Minus | token::TokenKind::Not => {
+                let unary_op = self.bump().unwrap().kind.into();
+                self.skip_spaces();
+                let expr = self.parse_prefix_expr()?;
+                Ok(Expr::new_unary(self.gen_id(), unary_op, Box::new(expr)))
+            }
+            _ => self.parse_primary_expr(),
+        }
     }
 
     fn parse_primary_expr(&mut self) -> Result<Expr> {
@@ -262,7 +277,9 @@ impl<'src> Parser<'src> {
             }
             token::TokenKind::Ident => Ok(Expr::new_var(self.gen_id(), tok)),
             token::TokenKind::LParen => {
+                self.skip_spaces();
                 let expr = self.parse_expr()?;
+                self.skip_spaces();
                 if !self.is_next_kind(token::TokenKind::RParen) {
                     return Err(self.compile_error(ParseError::UnclosedParenExpr));
                 }

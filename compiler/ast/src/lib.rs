@@ -246,6 +246,13 @@ impl Expr {
             kind: ExprKind::Lit(Lit::new(lit_kind, token)),
         }
     }
+
+    pub fn new_unary(id: NodeId, unary_op: UnaryOp, expr: Box<Expr>) -> Self {
+        Self {
+            id,
+            kind: ExprKind::Unary(unary_op, expr),
+        }
+    }
 }
 
 pub enum ExprKind {
@@ -254,17 +261,6 @@ pub enum ExprKind {
     Binary(BinOp, Box<Expr>, Box<Expr>),
     Unary(UnaryOp, Box<Expr>),
 }
-
-// impl<'a> Expr<'a> {
-//     pub fn pos(&self) -> Pos {
-//         match self {
-//             Self::Lit(lit) => lit.pos,
-//             Self::Ident(ident) => ident.pos,
-//             Self::Binary(binary) => binary.lhs.pos(),
-//             Self::Unary(unary) => unary.op.pos(),
-//         }
-//     }
-// }
 
 pub struct Lit {
     pub kind: LitKind,
@@ -296,32 +292,6 @@ impl From<token::LitKind> for LitKind {
     }
 }
 
-// pub struct Binary<'a> {
-//     // Ident
-//     pub op: &'a AstNode<'a>,
-//     pub precedence: u8,
-//     // Expr
-//     pub lhs: &'a AstNode<'a>,
-//     // Expr
-//     pub rhs: &'a AstNode<'a>,
-// }
-
-// impl<'a> Binary<'a> {
-//     pub fn new(
-//         op: &'a AstNode<'a>,
-//         precedence: u8,
-//         lhs: &'a AstNode<'a>,
-//         rhs: &'a AstNode<'a>,
-//     ) -> Self {
-//         Self {
-//             op,
-//             precedence,
-//             lhs,
-//             rhs,
-//         }
-//     }
-// }
-
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum BinOp {
     Add,
@@ -332,57 +302,16 @@ pub enum BinOp {
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum UnaryOp {
-    Plus,
     Minus,
     Not,
 }
 
-// #[derive(Debug)]
-// pub struct BinOp {
-//     pub symbol: String,
-//     pub precedence: u8,
-// }
-
-// impl BinOp {
-//     pub fn new<S: ToString>(symbol: S, precedence: u8) -> Self {
-//         Self {
-//             symbol: symbol.to_string(),
-//             precedence,
-//         }
-//     }
-// }
-
-// pub struct Unary<'a> {
-//     // UnaryOp
-//     pub op: &'a AstNode<'a>,
-//     // Expr
-//     pub expr: &'a AstNode<'a>,
-// }
-
-// impl<'a> Unary<'a> {
-//     pub fn new(op: &'a AstNode<'a>, expr: &'a AstNode<'a>) -> Self {
-//         Self { op, expr }
-//     }
-// }
-
-// #[derive(Debug)]
-// pub struct UnaryOp {
-//     pub kind: UnaryOpKind,
-//     pub pos: Pos,
-// }
-
-// impl UnaryOp {
-//     pub fn new(kind: UnaryOpKind, pos: Pos) -> Self {
-//         Self { kind, pos }
-//     }
-// }
-
-// #[derive(Debug, Clone, Copy, PartialEq)]
-// pub enum UnaryOpKind {
-//     /// +
-//     Add,
-//     /// -
-//     Sub,
-//     /// !
-//     Not,
-// }
+impl From<token::TokenKind> for UnaryOp {
+    fn from(k: token::TokenKind) -> Self {
+        match k {
+            token::TokenKind::Minus => Self::Minus,
+            token::TokenKind::Not => Self::Not,
+            _ => unreachable!(),
+        }
+    }
+}
