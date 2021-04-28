@@ -1,3 +1,5 @@
 mod lexer;
 mod scanner;
-mod token;
+pub mod token;
+
+pub use lexer::lex;

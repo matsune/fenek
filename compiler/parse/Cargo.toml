@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 paste = "1.0"
-typed-arena = "2.0.1"
 error = { path = "../error" }
-pos = { path = "../pos" }
+span = { path = "../span" }
+ast = { path = "../ast" }
+lex = { path = "../lex" }

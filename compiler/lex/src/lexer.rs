@@ -3,9 +3,6 @@ use super::token::*;
 use error::{CompileError, LexerError, LitError, Result};
 use span::{Offset, SrcFile};
 
-#[cfg(test)]
-mod tests;
-
 #[inline]
 fn is_newline(c: char) -> bool {
     c == '\n' || c == '\r'

@@ -16,16 +16,13 @@ fn main() {
     }
 }
 
-fn read_file<P: AsRef<Path>>(src: P) -> std::io::Result<String> {
-    let mut src_file = std::fs::File::open(&src)?;
-    let mut buf = String::new();
-    src_file.read_to_string(&mut buf)?;
-    Ok(buf)
-}
-
 fn run_main() -> Result<(), Box<dyn Error>> {
     let opts = Opts::parse();
     let src = SrcFile::open(opts.src)?;
+    let tokens = lex::lex(&src)?;
+    let expr = parse::parse(&src, tokens.into())?;
+    printer::ast::print_expr(&expr)?;
+
     // let mir_fun = {
     //     let input = read_file(&opts.src).map_err(|err| format!("{}: {}", &opts.src, err))?;
     //     let ast_arena = parse::ast::AstArena::new();

@@ -1,5 +1,4 @@
-use crate::lex::IntBase;
-use pos::Pos;
+use lex::token;
 
 pub type NodeId = usize;
 
@@ -144,11 +143,11 @@ pub type NodeId = usize;
 //     }
 // }
 
-#[derive(Debug, Clone)]
-pub struct Ident {
-    pub raw: String,
-    //     pub pos: Pos,
-}
+// #[derive(Debug, Clone)]
+// pub struct Ident {
+//     pub raw: String,
+//     pub pos: Pos,
+// }
 
 // impl Ident {
 //     pub fn new(raw: String, pos: Pos) -> Self {
@@ -224,12 +223,37 @@ pub struct Ident {
 //     }
 // }
 
-// pub enum Expr<'a> {
-//     Lit(Lit),
-//     Ident(Ident),
-//     Binary(Binary<'a>),
-//     Unary(Unary<'a>),
-// }
+pub struct Expr {
+    pub id: NodeId,
+    pub kind: ExprKind,
+}
+
+impl Expr {
+    pub fn new(id: NodeId, kind: ExprKind) -> Self {
+        Self { id, kind }
+    }
+
+    pub fn new_var(id: NodeId, token: token::Token) -> Self {
+        Self {
+            id,
+            kind: ExprKind::Var(token),
+        }
+    }
+
+    pub fn new_lit(id: NodeId, lit_kind: LitKind, token: token::Token) -> Self {
+        Self {
+            id,
+            kind: ExprKind::Lit(Lit::new(lit_kind, token)),
+        }
+    }
+}
+
+pub enum ExprKind {
+    Var(token::Token),
+    Lit(Lit),
+    Binary(BinOp, Box<Expr>, Box<Expr>),
+    Unary(UnaryOp, Box<Expr>),
+}
 
 // impl<'a> Expr<'a> {
 //     pub fn pos(&self) -> Pos {
@@ -242,25 +266,35 @@ pub struct Ident {
 //     }
 // }
 
-// pub struct Lit {
-//     pub kind: LitKind,
-//     pub literal: String,
-//     pub pos: Pos,
-// }
+pub struct Lit {
+    pub kind: LitKind,
+    pub token: token::Token,
+}
 
-// impl Lit {
-//     pub fn new(kind: LitKind, literal: String, pos: Pos) -> Self {
-//         Self { kind, literal, pos }
-//     }
-// }
+impl Lit {
+    pub fn new(kind: LitKind, token: token::Token) -> Self {
+        Self { kind, token }
+    }
+}
 
-// #[derive(Debug, PartialEq, Clone)]
-// pub enum LitKind {
-//     Int(IntBase),
-//     Float,
-//     Bool,
-//     String,
-// }
+#[derive(Debug, PartialEq, Clone)]
+pub enum LitKind {
+    Int(token::IntBase),
+    Float,
+    Bool,
+    String,
+}
+
+impl From<token::LitKind> for LitKind {
+    fn from(kind: token::LitKind) -> Self {
+        match kind {
+            token::LitKind::Int { base } => Self::Int(base),
+            token::LitKind::Float => Self::Float,
+            token::LitKind::Bool => Self::Bool,
+            token::LitKind::String => Self::String,
+        }
+    }
+}
 
 // pub struct Binary<'a> {
 //     // Ident
@@ -287,6 +321,21 @@ pub struct Ident {
 //         }
 //     }
 // }
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum BinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum UnaryOp {
+    Plus,
+    Minus,
+    Not,
+}
 
 // #[derive(Debug)]
 // pub struct BinOp {
