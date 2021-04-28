@@ -11,4 +11,6 @@ typed-arena = "2.0.1"
 num-traits = "0.2"
 error = { path = "../error" }
 parse = { path = "../parse" }
-pos = { path = "../pos" }
+span = { path = "../span" }
+ast = { path = "../ast" }
+lex = { path = "../lex" }

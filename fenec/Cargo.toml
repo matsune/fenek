@@ -10,7 +10,9 @@ edition = "2018"
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm11-0"] }
 typed-arena = "2.0.1"
 clap = "3.0.0-beta.2"
-# typeck = { path = "../compiler/typeck" }
+ast = { path = "../compiler/ast" }
+error = { path = "../compiler/error" }
+typeck = { path = "../compiler/typeck" }
 printer = { path = "../compiler/printer" }
 # codegen = { path = "../compiler/codegen" }
 span = { path = "../compiler/span" }

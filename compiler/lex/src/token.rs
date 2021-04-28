@@ -1,6 +1,6 @@
 use span::Offset;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Token {
     pub kind: TokenKind,
     pub raw: String,
@@ -44,6 +44,17 @@ pub enum IntBase {
     Octal,
     Decimal,
     Hex,
+}
+
+impl Into<u32> for IntBase {
+    fn into(self) -> u32 {
+        match self {
+            Self::Binary => 2,
+            Self::Octal => 8,
+            Self::Decimal => 10,
+            Self::Hex => 16,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

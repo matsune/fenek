@@ -114,12 +114,16 @@ impl From<&ast::StmtKind> for StmtKind {
     fn from(k: &ast::StmtKind) -> Self {
         match k {
             ast::StmtKind::Expr(expr) => Self::Expr(expr.into()),
-            ast::StmtKind::Ret(expr) => Self::Ret(expr.as_ref().map(|e| e.into())),
-            ast::StmtKind::VarDecl(tok, expr) => Self::VarDecl {
-                name: tok.raw.clone(),
-                init: expr.into(),
+            ast::StmtKind::Ret { keyword: _, expr } => Self::Ret(expr.as_ref().map(|e| e.into())),
+            ast::StmtKind::VarDecl {
+                keyword: _,
+                name,
+                init,
+            } => Self::VarDecl {
+                name: name.raw.clone(),
+                init: init.into(),
             },
-            ast::StmtKind::Empty => Self::Empty,
+            ast::StmtKind::Empty(_) => Self::Empty,
         }
     }
 }
@@ -147,12 +151,12 @@ enum ExprKind {
     },
     Lit(Lit),
     Binary {
-        bin_op: BinOp,
+        bin_op: BinOpKind,
         lhs: Box<Expr>,
         rhs: Box<Expr>,
     },
     Unary {
-        unary_op: UnaryOp,
+        unary_op: UnaryOpKind,
         expr: Box<Expr>,
     },
 }
@@ -168,7 +172,7 @@ impl From<&ast::ExprKind> for ExprKind {
                 let lhs: &ast::Expr = &lhs;
                 let rhs: &ast::Expr = &rhs;
                 Self::Binary {
-                    bin_op: op.into(),
+                    bin_op: BinOpKind::from(op.op_kind()),
                     lhs: Box::new(Expr::from(lhs)),
                     rhs: Box::new(Expr::from(rhs)),
                 }
@@ -176,7 +180,7 @@ impl From<&ast::ExprKind> for ExprKind {
             ast::ExprKind::Unary(op, expr) => {
                 let expr: &ast::Expr = &expr;
                 Self::Unary {
-                    unary_op: op.into(),
+                    unary_op: UnaryOpKind::from(&op.op_kind()),
                     expr: Box::new(Expr::from(expr)),
                 }
             }
@@ -237,14 +241,14 @@ impl From<&token::IntBase> for IntBase {
     }
 }
 
-pub enum BinOp {
+pub enum BinOpKind {
     Add,
     Sub,
     Mul,
     Div,
 }
 
-impl Serialize for BinOp {
+impl Serialize for BinOpKind {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -258,24 +262,24 @@ impl Serialize for BinOp {
     }
 }
 
-impl From<&ast::BinOp> for BinOp {
-    fn from(op: &ast::BinOp) -> Self {
+impl From<ast::BinOpKind> for BinOpKind {
+    fn from(op: ast::BinOpKind) -> Self {
         match op {
-            ast::BinOp::Add => Self::Add,
-            ast::BinOp::Sub => Self::Sub,
-            ast::BinOp::Mul => Self::Mul,
-            ast::BinOp::Div => Self::Div,
+            ast::BinOpKind::Add => Self::Add,
+            ast::BinOpKind::Sub => Self::Sub,
+            ast::BinOpKind::Mul => Self::Mul,
+            ast::BinOpKind::Div => Self::Div,
         }
     }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum UnaryOp {
+pub enum UnaryOpKind {
     Minus,
     Not,
 }
 
-impl Serialize for UnaryOp {
+impl Serialize for UnaryOpKind {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -287,11 +291,11 @@ impl Serialize for UnaryOp {
     }
 }
 
-impl From<&ast::UnaryOp> for UnaryOp {
-    fn from(op: &ast::UnaryOp) -> Self {
+impl From<&ast::UnaryOpKind> for UnaryOpKind {
+    fn from(op: &ast::UnaryOpKind) -> Self {
         match op {
-            ast::UnaryOp::Minus => Self::Minus,
-            ast::UnaryOp::Not => Self::Not,
+            ast::UnaryOpKind::Minus => Self::Minus,
+            ast::UnaryOpKind::Not => Self::Not,
         }
     }
 }

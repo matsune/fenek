@@ -16,22 +16,25 @@ fn main() {
     }
 }
 
+fn parse_ast(src: &SrcFile) -> Result<ast::Fun, error::CompileError> {
+    let tokens = lex::lex(&src)?;
+    parse::parse(&src, tokens.into())
+}
+
 fn run_main() -> Result<(), Box<dyn Error>> {
     let opts = Opts::parse();
     let src = SrcFile::open(opts.src)?;
-    let tokens = lex::lex(&src)?;
-    let fun = parse::parse(&src, tokens.into())?;
-    printer::ast::print_fun(&fun)?;
-
-    // let mir_fun = {
-    //     let input = read_file(&opts.src).map_err(|err| format!("{}: {}", &opts.src, err))?;
-    //     let ast_arena = parse::ast::AstArena::new();
-    //     let fun = parse::parse(&input, &ast_arena)?;
-    //     typeck::lower(&fun)?
-    // };
-    // if opts.emit.contains(&opts::Emit::Ast) {
-    //     printer::print(&mir_fun)?;
-    // }
+    let hir_fun = {
+        let ast_fun = parse_ast(&src)?;
+        if opts.emit.contains(&opts::Emit::Ast) {
+            printer::ast::print_fun(&ast_fun)?;
+        }
+        typeck::lower(&src, ast_fun)?
+    };
+    if opts.emit.contains(&opts::Emit::Hir) {
+        // TODO
+        // printer::hir::print_fun(&hir_fun)?;
+    }
 
     // let ctx = Context::create();
     // let mut codegen = Codegen::new(&ctx);
