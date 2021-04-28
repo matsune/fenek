@@ -20,8 +20,8 @@ fn run_main() -> Result<(), Box<dyn Error>> {
     let opts = Opts::parse();
     let src = SrcFile::open(opts.src)?;
     let tokens = lex::lex(&src)?;
-    let stmt = parse::parse(&src, tokens.into())?;
-    printer::ast::print_stmt(&stmt)?;
+    let fun = parse::parse(&src, tokens.into())?;
+    printer::ast::print_fun(&fun)?;
 
     // let mir_fun = {
     //     let input = read_file(&opts.src).map_err(|err| format!("{}: {}", &opts.src, err))?;

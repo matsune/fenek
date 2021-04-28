@@ -68,6 +68,12 @@ pub enum ParseError {
     InvalidBinOp(String),
     #[error("cannot use keyword {0}")]
     CannotUseKeyword(String),
+    #[error("invalid arg name")]
+    InvalidArgName,
+    #[error("invalid type name")]
+    InvalidTyName,
+    #[error("invalid function name")]
+    InvalidFunName,
 }
 
 #[derive(Error, Debug)]

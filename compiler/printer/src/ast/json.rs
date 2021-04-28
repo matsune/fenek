@@ -3,6 +3,90 @@ use serde::{Serialize, Serializer};
 use serde_json::Result;
 
 #[derive(Serialize)]
+pub struct Fun {
+    id: ast::NodeId,
+    name: String,
+    args: FunArgs,
+    ret_ty: Option<Ty>,
+    block: Block,
+}
+
+impl From<&ast::Fun> for Fun {
+    fn from(k: &ast::Fun) -> Self {
+        Self {
+            id: k.id,
+            name: k.name.raw.clone(),
+            args: k.args.iter().map(|arg| arg.into()).collect(),
+            ret_ty: k.ret_ty.as_ref().map(|t| t.into()),
+            block: Block::from(&k.block),
+        }
+    }
+}
+
+type FunArgs = Vec<FunArg>;
+
+#[derive(Serialize)]
+struct FunArg {
+    id: ast::NodeId,
+    name: String,
+    ty: Ty,
+}
+
+impl From<&ast::FunArg> for FunArg {
+    fn from(k: &ast::FunArg) -> Self {
+        Self {
+            id: k.id,
+            name: k.name.raw.clone(),
+            ty: Ty::from(&k.ty),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct Ty {
+    id: ast::NodeId,
+    #[serde(rename(serialize = "ty_kind"))]
+    kind: TyKind,
+}
+
+impl From<&ast::Ty> for Ty {
+    fn from(k: &ast::Ty) -> Self {
+        Self {
+            id: k.id,
+            kind: TyKind::from(&k.kind),
+        }
+    }
+}
+
+#[derive(Serialize)]
+enum TyKind {
+    Single(String),
+}
+
+impl From<&ast::TyKind> for TyKind {
+    fn from(k: &ast::TyKind) -> Self {
+        match k {
+            ast::TyKind::Single(tok) => Self::Single(tok.raw.clone()),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct Block {
+    id: ast::NodeId,
+    stmts: Vec<Stmt>,
+}
+
+impl From<&ast::Block> for Block {
+    fn from(k: &ast::Block) -> Self {
+        Self {
+            id: k.id,
+            stmts: k.stmts.iter().map(|s| s.into()).collect(),
+        }
+    }
+}
+
+#[derive(Serialize)]
 pub struct Stmt {
     id: ast::NodeId,
     #[serde(rename(serialize = "stmt_kind"))]
@@ -11,8 +95,10 @@ pub struct Stmt {
 
 impl From<&ast::Stmt> for Stmt {
     fn from(k: &ast::Stmt) -> Self {
-        let kind = StmtKind::from(&k.kind);
-        Self { id: k.id, kind }
+        Self {
+            id: k.id,
+            kind: StmtKind::from(&k.kind),
+        }
     }
 }
 
@@ -47,8 +133,10 @@ pub struct Expr {
 
 impl From<&ast::Expr> for Expr {
     fn from(k: &ast::Expr) -> Self {
-        let kind = ExprKind::from(&k.kind);
-        Self { id: k.id, kind }
+        Self {
+            id: k.id,
+            kind: ExprKind::from(&k.kind),
+        }
     }
 }
 
@@ -104,9 +192,8 @@ struct Lit {
 
 impl From<&ast::Lit> for Lit {
     fn from(lit: &ast::Lit) -> Self {
-        let kind = LitKind::from(&lit.kind);
         Lit {
-            kind,
+            kind: LitKind::from(&lit.kind),
             token: lit.token.raw.clone(),
         }
     }
