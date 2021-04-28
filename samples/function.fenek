@@ -1,4 +1,4 @@
-fun main() -> bool {
+fun main() -> i64 {
   var a = -10 + 7;
   var b = (3 - (-2)) * 4;
   ret a + b;

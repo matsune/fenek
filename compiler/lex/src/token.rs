@@ -1,4 +1,4 @@
-use span::Offset;
+use pos::Offset;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Token {

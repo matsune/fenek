@@ -6,7 +6,7 @@ use crate::ty;
 use error::{CompileError, TypeCkError};
 use lex::token;
 use num_traits::Num;
-use span::{Offset, Pos, SrcFile};
+use pos::{Offset, Pos, SrcFile};
 use std::collections::HashMap;
 use std::convert::From;
 use std::str::FromStr;
@@ -69,7 +69,7 @@ pub fn lower(src: &SrcFile, fun: ast::Fun) -> Result<hir::Fun> {
         let mut node_ty_map = HashMap::with_capacity(analyzer.node_ty_map.len());
         for (node_id, infer_ty) in analyzer.node_ty_map.iter() {
             let final_ty = analyzer.get_final_type(infer_ty).map_err(|err| {
-                let offset = ast::visit::visit(&fun, *node_id, |node| node.offset()).unwrap();
+                let offset = ast::visit::visit_fun(&fun, *node_id, |node| node.offset()).unwrap();
                 compile_error(src.pos_from_offset(offset), err)
             })?;
             node_ty_map.insert(*node_id, final_ty);
@@ -452,12 +452,11 @@ impl<'src> Lower<'src> {
         let stmts_len = fun.block.stmts.len();
         for (idx, stmt) in fun.block.stmts.iter().enumerate() {
             let stmt_offset = stmt.offset();
-            let stmt_id = stmt.id;
             if matches!(stmt.kind, ast::StmtKind::Empty(_)) {
                 continue;
             }
             let stmt = self.lower_stmt(scope, &stmt).map_err(|(id, err)| {
-                let offset = ast::visit::visit(&fun, id, |node| node.offset()).unwrap();
+                let offset = ast::visit::visit_fun(&fun, id, |node| node.offset()).unwrap();
                 compile_error(self.src.pos_from_offset(offset), err)
             })?;
             let is_last = idx == stmts_len - 1;

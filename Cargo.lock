@@ -29,7 +29,7 @@ name = "ast"
 version = "0.1.0"
 dependencies = [
  "lex",
- "span",
+ "pos",
 ]
 
 [[package]]
@@ -145,7 +145,7 @@ checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 name = "error"
 version = "0.1.0"
 dependencies = [
- "span",
+ "pos",
  "thiserror",
 ]
 
@@ -159,8 +159,8 @@ dependencies = [
  "inkwell",
  "lex",
  "parse",
+ "pos",
  "printer",
- "span",
  "typeck",
  "typed-arena",
 ]
@@ -272,7 +272,7 @@ name = "lex"
 version = "0.1.0"
 dependencies = [
  "error",
- "span",
+ "pos",
 ]
 
 [[package]]
@@ -421,7 +421,7 @@ dependencies = [
  "error",
  "lex",
  "paste",
- "span",
+ "pos",
 ]
 
 [[package]]
@@ -448,6 +448,10 @@ dependencies = [
  "fixedbitset",
  "indexmap",
 ]
+
+[[package]]
+name = "pos"
+version = "0.1.0"
 
 [[package]]
 name = "printer"
@@ -667,10 +671,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe0f37c9e8f3c5a4a66ad655a93c74daac4ad00c441533bf5c6e7990bb42604e"
 
 [[package]]
-name = "span"
-version = "0.1.0"
-
-[[package]]
 name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -758,7 +758,7 @@ dependencies = [
  "lex",
  "num-traits 0.2.14",
  "parse",
- "span",
+ "pos",
  "typed-arena",
 ]
 

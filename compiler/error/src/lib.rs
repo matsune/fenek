@@ -1,4 +1,4 @@
-use span::Pos;
+use pos::Pos;
 use thiserror::Error;
 
 #[derive(Error, Debug)]

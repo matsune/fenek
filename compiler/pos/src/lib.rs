@@ -8,11 +8,6 @@ use std::str::Chars;
 
 pub type Offset = u32;
 
-pub struct Span {
-    begin: Offset,
-    len: Offset,
-}
-
 pub struct SrcFile {
     path: PathBuf,
     inner: String,

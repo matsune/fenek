@@ -2,7 +2,7 @@ use clap::Clap;
 // use codegen::Codegen;
 use inkwell::context::Context;
 use opts::Opts;
-use span::SrcFile;
+use pos::SrcFile;
 use std::error::Error;
 use std::io::prelude::Read;
 use std::path::{Path, PathBuf};

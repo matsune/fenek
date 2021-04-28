@@ -1,7 +1,7 @@
 use ast::*;
 use error::{CompileError, ParseError, Result};
 use lex::token;
-use span::{Offset, Pos, SrcFile};
+use pos::{Offset, Pos, SrcFile};
 use std::collections::VecDeque;
 
 pub fn parse(src: &SrcFile, tokens: VecDeque<token::Token>) -> Result<Fun> {

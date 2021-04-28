@@ -7,6 +7,6 @@ edition = "2018"
 [dependencies]
 paste = "1.0"
 error = { path = "../error" }
-span = { path = "../span" }
+pos = { path = "../pos" }
 ast = { path = "../ast" }
 lex = { path = "../lex" }

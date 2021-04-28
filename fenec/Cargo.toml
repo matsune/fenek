@@ -15,7 +15,7 @@ error = { path = "../compiler/error" }
 typeck = { path = "../compiler/typeck" }
 printer = { path = "../compiler/printer" }
 # codegen = { path = "../compiler/codegen" }
-span = { path = "../compiler/span" }
+pos = { path = "../compiler/pos" }
 lex = { path = "../compiler/lex" }
 parse = { path = "../compiler/parse" }
 

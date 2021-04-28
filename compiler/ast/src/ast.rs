@@ -1,5 +1,5 @@
 use lex::token;
-use span::Offset;
+use pos::Offset;
 
 pub type NodeId = usize;
 

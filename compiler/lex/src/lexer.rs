@@ -1,7 +1,7 @@
 use super::scanner::*;
 use super::token::*;
 use error::{CompileError, LexerError, LitError, Result};
-use span::{Offset, SrcFile};
+use pos::{Offset, SrcFile};
 
 #[inline]
 fn is_newline(c: char) -> bool {

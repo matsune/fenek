@@ -1,5 +1,5 @@
 use crate::ast::*;
-use span::Offset;
+use pos::Offset;
 
 pub enum Node<'a> {
     Fun(&'a Fun),
@@ -30,26 +30,32 @@ impl<'a> Node<'a> {
     }
 }
 
-pub fn visit<'a, T, F: Fn(Node<'a>) -> T>(fun: &'a Fun, id: NodeId, callback: F) -> Option<T> {
+macro_rules! return_if_some {
+    ($e:expr) => {
+        let res = $e;
+        if res.is_some() {
+            return res;
+        }
+    };
+}
+
+pub fn visit_fun<'a, T, F: Fn(Node<'a>) -> T>(fun: &'a Fun, id: NodeId, callback: F) -> Option<T> {
     if fun.id == id {
         return Some(callback(Node::Fun(fun)));
     }
-    for arg in fun.args.iter() {
-        if arg.id == id {
-            return Some(callback(Node::FunArg(arg)));
-        }
-        if arg.ty.id == id {
-            return Some(callback(Node::Ty(&arg.ty)));
-        }
-    }
+
+    return_if_some!(visit_fun_args(&fun.args, id, &callback));
+
     if let Some(ret_ty) = &fun.ret_ty {
         if ret_ty.id == id {
             return Some(callback(Node::Ty(&ret_ty)));
         }
     }
+
     if fun.block.id == id {
         return Some(callback(Node::Block(&fun.block)));
     }
+
     for stmt in fun.block.stmts.iter() {
         if stmt.id == id {
             return Some(callback(Node::Stmt(stmt)));
@@ -60,18 +66,72 @@ pub fn visit<'a, T, F: Fn(Node<'a>) -> T>(fun: &'a Fun, id: NodeId, callback: F)
                 name: _,
                 init,
             } => {
-                if let Some(t) = visit_expr(init, id, &callback) {
-                    return Some(t);
-                }
+                return_if_some!(visit_expr(init, id, &callback));
             }
             StmtKind::Expr(expr) => {
-                if let Some(t) = visit_expr(expr, id, &callback) {
-                    return Some(t);
-                }
+                return_if_some!(visit_expr(expr, id, &callback));
             }
             _ => {}
         };
     }
+    None
+}
+
+fn visit_fun_args<'a, T, F: Fn(Node<'a>) -> T>(
+    args: &'a [FunArg],
+    id: NodeId,
+    callback: &F,
+) -> Option<T> {
+    for arg in args.iter() {
+        if arg.id == id {
+            return Some(callback(Node::FunArg(arg)));
+        }
+        return_if_some!(visit_ty(&arg.ty, id, callback));
+    }
+    None
+}
+
+fn visit_ty<'a, T, F: Fn(Node<'a>) -> T>(ty: &'a Ty, id: NodeId, callback: &F) -> Option<T> {
+    if ty.id == id {
+        Some(callback(Node::Ty(&ty)))
+    } else {
+        None
+    }
+}
+
+fn visit_block<'a, T, F: Fn(Node<'a>) -> T>(
+    block: &'a Block,
+    id: NodeId,
+    callback: &F,
+) -> Option<T> {
+    if block.id == id {
+        return Some(callback(Node::Block(&block)));
+    }
+
+    for stmt in block.stmts.iter() {
+        return_if_some!(visit_stmt(stmt, id, &callback));
+    }
+
+    None
+}
+
+fn visit_stmt<'a, T, F: Fn(Node<'a>) -> T>(stmt: &'a Stmt, id: NodeId, callback: &F) -> Option<T> {
+    if stmt.id == id {
+        return Some(callback(Node::Stmt(stmt)));
+    }
+    match &stmt.kind {
+        StmtKind::VarDecl {
+            keyword: _,
+            name: _,
+            init,
+        } => {
+            return_if_some!(visit_expr(init, id, &callback));
+        }
+        StmtKind::Expr(expr) => {
+            return_if_some!(visit_expr(expr, id, &callback));
+        }
+        _ => {}
+    };
     None
 }
 
@@ -81,11 +141,8 @@ fn visit_expr<'a, T, F: Fn(Node<'a>) -> T>(expr: &'a Expr, id: NodeId, callback:
     }
     match &expr.kind {
         ExprKind::Binary(_, lhs, rhs) => {
-            if let Some(t) = visit_expr(&lhs, id, callback) {
-                Some(t)
-            } else {
-                visit_expr(&rhs, id, callback)
-            }
+            return_if_some!(visit_expr(&lhs, id, callback));
+            visit_expr(&rhs, id, callback)
         }
         ExprKind::Unary(_, expr) => visit_expr(&expr, id, callback),
         _ => None,
