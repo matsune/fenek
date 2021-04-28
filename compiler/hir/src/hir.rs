@@ -1,4 +1,4 @@
-use crate::scope::{Def, FunDef, VarDef};
+use crate::def::{Def, FunDef, VarDef};
 use crate::ty;
 use lex::token;
 

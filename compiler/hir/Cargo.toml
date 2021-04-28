@@ -1,5 +1,5 @@
 [package]
-name = "typeck"
+name = "hir"
 version = "0.1.0"
 authors = ["Yuma Matsune <yuma.matsune@gmail.com>"]
 edition = "2018"
@@ -7,11 +7,5 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-typed-arena = "2.0.1"
-num-traits = "0.2"
-error = { path = "../error" }
-parse = { path = "../parse" }
-pos = { path = "../pos" }
 ast = { path = "../ast" }
 lex = { path = "../lex" }
-hir = { path = "../hir" }

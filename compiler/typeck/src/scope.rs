@@ -1,3 +1,4 @@
+use hir::def::{Def, FunDef, VarDef};
 use std::collections::HashMap;
 
 pub type ArenaIdx = usize;
@@ -66,92 +67,5 @@ impl<T> ScopeTable<T> {
 
     pub fn insert_fun(&mut self, symbol: String, def: FunDef<T>) {
         self.table.insert(symbol, Def::Fun(def));
-    }
-}
-
-pub type DefId = usize;
-
-/// User defined symbols. This will be created when
-/// user defines functions or variables which has a
-/// unique name in the scope.
-///
-/// Generic type <T> will be `infer_ty::InferTy` or
-/// `ty::Type` because this will be used by either
-/// type inference and type checking.
-#[derive(Debug, Clone)]
-pub enum Def<T> {
-    Fun(FunDef<T>),
-    Var(VarDef<T>),
-}
-
-impl<T> Def<T> {
-    pub fn into_fun_def(self) -> FunDef<T> {
-        match self {
-            Def::Fun(def) => def,
-            _ => panic!(),
-        }
-    }
-
-    pub fn into_var_def(self) -> VarDef<T> {
-        match self {
-            Def::Var(var_def) => var_def,
-            _ => panic!(),
-        }
-    }
-
-    pub fn as_var_def(&self) -> &VarDef<T> {
-        match self {
-            Def::Var(ref var_def) => var_def,
-            _ => panic!(),
-        }
-    }
-
-    pub fn id(&self) -> DefId {
-        match self {
-            Def::Fun(fun_def) => fun_def.id,
-            Def::Var(var_def) => var_def.id,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct FunDef<T> {
-    pub id: DefId,
-    pub ret_ty: T,
-    pub arg_tys: Vec<T>,
-}
-
-impl<T> FunDef<T> {
-    pub fn new(id: DefId, ret_ty: T, arg_tys: Vec<T>) -> Self {
-        Self {
-            id,
-            ret_ty,
-            arg_tys,
-        }
-    }
-}
-
-impl<T> Into<Def<T>> for FunDef<T> {
-    fn into(self) -> Def<T> {
-        Def::Fun(self)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct VarDef<T> {
-    pub id: DefId,
-    pub ty: T,
-    pub is_mut: bool,
-}
-
-impl<T> VarDef<T> {
-    pub fn new(id: DefId, ty: T, is_mut: bool) -> Self {
-        Self { id, ty, is_mut }
-    }
-}
-
-impl<T> Into<Def<T>> for VarDef<T> {
-    fn into(self) -> Def<T> {
-        Def::Var(self)
     }
 }

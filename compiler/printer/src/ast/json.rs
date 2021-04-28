@@ -1,6 +1,5 @@
 use lex::token;
 use serde::{Serialize, Serializer};
-use serde_json::Result;
 
 #[derive(Serialize)]
 pub struct Fun {
@@ -180,7 +179,7 @@ impl From<&ast::ExprKind> for ExprKind {
             ast::ExprKind::Unary(op, expr) => {
                 let expr: &ast::Expr = &expr;
                 Self::Unary {
-                    unary_op: UnaryOpKind::from(&op.op_kind()),
+                    unary_op: op.op_kind().into(),
                     expr: Box::new(Expr::from(expr)),
                 }
             }
@@ -291,8 +290,8 @@ impl Serialize for UnaryOpKind {
     }
 }
 
-impl From<&ast::UnaryOpKind> for UnaryOpKind {
-    fn from(op: &ast::UnaryOpKind) -> Self {
+impl From<ast::UnaryOpKind> for UnaryOpKind {
+    fn from(op: ast::UnaryOpKind) -> Self {
         match op {
             ast::UnaryOpKind::Minus => Self::Minus,
             ast::UnaryOpKind::Not => Self::Not,

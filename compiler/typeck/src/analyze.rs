@@ -1,12 +1,12 @@
-use crate::hir;
-use crate::hir::Typed;
 use crate::infer_ty::*;
 use crate::scope::*;
-use crate::ty;
 use error::{CompileError, TypeCkError};
+use hir::def::*;
+use hir::ty;
+use hir::Typed;
 use lex::token;
 use num_traits::Num;
-use pos::{Offset, Pos, SrcFile};
+use pos::{Pos, SrcFile};
 use std::collections::HashMap;
 use std::convert::From;
 use std::str::FromStr;

@@ -13,4 +13,5 @@ ptree = "0.3.2"
 parse = { path = "../parse" }
 ast = { path = "../ast" }
 lex = { path = "../lex" }
-# typeck = { path = "../typeck" }
+typeck = { path = "../typeck" }
+hir = { path = "../hir" }

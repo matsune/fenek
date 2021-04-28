@@ -207,6 +207,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "hir"
+version = "0.1.0"
+dependencies = [
+ "ast",
+ "lex",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -458,11 +466,13 @@ name = "printer"
 version = "0.1.0"
 dependencies = [
  "ast",
+ "hir",
  "lex",
  "parse",
  "ptree",
  "serde 1.0.125",
  "serde_json",
+ "typeck",
 ]
 
 [[package]]
@@ -755,6 +765,7 @@ version = "0.1.0"
 dependencies = [
  "ast",
  "error",
+ "hir",
  "lex",
  "num-traits 0.2.14",
  "parse",

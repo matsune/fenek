@@ -27,13 +27,12 @@ fn run_main() -> Result<(), Box<dyn Error>> {
     let hir_fun = {
         let ast_fun = parse_ast(&src)?;
         if opts.emit.contains(&opts::Emit::Ast) {
-            printer::ast::print_fun(&ast_fun)?;
+            printer::print_ast_fun(&ast_fun)?;
         }
         typeck::lower(&src, ast_fun)?
     };
     if opts.emit.contains(&opts::Emit::Hir) {
-        // TODO
-        // printer::hir::print_fun(&hir_fun)?;
+        printer::print_hir_fun(&hir_fun)?;
     }
 
     // let ctx = Context::create();
