@@ -8,7 +8,6 @@ pub trait Typed {
     fn get_type(&self) -> &ty::Type;
 }
 
-#[derive(Debug)]
 pub struct Fun {
     pub id: ast::NodeId,
     pub name: Ident,
@@ -40,7 +39,6 @@ impl Fun {
 
 pub type FunArgs = Vec<Ident>;
 
-#[derive(Debug)]
 pub struct Block {
     pub id: ast::NodeId,
     pub stmts: Vec<Stmt>,
@@ -54,7 +52,6 @@ impl Block {
 
 macro_rules! Enum {
     ($name:ident [$($Var:ident),*]) => {
-        #[derive(Debug)]
         pub enum $name {
             $(
                 $Var($Var),
@@ -73,7 +70,6 @@ macro_rules! Enum {
 
 Enum!(Stmt [VarDecl, Ret, Expr]);
 
-#[derive(Debug)]
 pub struct VarDecl {
     pub id: ast::NodeId,
     pub name: token::Token,
@@ -97,7 +93,6 @@ impl VarDecl {
     }
 }
 
-#[derive(Debug)]
 pub struct Ret {
     pub id: ast::NodeId,
     pub expr: Option<Expr>,
@@ -122,7 +117,6 @@ impl Typed for Expr {
     }
 }
 
-#[derive(Debug)]
 pub struct Lit {
     pub id: ast::NodeId,
     pub kind: LitKind,
@@ -141,7 +135,6 @@ impl Typed for Lit {
     }
 }
 
-#[derive(Debug)]
 pub enum LitKind {
     I8(i8),
     I16(i16),
@@ -161,7 +154,6 @@ impl LitKind {
     }
 }
 
-#[derive(Debug)]
 pub struct Ident {
     pub raw: String,
     pub def: Def<ty::Type>,
@@ -182,7 +174,12 @@ impl Typed for Ident {
     }
 }
 
-#[derive(Debug)]
+pub struct MethodCall {
+    method: String,
+    args: Vec<Expr>,
+    pub ty: ty::Type,
+}
+
 pub struct Binary {
     pub id: ast::NodeId,
     pub op: ast::BinOpKind,
@@ -209,7 +206,6 @@ impl Typed for Binary {
     }
 }
 
-#[derive(Debug)]
 pub struct Unary {
     pub id: ast::NodeId,
     pub op: ast::UnaryOpKind,
