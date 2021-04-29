@@ -100,6 +100,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "codegen"
+version = "0.1.0"
+dependencies = [
+ "ast",
+ "hir",
+ "inkwell",
+ "parse",
+ "printer",
+ "typeck",
+]
+
+[[package]]
 name = "config"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -155,6 +167,7 @@ version = "0.1.0"
 dependencies = [
  "ast",
  "clap",
+ "codegen",
  "error",
  "inkwell",
  "lex",

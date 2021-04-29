@@ -1,3 +1,6 @@
+use hir::def::DefId;
+use hir::ty;
+use hir::Typed;
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -7,12 +10,7 @@ use inkwell::support::LLVMString;
 use inkwell::types::{BasicType, BasicTypeEnum, FunctionType};
 use inkwell::values::{BasicValueEnum, FunctionValue, IntMathValue, IntValue, PointerValue};
 use inkwell::AddressSpace;
-use parse::ast;
 use std::collections::HashMap;
-use typeck::hir;
-use typeck::hir::Typed;
-use typeck::scope::DefId;
-use typeck::ty;
 
 fn llvm_intrinsic_type_name(ty: BasicTypeEnum) -> String {
     match ty {
@@ -326,31 +324,44 @@ impl<'ctx> Codegen<'ctx> {
                     ty::Type::Int(_) => {
                         let lhs = lhs.into_int_value();
                         let rhs = rhs.into_int_value();
-                        match binary.op.as_str() {
-                            "+" => self.build_checked_int_arithmetic(lhs, rhs, "sadd"),
-                            "-" => self.build_checked_int_arithmetic(lhs, rhs, "ssub"),
-                            "*" => self.build_checked_int_arithmetic(lhs, rhs, "smul"),
-                            "/" => self.builder().build_int_signed_div(lhs, rhs, "sdiv").into(),
-                            _ => unimplemented!(),
+                        match binary.op {
+                            ast::BinOpKind::Add => {
+                                self.build_checked_int_arithmetic(lhs, rhs, "sadd")
+                            }
+                            ast::BinOpKind::Sub => {
+                                self.build_checked_int_arithmetic(lhs, rhs, "ssub")
+                            }
+                            ast::BinOpKind::Mul => {
+                                self.build_checked_int_arithmetic(lhs, rhs, "smul")
+                            }
+                            ast::BinOpKind::Div => {
+                                self.builder().build_int_signed_div(lhs, rhs, "sdiv").into()
+                            }
                         }
                     }
                     ty::Type::Float(_) => {
                         let lhs = lhs.into_float_value();
                         let rhs = rhs.into_float_value();
-                        match binary.op.as_str() {
-                            "+" => self.builder().build_float_add(lhs, rhs, "fadd").into(),
-                            "-" => self.builder().build_float_sub(lhs, rhs, "fsub").into(),
-                            "*" => self.builder().build_float_mul(lhs, rhs, "fmul").into(),
-                            "/" => self.builder().build_float_div(lhs, rhs, "fdiv").into(),
-                            _ => unimplemented!(),
+                        match binary.op {
+                            ast::BinOpKind::Add => {
+                                self.builder().build_float_add(lhs, rhs, "fadd").into()
+                            }
+                            ast::BinOpKind::Sub => {
+                                self.builder().build_float_sub(lhs, rhs, "fsub").into()
+                            }
+                            ast::BinOpKind::Mul => {
+                                self.builder().build_float_mul(lhs, rhs, "fmul").into()
+                            }
+                            ast::BinOpKind::Div => {
+                                self.builder().build_float_div(lhs, rhs, "fdiv").into()
+                            }
                         }
                     }
                     _ => unimplemented!(),
                 }
             }
             hir::Expr::Unary(unary) => match unary.op {
-                ast::UnaryOpKind::Add => self.build_expr(&unary.expr),
-                ast::UnaryOpKind::Sub => {
+                ast::UnaryOpKind::Minus => {
                     let expr = self.build_expr(&unary.expr);
                     match unary.get_type() {
                         ty::Type::Int(_) => self

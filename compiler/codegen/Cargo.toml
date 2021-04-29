@@ -11,3 +11,5 @@ inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", feat
 parse = { path = "../parse" }
 typeck = { path = "../typeck" }
 printer = { path = "../printer" }
+hir = { path = "../hir" }
+ast = { path = "../ast" }

@@ -9,7 +9,7 @@ use std::str::Chars;
 pub type Offset = u32;
 
 pub struct SrcFile {
-    path: PathBuf,
+    pub path: PathBuf,
     inner: String,
 }
 

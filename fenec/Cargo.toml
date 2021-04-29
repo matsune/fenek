@@ -14,7 +14,7 @@ ast = { path = "../compiler/ast" }
 error = { path = "../compiler/error" }
 typeck = { path = "../compiler/typeck" }
 printer = { path = "../compiler/printer" }
-# codegen = { path = "../compiler/codegen" }
+codegen = { path = "../compiler/codegen" }
 pos = { path = "../compiler/pos" }
 lex = { path = "../compiler/lex" }
 parse = { path = "../compiler/parse" }
