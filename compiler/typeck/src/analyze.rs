@@ -21,9 +21,6 @@ fn is_parse_int_overflow_error(e: std::num::ParseIntError) -> bool {
     e == neg_overflow_err
 }
 
-#[cfg(test)]
-mod tests;
-
 type Result<T> = std::result::Result<T, CompileError>;
 
 fn compile_error(pos: Pos, typeck_err: TypeCkError) -> CompileError {

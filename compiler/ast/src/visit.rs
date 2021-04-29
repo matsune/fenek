@@ -1,4 +1,4 @@
-use crate::ast::*;
+use crate::*;
 use pos::Offset;
 
 pub enum Node<'a> {
