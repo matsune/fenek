@@ -6,16 +6,6 @@ use hir::ty;
 use pos::{Pos, SrcFile};
 use std::collections::HashMap;
 
-// https://github.com/rust-lang/rust/issues/22639
-fn is_parse_int_overflow_error(e: std::num::ParseIntError) -> bool {
-    let pos_overflow_err = "2147483648".parse::<i32>().err().unwrap();
-    if e == pos_overflow_err {
-        return true;
-    }
-    let neg_overflow_err = "-2147483649".parse::<i32>().err().unwrap();
-    e == neg_overflow_err
-}
-
 fn compile_error(pos: Pos, typeck_err: TypeCkError) -> CompileError {
     CompileError::new(pos, Box::new(typeck_err))
 }
@@ -234,7 +224,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
     fn unify_ty(
         &self,
         ty: &'infer InferTy<'infer>,
-    ) -> std::result::Result<&'infer InferTy<'infer>, TypeCkError> {
+    ) -> Result<&'infer InferTy<'infer>, TypeCkError> {
         let mut ty = ty;
         for r_ty in ty.borrow_from_nodes().iter() {
             ty = unify(ty, self.unify_ty(r_ty)?)?;
@@ -242,10 +232,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         Ok(ty)
     }
 
-    pub fn get_final_type(
-        &self,
-        ty: &'infer InferTy<'infer>,
-    ) -> std::result::Result<ty::Type, TypeCkError> {
+    pub fn get_final_type(&self, ty: &'infer InferTy<'infer>) -> Result<ty::Type, TypeCkError> {
         let top_ty = ty.prune();
         let final_kind = self.unify_ty(top_ty)?.kind;
         let final_ty = match &final_kind {
@@ -274,7 +261,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
 fn unify<'infer>(
     a: &'infer InferTy<'infer>,
     b: &'infer InferTy<'infer>,
-) -> std::result::Result<&'infer InferTy<'infer>, TypeCkError> {
+) -> Result<&'infer InferTy<'infer>, TypeCkError> {
     match (&a.kind, &b.kind) {
         // Var
         (InferTyKind::Var, _) => Ok(b),

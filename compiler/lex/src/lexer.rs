@@ -328,7 +328,7 @@ impl<'src> Lexer<'src> {
     // binary_lit       ::= "0" ("b" | "B") {"_"}* binary_digits
     // binary_digits    ::= binary_digit {binary_digit | "_"}*
     // binary_digit     ::= "0" | "1"
-    fn scan_binary_lit(&mut self, raw: &mut String) -> std::result::Result<(), LitError> {
+    fn scan_binary_lit(&mut self, raw: &mut String) -> Result<(), LitError> {
         while self.peek() == '_' {
             raw.push(self.bump());
         }
@@ -352,7 +352,7 @@ impl<'src> Lexer<'src> {
     // octal_lit       ::= "0" ("o" | "O") { "_" } octal_digits
     // octal_digits    ::= octal_digit { { "_" } octal_digit }
     // octal_digit     ::= "0" ... "7"
-    fn scan_octal_lit(&mut self, raw: &mut String) -> std::result::Result<(), LitError> {
+    fn scan_octal_lit(&mut self, raw: &mut String) -> Result<(), LitError> {
         while self.peek() == '_' {
             raw.push(self.bump());
         }
@@ -374,7 +374,7 @@ impl<'src> Lexer<'src> {
     // hex_lit       ::= "0" ("x" | "X") { "_" } hex_digits
     // hex_digits    ::= hex_digit { { "_" } hex_digit }
     // hex_digit     ::= "0" ... "9" | "A" ... "F" | "a" ... "f"
-    fn scan_hex_lit(&mut self, raw: &mut String) -> std::result::Result<(), LitError> {
+    fn scan_hex_lit(&mut self, raw: &mut String) -> Result<(), LitError> {
         while self.peek() == '_' {
             raw.push(self.bump());
         }

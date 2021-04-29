@@ -1,5 +1,6 @@
 use clap::Clap;
 use codegen::Codegen;
+use error::Result;
 use inkwell::context::Context;
 use opts::Opts;
 use pos::SrcFile;
@@ -14,7 +15,7 @@ fn main() {
     }
 }
 
-fn parse_ast(src: &SrcFile) -> Result<ast::Fun, error::CompileError> {
+fn parse_ast(src: &SrcFile) -> Result<ast::Fun> {
     let tokens = lex::lex(&src)?;
     parse::parse(&src, tokens.into())
 }

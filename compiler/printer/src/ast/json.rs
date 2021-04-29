@@ -248,7 +248,7 @@ pub enum BinOpKind {
 }
 
 impl Serialize for BinOpKind {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -279,7 +279,7 @@ pub enum UnaryOpKind {
 }
 
 impl Serialize for UnaryOpKind {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {

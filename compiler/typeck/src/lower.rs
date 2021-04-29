@@ -46,14 +46,11 @@ fn strip_base_underscore(base: token::IntBase, literal: &str) -> String {
     }
 }
 
-fn parse_int_literal<T: Num>(
-    base: token::IntBase,
-    literal: &str,
-) -> std::result::Result<T, T::FromStrRadixErr> {
+fn parse_int_literal<T: Num>(base: token::IntBase, literal: &str) -> Result<T, T::FromStrRadixErr> {
     T::from_str_radix(&strip_base_underscore(base, &literal), base.into())
 }
 
-type LowerResult<T> = std::result::Result<T, (ast::NodeId, TypeCkError)>;
+type LowerResult<T> = Result<T, (ast::NodeId, TypeCkError)>;
 
 pub fn lower(src: &SrcFile, fun: ast::Fun) -> Result<hir::Fun> {
     let lower = {
@@ -259,7 +256,7 @@ impl<'src> Lower<'src> {
         ty: &ty::Type,
         lit_kind: &ast::LitKind,
         literal: &str,
-    ) -> std::result::Result<hir::LitKind, TypeCkError> {
+    ) -> Result<hir::LitKind, TypeCkError> {
         let kind = match lit_kind {
             // int literal
             ast::LitKind::Int(base) => match ty {
