@@ -4,7 +4,6 @@ use hir::Typed;
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
-use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
 use inkwell::support::LLVMString;
 use inkwell::types::{BasicType, BasicTypeEnum, FunctionType};
@@ -221,7 +220,7 @@ impl<'ctx> Codegen<'ctx> {
         )
     }
 
-    pub fn build_fun(&mut self, fun: &hir::Fun) {
+    pub fn build_fun(&mut self, fun: hir::Fun) {
         self.function = Some(self.build_function(&fun.name.raw, &fun.ret_ty, &fun.def.arg_tys));
         // append and set basic block
         let start_bb = self.append_basic_block("start");

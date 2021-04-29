@@ -47,34 +47,10 @@ pub fn visit_fun<'a, T, F: Fn(Node<'a>) -> T>(fun: &'a Fun, id: NodeId, callback
     return_if_some!(visit_fun_args(&fun.args, id, &callback));
 
     if let Some(ret_ty) = &fun.ret_ty {
-        if ret_ty.id == id {
-            return Some(callback(Node::Ty(&ret_ty)));
-        }
+        return_if_some!(visit_ty(&ret_ty, id, &callback));
     }
 
-    if fun.block.id == id {
-        return Some(callback(Node::Block(&fun.block)));
-    }
-
-    for stmt in fun.block.stmts.iter() {
-        if stmt.id == id {
-            return Some(callback(Node::Stmt(stmt)));
-        }
-        match &stmt.kind {
-            StmtKind::VarDecl {
-                keyword: _,
-                name: _,
-                init,
-            } => {
-                return_if_some!(visit_expr(init, id, &callback));
-            }
-            StmtKind::Expr(expr) => {
-                return_if_some!(visit_expr(expr, id, &callback));
-            }
-            _ => {}
-        };
-    }
-    None
+    visit_block(&fun.block, id, &callback)
 }
 
 fn visit_fun_args<'a, T, F: Fn(Node<'a>) -> T>(
@@ -107,11 +83,9 @@ fn visit_block<'a, T, F: Fn(Node<'a>) -> T>(
     if block.id == id {
         return Some(callback(Node::Block(&block)));
     }
-
     for stmt in block.stmts.iter() {
         return_if_some!(visit_stmt(stmt, id, &callback));
     }
-
     None
 }
 

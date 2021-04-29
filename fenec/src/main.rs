@@ -4,8 +4,6 @@ use inkwell::context::Context;
 use opts::Opts;
 use pos::SrcFile;
 use std::error::Error;
-use std::io::prelude::Read;
-use std::path::{Path, PathBuf};
 
 mod opts;
 
@@ -37,7 +35,7 @@ fn run_main() -> Result<(), Box<dyn Error>> {
 
     let ctx = Context::create();
     let mut codegen = Codegen::new(&ctx);
-    codegen.build_fun(&hir_fun);
+    codegen.build_fun(hir_fun);
     if opts.emit.contains(&opts::Emit::LlvmIr) {
         let mut out = src.path;
         out.set_extension("ll");
