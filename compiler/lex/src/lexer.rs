@@ -225,7 +225,7 @@ impl<'src> Lexer<'src> {
             }
             c => return Err(self.compile_error(offset, LexerError::UnknwonToken(c))),
         };
-        Result::Ok(tok)
+        Ok(tok)
     }
 
     fn bump_while<Pred, F>(&mut self, predicate: Pred, mut callback: F)
@@ -319,7 +319,7 @@ impl<'src> Lexer<'src> {
                 offset,
             ),
         };
-        Result::Ok(tok)
+        Ok(tok)
     }
 
     // This will be called after scanning binary prefix so
@@ -414,7 +414,7 @@ impl<'src> Lexer<'src> {
                         '0' => '\0',
                         'x' => unimplemented!("hex_digit"),
                         c => {
-                            return Result::Err(self.compile_error(
+                            return Err(self.compile_error(
                                 self.offset,
                                 LitError::UnknownCharEscape(c).into(),
                             ));
@@ -427,9 +427,9 @@ impl<'src> Lexer<'src> {
             }
         }
         if terminated {
-            Result::Ok(self.mk_tok(TokenKind::Lit(LitKind::String), raw, offset))
+            Ok(self.mk_tok(TokenKind::Lit(LitKind::String), raw, offset))
         } else {
-            Result::Err(self.compile_error(offset, LitError::UnterminatedString(raw).into()))
+            Err(self.compile_error(offset, LitError::UnterminatedString(raw).into()))
         }
     }
 
@@ -457,7 +457,7 @@ impl<'src> Lexer<'src> {
     //                     't' => '\t',
     //                     '0' => '\0',
     //                     'x' => unimplemented!("hex_digit"),
-    //                     c => return Result::Err(LitError::UnknownCharEscape(c)),
+    //                     c => return Err(LitError::UnknownCharEscape(c)),
     //                 };
     //                 raw.push(escaped_c);
     //             }
@@ -466,9 +466,9 @@ impl<'src> Lexer<'src> {
     //         }
     //     }
     //     if terminated {
-    //         Result::Ok(self.mk_tok(TokenKind::Lit(LitKind::Char), raw))
+    //         Ok(self.mk_tok(TokenKind::Lit(LitKind::Char), raw))
     //     } else {
-    //         Result::Err(LitError::UnterminatedChar(raw))
+    //         Err(LitError::UnterminatedChar(raw))
     //     }
     // }
 }

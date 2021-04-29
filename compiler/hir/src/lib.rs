@@ -4,10 +4,6 @@ pub mod ty;
 use def::*;
 use lex::token;
 
-pub trait Typed {
-    fn get_type(&self) -> &ty::Type;
-}
-
 pub struct Fun {
     pub id: ast::NodeId,
     pub name: Ident,
@@ -104,18 +100,35 @@ impl Ret {
     }
 }
 
-Enum!(Expr [Lit, Ident, Binary, Unary]);
-
-impl Typed for Expr {
-    fn get_type(&self) -> &ty::Type {
-        match self {
-            Expr::Lit(lit) => lit.get_type(),
-            Expr::Ident(ident) => ident.get_type(),
-            Expr::Binary(binary) => binary.get_type(),
-            Expr::Unary(unary) => unary.get_type(),
+macro_rules! Enum_with_type {
+    ($name:ident [$($Var:ident),*]) => {
+        pub enum $name {
+            $(
+                $Var($Var),
+            )*
         }
+
+        impl $name {
+            pub fn get_type(&self) -> &ty::Type {
+                match self {
+                    $(
+                    $name::$Var(v) => v.get_type(),
+                    )*
+                }
+            }
+        }
+
+        $(
+            impl Into<$name> for $Var {
+                fn into(self) -> $name {
+                    $name::$Var(self)
+                }
+            }
+        )*
     }
 }
+
+Enum_with_type!(Expr [Lit, Ident, Binary, Unary]);
 
 pub struct Lit {
     pub id: ast::NodeId,
@@ -127,10 +140,8 @@ impl Lit {
     pub fn new(id: ast::NodeId, kind: LitKind, ty: ty::Type) -> Self {
         Self { id, kind, ty }
     }
-}
 
-impl Typed for Lit {
-    fn get_type(&self) -> &ty::Type {
+    pub fn get_type(&self) -> &ty::Type {
         &self.ty
     }
 }
@@ -163,21 +174,13 @@ impl Ident {
     pub fn new(raw: String, def: Def<ty::Type>) -> Self {
         Self { raw, def }
     }
-}
 
-impl Typed for Ident {
-    fn get_type(&self) -> &ty::Type {
+    pub fn get_type(&self) -> &ty::Type {
         match &self.def {
             Def::Fun(fun_def) => &fun_def.ret_ty,
             Def::Var(var_def) => &var_def.ty,
         }
     }
-}
-
-pub struct MethodCall {
-    method: String,
-    args: Vec<Expr>,
-    pub ty: ty::Type,
 }
 
 pub struct Binary {
@@ -198,10 +201,8 @@ impl Binary {
             ty,
         }
     }
-}
 
-impl Typed for Binary {
-    fn get_type(&self) -> &ty::Type {
+    pub fn get_type(&self) -> &ty::Type {
         &self.ty
     }
 }
@@ -220,10 +221,8 @@ impl Unary {
             expr: Box::new(expr),
         }
     }
-}
 
-impl Typed for Unary {
-    fn get_type(&self) -> &ty::Type {
+    pub fn get_type(&self) -> &ty::Type {
         &self.expr.get_type()
     }
 }

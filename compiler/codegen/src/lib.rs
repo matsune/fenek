@@ -1,6 +1,5 @@
 use hir::def::DefId;
 use hir::ty;
-use hir::Typed;
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;

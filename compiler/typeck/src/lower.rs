@@ -4,7 +4,6 @@ use crate::scope::*;
 use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
 use hir::ty;
-use hir::Typed;
 use lex::token;
 use num_traits::Num;
 use pos::{Pos, SrcFile};
@@ -382,16 +381,6 @@ impl<'src> Lower<'src> {
                 match &expr.kind {
                     ast::ExprKind::Lit(lit) => {
                         match op.op_kind() {
-                            // ast::UnaryOpKind::Add => {
-                            //     // + should have number
-                            //     if !ty.is_int() && !ty.is_float() {
-                            //         return Err(compile_error(
-                            //             lit.pos,
-                            //             TypeCkError::InvalidUnaryTypes,
-                            //         ));
-                            //     }
-                            //     self.lower_lit(unary.expr.id, &lit).map(|v| v.into())
-                            // }
                             ast::UnaryOpKind::Minus => {
                                 // - should have number
                                 if !ty.is_int() && !ty.is_float() {
