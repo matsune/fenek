@@ -4,6 +4,16 @@ pub mod ty;
 use def::*;
 use lex::token;
 
+pub struct Module {
+    pub funs: Vec<Fun>,
+}
+
+impl Module {
+    pub fn new(funs: Vec<Fun>) -> Self {
+        Self { funs }
+    }
+}
+
 pub struct Fun {
     pub id: ast::NodeId,
     pub name: Ident,

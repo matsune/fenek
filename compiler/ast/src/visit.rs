@@ -39,6 +39,17 @@ macro_rules! return_if_some {
     };
 }
 
+pub fn visit_module<'a, T, F: Fn(Node<'a>) -> T>(
+    module: &'a Module,
+    id: NodeId,
+    callback: F,
+) -> Option<T> {
+    for fun in &module.funs {
+        return_if_some!(visit_fun(&fun, id, &callback));
+    }
+    None
+}
+
 pub fn visit_fun<'a, T, F: Fn(Node<'a>) -> T>(fun: &'a Fun, id: NodeId, callback: F) -> Option<T> {
     if fun.id == id {
         return Some(callback(Node::Fun(fun)));

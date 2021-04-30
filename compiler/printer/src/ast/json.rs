@@ -2,6 +2,19 @@ use lex::token;
 use serde::{Serialize, Serializer};
 
 #[derive(Serialize)]
+pub struct Module {
+    funs: Vec<Fun>,
+}
+
+impl From<&ast::Module> for Module {
+    fn from(k: &ast::Module) -> Self {
+        Self {
+            funs: k.funs.iter().map(|f| f.into()).collect(),
+        }
+    }
+}
+
+#[derive(Serialize)]
 pub struct Fun {
     id: ast::NodeId,
     name: String,

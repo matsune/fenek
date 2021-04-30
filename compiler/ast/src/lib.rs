@@ -5,6 +5,16 @@ use pos::Offset;
 
 pub type NodeId = usize;
 
+pub struct Module {
+    pub funs: Vec<Fun>,
+}
+
+impl Module {
+    pub fn new(funs: Vec<Fun>) -> Self {
+        Self { funs }
+    }
+}
+
 pub struct Fun {
     pub id: NodeId,
     pub name: token::Token,

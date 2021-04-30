@@ -51,18 +51,19 @@ fn parse_int_literal<T: Num>(base: token::IntBase, literal: &str) -> Result<T, T
 
 type LowerResult<T> = Result<T, (ast::NodeId, TypeCkError)>;
 
-pub fn lower(src: &SrcFile, fun: ast::Fun) -> Result<hir::Fun> {
+pub fn lower(src: &SrcFile, module: ast::Module) -> Result<hir::Module> {
     let lower = {
         // lifetime 'infer
         let ty_arena = InferTyArena::default();
         let mut analyzer = TyAnalyzer::new(src, &ty_arena);
-        analyzer.analyze_fun(&fun)?;
+        analyzer.analyze_module(&module)?;
 
         // Finalyze InferTy into ty::Type
         let mut node_ty_map = HashMap::with_capacity(analyzer.node_ty_map.len());
         for (node_id, infer_ty) in analyzer.node_ty_map.iter() {
             let final_ty = analyzer.get_final_type(infer_ty).map_err(|err| {
-                let offset = ast::visit::visit_fun(&fun, *node_id, |node| node.offset()).unwrap();
+                let offset =
+                    ast::visit::visit_module(&module, *node_id, |node| node.offset()).unwrap();
                 compile_error(src.pos_from_offset(offset), err)
             })?;
             node_ty_map.insert(*node_id, final_ty);
@@ -94,7 +95,7 @@ pub fn lower(src: &SrcFile, fun: ast::Fun) -> Result<hir::Fun> {
         }
         Lower::new(&src, node_ty_map, analyzer.node_scope_map, scopes)
     };
-    lower.lower_fun(&fun)
+    lower.lower_module(&module)
 }
 
 struct Lower<'src> {
@@ -119,19 +120,12 @@ impl<'src> Lower<'src> {
         }
     }
 
-    fn get_type_from_name(&self, ty_name: &str) -> ty::Type {
-        match ty_name {
-            "i8" => ty::Type::Int(ty::IntKind::I8),
-            "i16" => ty::Type::Int(ty::IntKind::I16),
-            "i32" => ty::Type::Int(ty::IntKind::I32),
-            "i64" => ty::Type::Int(ty::IntKind::I64),
-            "f32" => ty::Type::Float(ty::FloatKind::F32),
-            "f64" => ty::Type::Float(ty::FloatKind::F64),
-            "bool" => ty::Type::Bool,
-            // "string" => self.ty_arena.alloc_string(),
-            "void" => ty::Type::Void,
-            _ => unreachable!(),
+    fn lower_module(&self, module: &ast::Module) -> Result<hir::Module> {
+        let mut funs = Vec::new();
+        for fun in &module.funs {
+            funs.push(self.lower_fun(&fun)?);
         }
+        Ok(hir::Module::new(funs))
     }
 
     fn lower_fun(&self, fun: &ast::Fun) -> Result<hir::Fun> {
@@ -151,7 +145,7 @@ impl<'src> Lower<'src> {
             let def = scope.lookup(&arg.name.raw).unwrap().as_var_def();
             args.push(hir::Ident::new(
                 arg.name.raw.clone(),
-                VarDef::new(def.id, self.get_type_from_name(&arg.name.raw), def.is_mut).into(),
+                VarDef::new(def.id, def.ty.clone(), def.is_mut).into(),
             ));
         }
         let mut stmts = Vec::new();

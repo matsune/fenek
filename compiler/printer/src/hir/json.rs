@@ -3,6 +3,19 @@ use serde::Serialize;
 use std::ops::Deref;
 
 #[derive(Serialize)]
+pub struct Module {
+    funs: Vec<Fun>,
+}
+
+impl From<&hir::Module> for Module {
+    fn from(base: &hir::Module) -> Self {
+        Self {
+            funs: base.funs.iter().map(|fun| fun.into()).collect(),
+        }
+    }
+}
+
+#[derive(Serialize)]
 pub struct Fun {
     id: ast::NodeId,
     def_id: hir::def::DefId,

@@ -1,4 +1,8 @@
-fun main() -> i32 {
-  var a = (12.3 + 3) * 4;
-  ret a / 7;
+fun sum(a: i32, b: i32) -> i32 {
+  ret a + b;
+}
+
+fun main() -> i8 {
+  var a = -(-12 + 3) * 4;
+  ret a * 10;
 }

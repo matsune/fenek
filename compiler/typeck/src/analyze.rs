@@ -81,7 +81,14 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         Some(infer_ty)
     }
 
-    pub fn analyze_fun(&mut self, fun: &ast::Fun) -> Result<()> {
+    pub fn analyze_module(&mut self, module: &ast::Module) -> Result<()> {
+        for fun in &module.funs {
+            self.analyze_fun(&fun)?;
+        }
+        Ok(())
+    }
+
+    fn analyze_fun(&mut self, fun: &ast::Fun) -> Result<()> {
         let ret_ty = match &fun.ret_ty {
             Some(ret_ty) => {
                 let ret_ty_id = ret_ty.id;

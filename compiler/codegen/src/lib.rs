@@ -65,7 +65,7 @@ impl<'ctx> Variable<'ctx> {
 //     fn merge(
 //         self,
 //         other: Self,
-//         self_bb: BasicBlock<'ctx>,
+//         this_bb: BasicBlock<'ctx>,
 //         other_bb: BasicBlock<'ctx>,
 //         codegen: &mut Codegen<'ctx>,
 //     ) -> Self;
@@ -75,7 +75,7 @@ impl<'ctx> Variable<'ctx> {
 //     fn merge(
 //         self,
 //         other: Self,
-//         self_bb: BasicBlock<'ctx>,
+//         this_bb: BasicBlock<'ctx>,
 //         other_bb: BasicBlock<'ctx>,
 //         codegen: &mut Codegen<'ctx>,
 //     ) -> Self {
@@ -86,14 +86,14 @@ impl<'ctx> Variable<'ctx> {
 //     fn merge(
 //         self,
 //         other: Self,
-//         self_bb: BasicBlock<'ctx>,
+//         this_bb: BasicBlock<'ctx>,
 //         other_bb: BasicBlock<'ctx>,
 //         codegen: &mut Codegen<'ctx>,
 //     ) -> Self {
 //         let phi = codegen
 //             .builder()
 //             .build_phi(self.get_type(), "mergeValuesEndIf");
-//         phi.add_incoming(&[(&self, self_bb), (&other, other_bb)]);
+//         phi.add_incoming(&[(&self, this_bb), (&other, other_bb)]);
 //         phi.as_basic_value()
 //     }
 // }
@@ -217,6 +217,12 @@ impl<'ctx> Codegen<'ctx> {
             self.module.add_function(name, fn_type, None),
             self.context.create_builder(),
         )
+    }
+
+    pub fn build_module(&mut self, module: hir::Module) {
+        for fun in module.funs {
+            self.build_fun(fun);
+        }
     }
 
     pub fn build_fun(&mut self, fun: hir::Fun) {
@@ -436,9 +442,9 @@ impl<'ctx> Codegen<'ctx> {
         self.build_conditional(
             is_overflow,
             // Return an error if there is overflow.
-            |self_| {
-                self_.intrinsic_puts(&format!("attempt to {} with overflow", name));
-                self_.intrinsic_exit(1);
+            |this| {
+                this.intrinsic_puts(&format!("attempt to {} with overflow", name));
+                this.intrinsic_exit(1);
             },
             // Otherwise proceed.
             |_| (),

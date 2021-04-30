@@ -15,7 +15,7 @@ fn main() {
     }
 }
 
-fn parse_ast(src: &SrcFile) -> Result<ast::Fun> {
+fn parse_ast(src: &SrcFile) -> Result<ast::Module> {
     let tokens = lex::lex(&src)?;
     parse::parse(&src, tokens.into())
 }
@@ -23,20 +23,20 @@ fn parse_ast(src: &SrcFile) -> Result<ast::Fun> {
 fn run_main() -> Result<(), Box<dyn Error>> {
     let opts = Opts::parse();
     let src = SrcFile::open(opts.src)?;
-    let hir_fun = {
-        let ast_fun = parse_ast(&src)?;
+    let module = {
+        let ast = parse_ast(&src)?;
         if opts.emit.contains(&opts::Emit::Ast) {
-            printer::print_ast_fun(&ast_fun)?;
+            printer::ast::print(&ast)?;
         }
-        typeck::lower(&src, ast_fun)?
+        typeck::lower(&src, ast)?
     };
     if opts.emit.contains(&opts::Emit::Hir) {
-        printer::print_hir_fun(&hir_fun)?;
+        printer::hir::print(&module)?;
     }
 
     let ctx = Context::create();
     let mut codegen = Codegen::new(&ctx);
-    codegen.build_fun(hir_fun);
+    codegen.build_module(module);
     if opts.emit.contains(&opts::Emit::LlvmIr) {
         let mut out = src.path;
         out.set_extension("ll");
