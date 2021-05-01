@@ -173,7 +173,7 @@ impl<'src> Parser<'src> {
         let ty = self
             .bump_if(|tok| tok.is_ident() && !tok.is_keyword())
             .ok_or_else(|| self.compile_error(ParseError::InvalidTyName))?;
-        Ok(Ty::new_single(self.gen_id(), ty))
+        Ok(Ty::new_basic(self.gen_id(), ty))
     }
 
     fn parse_block(&mut self) -> Result<Block> {
@@ -308,7 +308,55 @@ impl<'src> Parser<'src> {
                 let expr = self.parse_prefix_expr()?;
                 Ok(Expr::new_unary(self.gen_id(), op, Box::new(expr)))
             }
-            _ => self.parse_primary_expr(),
+            _ => self.parse_postfix_expr(),
+        }
+    }
+
+    fn parse_postfix_expr(&mut self) -> Result<Expr> {
+        let primary = self.parse_primary_expr()?;
+        self.skip_spaces();
+        match primary.kind {
+            ExprKind::Path(tok) if self.is_next_kind(token::TokenKind::LParen) => {
+                self.bump();
+                self.skip_spaces();
+                if self
+                    .bump_if(|tok| tok.kind == token::TokenKind::RParen)
+                    .is_some()
+                {
+                    return Ok(Expr::new_call(self.gen_id(), tok, Vec::new()));
+                }
+
+                let mut args = Vec::new();
+                loop {
+                    args.push(self.parse_expr()?);
+                    self.skip_spaces();
+
+                    match self.peek() {
+                        Some(tok) if tok.kind == token::TokenKind::RParen => {
+                            self.bump();
+                            break;
+                        }
+                        Some(tok) if tok.kind == token::TokenKind::Comma => {
+                            self.bump();
+                            self.skip_spaces();
+                        }
+                        Some(tok) => {
+                            return Err(CompileError::new(
+                                self.src.pos_from_offset(tok.offset),
+                                ParseError::Expected(")` or `,".to_string()).into(),
+                            ))
+                        }
+                        None => {
+                            return Err(CompileError::new(
+                                self.src.pos_from_offset(self.last_offset),
+                                ParseError::UnexpectedEof.into(),
+                            ))
+                        }
+                    };
+                }
+                Ok(Expr::new_call(self.gen_id(), tok, args))
+            }
+            _ => Ok(primary),
         }
     }
 
@@ -331,7 +379,7 @@ impl<'src> Parser<'src> {
                         ParseError::CannotUseKeyword(tok.raw).into(),
                     ))
                 } else {
-                    Ok(Expr::new_var(self.gen_id(), tok))
+                    Ok(Expr::new_path(self.gen_id(), tok))
                 }
             }
             token::TokenKind::LParen => {

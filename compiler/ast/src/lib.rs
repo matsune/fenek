@@ -67,10 +67,10 @@ impl ToString for Ty {
 }
 
 impl Ty {
-    pub fn new_single(id: NodeId, tok: token::Token) -> Self {
+    pub fn new_basic(id: NodeId, tok: token::Token) -> Self {
         Self {
             id,
-            kind: TyKind::Single(tok),
+            kind: TyKind::Basic(tok),
         }
     }
 
@@ -80,14 +80,14 @@ impl Ty {
 }
 
 pub enum TyKind {
-    Single(token::Token),
+    Basic(token::Token),
     // Lambda, Tuple...
 }
 
 impl ToString for TyKind {
     fn to_string(&self) -> String {
         match self {
-            Self::Single(tok) => tok.raw.clone(),
+            Self::Basic(tok) => tok.raw.clone(),
         }
     }
 }
@@ -95,7 +95,7 @@ impl ToString for TyKind {
 impl TyKind {
     pub fn offset(&self) -> Offset {
         match self {
-            Self::Single(tok) => tok.offset,
+            Self::Basic(tok) => tok.offset,
         }
     }
 }
@@ -195,10 +195,17 @@ impl Expr {
         Self { id, kind }
     }
 
-    pub fn new_var(id: NodeId, token: token::Token) -> Self {
+    pub fn new_path(id: NodeId, token: token::Token) -> Self {
         Self {
             id,
-            kind: ExprKind::Var(token),
+            kind: ExprKind::Path(token),
+        }
+    }
+
+    pub fn new_call(id: NodeId, token: token::Token, args: Vec<Expr>) -> Self {
+        Self {
+            id,
+            kind: ExprKind::Call(token, args),
         }
     }
 
@@ -229,7 +236,10 @@ impl Expr {
 }
 
 pub enum ExprKind {
-    Var(token::Token),
+    // `Path` will have an array of tokens to represent
+    // either variable, method or field of struct.
+    Path(token::Token),
+    Call(token::Token, Vec<Expr>),
     Lit(Lit),
     Binary(BinOp, Box<Expr>, Box<Expr>),
     Unary(UnaryOp, Box<Expr>),
@@ -238,7 +248,8 @@ pub enum ExprKind {
 impl ExprKind {
     pub fn offset(&self) -> Offset {
         match self {
-            Self::Var(tok) => tok.offset,
+            Self::Path(tok) => tok.offset,
+            Self::Call(tok, _) => tok.offset,
             Self::Lit(lit) => lit.token.offset,
             Self::Binary(_, lhs, _) => lhs.offset(),
             Self::Unary(op, _) => op.raw.offset,

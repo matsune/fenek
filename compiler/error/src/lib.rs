@@ -78,14 +78,20 @@ pub enum ParseError {
 
 #[derive(Error, Debug)]
 pub enum TypeCkError {
+    #[error("already defined function `{0}`")]
+    AlreadyDefinedFun(String),
     #[error("already defined variable `{0}`")]
     AlreadyDefinedVariable(String),
     #[error("invalid type")]
     InvalidType,
     #[error("undefined type `{0}`")]
     UndefinedType(String),
+    #[error("undefined function `{0}`")]
+    UndefinedFun(String),
     #[error("undefined variable `{0}`")]
     UndefinedVariable(String),
+    #[error("invalid args count")]
+    InvalidArgsCount,
     #[error("invalid return type")]
     InvalidReturnType,
     #[error("must be ret statement")]

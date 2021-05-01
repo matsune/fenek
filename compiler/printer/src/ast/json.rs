@@ -72,13 +72,13 @@ impl From<&ast::Ty> for Ty {
 
 #[derive(Serialize)]
 enum TyKind {
-    Single(String),
+    Basic(String),
 }
 
 impl From<&ast::TyKind> for TyKind {
     fn from(k: &ast::TyKind) -> Self {
         match k {
-            ast::TyKind::Single(tok) => Self::Single(tok.raw.clone()),
+            ast::TyKind::Basic(tok) => Self::Basic(tok.raw.clone()),
         }
     }
 }
@@ -158,8 +158,12 @@ impl From<&ast::Expr> for Expr {
 
 #[derive(Serialize)]
 enum ExprKind {
-    Var {
+    Path {
         raw: String,
+    },
+    Call {
+        name: String,
+        args: Vec<Expr>,
     },
     Lit(Lit),
     Binary {
@@ -176,8 +180,12 @@ enum ExprKind {
 impl From<&ast::ExprKind> for ExprKind {
     fn from(k: &ast::ExprKind) -> Self {
         match k {
-            ast::ExprKind::Var(tok) => Self::Var {
+            ast::ExprKind::Path(tok) => Self::Path {
                 raw: tok.raw.clone(),
+            },
+            ast::ExprKind::Call(tok, args) => Self::Call {
+                name: tok.raw.clone(),
+                args: args.iter().map(|arg| arg.into()).collect(),
             },
             ast::ExprKind::Lit(lit) => Self::Lit(lit.into()),
             ast::ExprKind::Binary(op, lhs, rhs) => {

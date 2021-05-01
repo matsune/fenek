@@ -1,5 +1,8 @@
-use hir::def::{Def, FunDef, VarDef};
+use crate::infer_ty::InferTy;
+use hir::def::Def;
+use hir::ty;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 pub type ArenaIdx = usize;
 
@@ -36,7 +39,7 @@ impl<T> std::convert::From<Vec<ScopeTable<T>>> for ScopeArena<T> {
 #[derive(Debug)]
 pub struct ScopeTable<T> {
     pub idx: ArenaIdx,
-    pub table: HashMap<String, Def<T>>,
+    pub table: HashMap<String, Rc<Def<T>>>,
     pub parent: Option<ArenaIdx>,
 }
 
@@ -49,23 +52,83 @@ impl<T> ScopeTable<T> {
         }
     }
 
-    pub fn lookup(&self, symbol: &str) -> Option<&Def<T>> {
-        self.table.get(symbol)
-    }
-
-    pub fn lookup_mut(&mut self, symbol: &str) -> Option<&mut Def<T>> {
+    pub fn lookup_mut(&mut self, symbol: &str) -> Option<&mut Rc<Def<T>>> {
         self.table.get_mut(symbol)
     }
 
     pub fn insert(&mut self, key: String, value: Def<T>) {
-        self.table.insert(key, value);
+        self.table.insert(key, Rc::new(value));
     }
 
-    pub fn insert_var(&mut self, symbol: String, def: VarDef<T>) {
-        self.table.insert(symbol, Def::Var(def));
+    pub fn insert_var(&mut self, symbol: String, def: Def<T>) -> Rc<Def<T>> {
+        let rc = Rc::new(def);
+        self.table.insert(symbol, rc.clone());
+        rc
     }
 
-    pub fn insert_fun(&mut self, symbol: String, def: FunDef<T>) {
-        self.table.insert(symbol, Def::Fun(def));
+    pub fn insert_fun(&mut self, symbol: String, def: Def<T>) -> Rc<Def<T>> {
+        let rc = Rc::new(def);
+        self.table.insert(symbol, rc.clone());
+        rc
+    }
+}
+
+impl ScopeTable<ty::Type> {
+    pub fn lookup_fun(&self, symbol: &str) -> Option<Rc<Def<ty::Type>>> {
+        match self.table.get(symbol) {
+            Some(cell) => {
+                let def: &Def<_> = cell;
+                if def.ty.is_fun() {
+                    Some(cell.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    pub fn lookup_var(&self, symbol: &str) -> Option<Rc<Def<ty::Type>>> {
+        match self.table.get(symbol) {
+            Some(cell) => {
+                let def: &Def<_> = cell;
+                if !def.ty.is_fun() {
+                    Some(cell.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+}
+
+impl<'a> ScopeTable<&'a InferTy<'a>> {
+    pub fn lookup_fun(&self, symbol: &str) -> Option<Rc<Def<&'a InferTy<'a>>>> {
+        match self.table.get(symbol) {
+            Some(cell) => {
+                let def: &Def<_> = cell;
+                if def.ty.kind.is_fun() {
+                    Some(cell.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    pub fn lookup_var(&self, symbol: &str) -> Option<Rc<Def<&'a InferTy<'a>>>> {
+        match self.table.get(symbol) {
+            Some(cell) => {
+                let def: &Def<_> = cell;
+                if !def.ty.kind.is_fun() {
+                    Some(cell.clone())
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
     }
 }

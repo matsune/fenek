@@ -1,4 +1,5 @@
 use serde::{Serialize, Serializer};
+use std::ops::Deref;
 
 macro_rules! impl_serializer_for_ToString {
     ($name:ident) => {
@@ -55,17 +56,14 @@ impl ToString for Type {
 
 pub struct FunType {
     args: Vec<Type>,
-    ret: Option<Box<Type>>,
+    ret: Box<Type>,
 }
 
 impl From<&hir::ty::FunType> for FunType {
     fn from(fun: &hir::ty::FunType) -> Self {
         Self {
             args: fun.args.iter().map(|arg| arg.into()).collect(),
-            ret: fun.ret.as_ref().map(|b| {
-                let ty: &hir::ty::Type = b;
-                Box::new(Type::from(ty))
-            }),
+            ret: Box::new(fun.ret.deref().into()),
         }
     }
 }
@@ -79,10 +77,7 @@ impl ToString for FunType {
                 .map(|arg| arg.to_string())
                 .collect::<Vec<String>>()
                 .join(", "),
-            self.ret
-                .as_ref()
-                .map(|b| b.to_string())
-                .unwrap_or_else(|| Type::Void.to_string())
+            self.ret.to_string()
         )
     }
 }

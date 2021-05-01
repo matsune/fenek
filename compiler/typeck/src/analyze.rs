@@ -4,7 +4,8 @@ use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
 use hir::ty;
 use pos::{Pos, SrcFile};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 fn compile_error(pos: Pos, typeck_err: TypeCkError) -> CompileError {
     CompileError::new(pos, Box::new(typeck_err))
@@ -15,10 +16,10 @@ pub struct TyAnalyzer<'src, 'infer> {
     ty_arena: &'infer InferTyArena<'infer>,
     pub node_ty_map: HashMap<ast::NodeId, &'infer InferTy<'infer>>,
     pub node_scope_map: HashMap<ast::NodeId, ArenaIdx>,
+    pub node_def_map: HashMap<ast::NodeId, Rc<Def<&'infer InferTy<'infer>>>>,
     pub scopes: Vec<ScopeTable<&'infer InferTy<'infer>>>,
     scope_idx: ArenaIdx,
     def_id: DefId,
-    current_fn_ret_ty: Option<&'infer InferTy<'infer>>,
 }
 
 impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
@@ -32,10 +33,10 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
             ty_arena,
             node_scope_map: HashMap::new(),
             node_ty_map: HashMap::new(),
+            node_def_map: HashMap::new(),
             scopes,
             scope_idx,
             def_id: 0,
-            current_fn_ret_ty: None,
         }
     }
 
@@ -65,7 +66,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
 
     fn get_type_from_ty(&self, ty: &ast::Ty) -> Option<&'infer InferTy<'infer>> {
         let infer_ty = match &ty.kind {
-            ast::TyKind::Single(tok) => match tok.raw.as_str() {
+            ast::TyKind::Basic(tok) => match tok.raw.as_str() {
                 "i8" => self.ty_arena.alloc_i8(),
                 "i16" => self.ty_arena.alloc_i16(),
                 "i32" => self.ty_arena.alloc_i32(),
@@ -81,14 +82,72 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         Some(infer_ty)
     }
 
+    fn lookup_fun(&self, name: &str) -> Option<Rc<Def<&'infer InferTy<'infer>>>> {
+        let scopes = &self.scopes;
+        let mut tmp_idx = self.scope_idx;
+        while let Some(scope_table) = scopes.get(tmp_idx) {
+            match scope_table.lookup_fun(name) {
+                Some(fun_def) => {
+                    return Some(fun_def.clone());
+                }
+                None => match scope_table.parent {
+                    Some(parent_idx) => tmp_idx = parent_idx,
+                    None => break,
+                },
+            }
+        }
+        None
+    }
+
     pub fn analyze_module(&mut self, module: &ast::Module) -> Result<()> {
+        for fun in &module.funs {
+            if self.lookup_fun(&fun.name.raw).is_some() {
+                return Err(compile_error(
+                    self.src.pos_from_offset(fun.name.offset),
+                    TypeCkError::AlreadyDefinedFun(fun.name.raw.clone()),
+                ));
+            }
+            let fun_def = self.make_fun_def(&fun)?;
+            let rc = self
+                .get_scope_mut()
+                .insert_fun(fun.name.raw.clone(), fun_def);
+            self.node_def_map.insert(fun.id, rc);
+        }
+
         for fun in &module.funs {
             self.analyze_fun(&fun)?;
         }
         Ok(())
     }
 
-    fn analyze_fun(&mut self, fun: &ast::Fun) -> Result<()> {
+    fn make_fun_def(&mut self, fun: &ast::Fun) -> Result<Def<&'infer InferTy<'infer>>> {
+        let mut arg_tys = Vec::new();
+        let mut arg_names = HashSet::new();
+        for arg in &fun.args {
+            let arg_name = &arg.name.raw;
+            if arg_names.contains(arg_name) {
+                return Err(compile_error(
+                    self.src.pos_from_offset(arg.name.offset),
+                    TypeCkError::AlreadyDefinedVariable(arg_name.clone()),
+                ));
+            }
+            arg_names.insert(arg_name);
+            let arg_ty = self.get_type_from_ty(&arg.ty).ok_or_else(|| {
+                compile_error(
+                    self.src.pos_from_offset(arg.ty.offset()),
+                    TypeCkError::UndefinedType(arg.ty.to_string()),
+                )
+            })?;
+            if !arg_ty.kind.is_variable() {
+                return Err(compile_error(
+                    self.src.pos_from_offset(arg.ty.offset()),
+                    TypeCkError::InvalidType,
+                ));
+            }
+            arg_tys.push(arg_ty);
+            self.node_ty_map.insert(arg.id, arg_ty);
+        }
+
         let ret_ty = match &fun.ret_ty {
             Some(ret_ty) => {
                 let ret_ty_id = ret_ty.id;
@@ -103,59 +162,39 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
             }
             None => self.ty_arena.alloc_void(),
         };
-        self.current_fn_ret_ty = Some(ret_ty);
+
+        Ok(Def::new(
+            self.gen_def_id(),
+            self.ty_arena.alloc_fun(arg_tys, ret_ty),
+            false,
+        ))
+    }
+
+    fn analyze_fun(&mut self, fun: &ast::Fun) -> Result<()> {
+        let fun_def = self.lookup_fun(&fun.name.raw).unwrap();
         self.push_scope();
         self.node_scope_map.insert(fun.block.id, self.scope_idx);
 
-        for arg in &fun.args {
-            let arg_name = arg.name.raw.clone();
-            if self.get_scope().lookup(&arg_name).is_some() {
-                return Err(compile_error(
-                    self.src.pos_from_offset(arg.name.offset),
-                    TypeCkError::AlreadyDefinedVariable(arg_name),
-                ));
-            }
-            let ty = self.get_type_from_ty(&arg.ty).ok_or_else(|| {
-                compile_error(
-                    self.src.pos_from_offset(arg.ty.offset()),
-                    TypeCkError::UndefinedType(arg.ty.to_string()),
-                )
-            })?;
-            // void type can't be used as an arg type
-            if ty.is_void() {
-                return Err(compile_error(
-                    self.src.pos_from_offset(arg.ty.offset()),
-                    TypeCkError::InvalidType,
-                ));
-            }
-            let def = VarDef::new(self.gen_def_id(), ty, false);
-            self.get_scope_mut().insert_var(arg_name, def);
+        for (idx, arg) in fun.args.iter().enumerate() {
+            let ty = fun_def.ty.kind.as_fun().arg_tys[idx];
+            let def = Def::new(self.gen_def_id(), ty, false);
+            let def = self.get_scope_mut().insert_var(arg.name.raw.clone(), def);
+            self.node_def_map.insert(arg.id, def);
         }
 
         for stmt in &fun.block.stmts {
-            self.analyze_stmt(&stmt)?;
+            self.analyze_stmt(&stmt, &fun_def.ty.kind.as_fun().ret_ty)?;
         }
 
-        let def = FunDef::new(
-            self.gen_def_id(),
-            ret_ty,
-            fun.args
-                .iter()
-                .map(|arg| {
-                    self.get_scope()
-                        .lookup(&arg.name.raw)
-                        .unwrap()
-                        .as_var_def()
-                        .ty
-                })
-                .collect(),
-        );
         self.pop_scope();
-        self.get_scope_mut().insert_fun(fun.name.raw.clone(), def);
         Ok(())
     }
 
-    fn analyze_stmt(&mut self, stmt: &ast::Stmt) -> Result<()> {
+    fn analyze_stmt(
+        &mut self,
+        stmt: &ast::Stmt,
+        current_fn_ret_ty: &'infer InferTy<'infer>,
+    ) -> Result<()> {
         match &stmt.kind {
             ast::StmtKind::Expr(expr) => {
                 self.analyze_expr(&expr)?;
@@ -165,7 +204,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 name,
                 init,
             } => {
-                if self.get_scope().lookup(&name.raw).is_some() {
+                if self.get_scope().lookup_var(&name.raw).is_some() {
                     return Err(compile_error(
                         self.src.pos_from_offset(name.offset),
                         TypeCkError::AlreadyDefinedVariable(name.raw.clone()),
@@ -175,17 +214,16 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 let var_ty = self.ty_arena.alloc_var();
                 let def_id = self.gen_def_id();
                 init_ty.set_prune(var_ty);
-                let def = VarDef::new(def_id, init_ty, true);
-                self.get_scope_mut().insert_var(name.raw.clone(), def);
+                let def = Def::new(def_id, init_ty, true);
+                let def = self.get_scope_mut().insert_var(name.raw.clone(), def);
+                self.node_def_map.insert(stmt.id, def);
             }
             ast::StmtKind::Ret { keyword: _, expr } => {
                 let ty = match &expr {
                     Some(expr) => self.analyze_expr(&expr)?,
                     None => self.ty_arena.alloc_void(),
                 };
-                if let Some(ret_ty) = self.current_fn_ret_ty {
-                    ty.set_prune(ret_ty);
-                }
+                ty.set_prune(current_fn_ret_ty);
             }
             ast::StmtKind::Empty(_) => {}
         };
@@ -200,8 +238,12 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 ast::LitKind::Bool => self.ty_arena.alloc_bool(),
                 ast::LitKind::String => unimplemented!(),
             },
-            ast::ExprKind::Var(tok) => match self.get_scope().lookup(&tok.raw) {
-                Some(def) => def.as_var_def().ty,
+            ast::ExprKind::Path(tok) => match self.get_scope().lookup_var(&tok.raw) {
+                Some(var_def) => {
+                    let ty = var_def.ty;
+                    self.node_def_map.insert(expr.id, var_def);
+                    ty
+                }
                 None => {
                     return Err(compile_error(
                         self.src.pos_from_offset(tok.offset),
@@ -209,6 +251,30 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                     ));
                 }
             },
+            ast::ExprKind::Call(path, args) => {
+                let def = self.lookup_fun(&path.raw).ok_or_else(|| {
+                    compile_error(
+                        self.src.pos_from_offset(path.offset),
+                        TypeCkError::UndefinedFun(path.raw.clone()),
+                    )
+                })?;
+                if def.ty.kind.as_fun().arg_tys.len() != args.len() {
+                    return Err(compile_error(
+                        self.src.pos_from_offset(path.offset),
+                        TypeCkError::InvalidArgsCount,
+                    ));
+                }
+                self.node_def_map.insert(expr.id, def.clone());
+                let ty = self.ty_arena.alloc_var();
+                let arg_tys = &def.ty.kind.as_fun().arg_tys;
+                for (idx, arg) in args.iter().enumerate() {
+                    let ty = arg_tys[idx];
+                    let arg_ty = self.analyze_expr(&arg)?;
+                    arg_ty.set_prune(ty);
+                }
+                ty.set_prune(&def.ty.kind.as_fun().ret_ty);
+                ty
+            }
             ast::ExprKind::Binary(_, lhs, rhs) => {
                 let binary_ty = self.ty_arena.alloc_var();
                 let lhs_ty = self.analyze_expr(&lhs)?;
@@ -241,8 +307,8 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
 
     pub fn get_final_type(&self, ty: &'infer InferTy<'infer>) -> Result<ty::Type, TypeCkError> {
         let top_ty = ty.prune();
-        let final_kind = self.unify_ty(top_ty)?.kind;
-        let final_ty = match &final_kind {
+        let final_kind = &self.unify_ty(top_ty)?.kind;
+        let final_ty = match final_kind {
             InferTyKind::Var => {
                 return Err(TypeCkError::UnresolvedType);
             }
@@ -260,6 +326,14 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
             InferTyKind::FloatLit => ty::Type::Float(ty::FloatKind::F64),
             InferTyKind::Bool => ty::Type::Bool,
             InferTyKind::Void => ty::Type::Void,
+            InferTyKind::Fun(fun_ty) => {
+                let mut arg_tys = Vec::new();
+                for arg_ty in &fun_ty.arg_tys {
+                    arg_tys.push(self.get_final_type(arg_ty)?);
+                }
+                let ret_ty = self.get_final_type(&fun_ty.ret_ty)?;
+                ty::Type::Fun(ty::FunType::new(arg_tys, Box::new(ret_ty)))
+            }
         };
         Ok(final_ty)
     }

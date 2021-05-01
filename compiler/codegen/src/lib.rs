@@ -8,7 +8,9 @@ use inkwell::support::LLVMString;
 use inkwell::types::{BasicType, BasicTypeEnum, FunctionType};
 use inkwell::values::{BasicValueEnum, FunctionValue, IntMathValue, IntValue, PointerValue};
 use inkwell::AddressSpace;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 fn llvm_intrinsic_type_name(ty: BasicTypeEnum) -> String {
     match ty {
@@ -39,6 +41,18 @@ impl<'ctx> Function<'ctx> {
             builder,
             var_map: HashMap::new(),
         }
+    }
+
+    fn current_block(&self) -> BasicBlock<'ctx> {
+        self.builder.get_insert_block().unwrap()
+    }
+
+    fn needs_terminator(&self) -> bool {
+        self.builder
+            .get_insert_block()
+            .unwrap()
+            .get_terminator()
+            .is_none()
     }
 }
 
@@ -101,7 +115,8 @@ impl<'ctx> Variable<'ctx> {
 pub struct Codegen<'ctx> {
     context: &'ctx Context,
     module: Module<'ctx>,
-    function: Option<Function<'ctx>>,
+    // function: Option<&Function<'ctx>>,
+    def_function_map: HashMap<DefId, Rc<RefCell<Function<'ctx>>>>,
 }
 
 impl<'ctx> Codegen<'ctx> {
@@ -109,7 +124,8 @@ impl<'ctx> Codegen<'ctx> {
         Self {
             context,
             module: context.create_module("fenec"),
-            function: None,
+            // function: None,
+            def_function_map: HashMap::new(),
         }
     }
 
@@ -117,38 +133,40 @@ impl<'ctx> Codegen<'ctx> {
         self.module.print_to_file(path)
     }
 
-    fn function(&self) -> &Function<'ctx> {
-        self.function.as_ref().unwrap()
-    }
+    // fn function(&self) -> &Function<'ctx> {
+    //     self.function.as_ref().unwrap()
+    // }
 
-    fn function_mut(&mut self) -> &mut Function<'ctx> {
-        self.function.as_mut().unwrap()
-    }
+    // fn function_mut(&mut self) -> &mut Function<'ctx> {
+    //     self.function.as_mut().unwrap()
+    // }
 
-    fn builder(&self) -> &Builder<'ctx> {
-        &self.function().builder
-    }
+    // fn builder(&self) -> &Builder<'ctx> {
+    //     &self.function().builder
+    // }
 
-    fn append_basic_block(&self, name: &str) -> BasicBlock<'ctx> {
-        self.context
-            .append_basic_block(self.function().fn_value, name)
+    fn append_basic_block(&self, function: &Function<'ctx>, name: &str) -> BasicBlock<'ctx> {
+        self.context.append_basic_block(function.fn_value, name)
     }
+    // fn append_basic_block(&self, name: &str) -> BasicBlock<'ctx> {
+    //     self.context
+    //         .append_basic_block(self.function().fn_value, name)
+    // }
 
-    fn set_basic_block(&self, basic_block: BasicBlock<'ctx>) {
-        self.function().builder.position_at_end(basic_block);
+    fn set_basic_block(&self, function: &Function<'ctx>, basic_block: BasicBlock<'ctx>) {
+        function.builder.position_at_end(basic_block);
     }
+    // fn set_basic_block(&self, basic_block: BasicBlock<'ctx>) {
+    //     self.function().builder.position_at_end(basic_block);
+    // }
 
-    fn current_block(&mut self) -> BasicBlock<'ctx> {
-        self.builder().get_insert_block().unwrap()
-    }
-
-    fn needs_terminator(&mut self) -> bool {
-        self.builder()
-            .get_insert_block()
-            .unwrap()
-            .get_terminator()
-            .is_none()
-    }
+    // fn needs_terminator(&mut self) -> bool {
+    //     self.builder()
+    //         .get_insert_block()
+    //         .unwrap()
+    //         .get_terminator()
+    //         .is_none()
+    // }
 
     pub fn get_llvm_intrinisic(
         &mut self,
@@ -220,55 +238,73 @@ impl<'ctx> Codegen<'ctx> {
     }
 
     pub fn build_module(&mut self, module: hir::Module) {
+        for fun in &module.funs {
+            let function = self.build_function(
+                &fun.name,
+                &fun.def.ty.as_fun().ret,
+                &fun.def.ty.as_fun().args,
+            );
+            self.def_function_map
+                .insert(fun.def.id, Rc::new(RefCell::new(function)));
+        }
+
         for fun in module.funs {
             self.build_fun(fun);
         }
     }
 
     pub fn build_fun(&mut self, fun: hir::Fun) {
-        self.function = Some(self.build_function(&fun.name.raw, &fun.ret_ty, &fun.def.arg_tys));
+        let function = self.def_function_map.get(&fun.def.id).unwrap().clone();
         // append and set basic block
-        let start_bb = self.append_basic_block("start");
-        self.set_basic_block(start_bb);
+        let start_bb = self.append_basic_block(&function.borrow(), "start");
+        self.set_basic_block(&function.borrow(), start_bb);
         // args
-        self.build_fun_args(&fun);
+        self.build_fun_args(&function, &fun);
         // block
         for stmt in fun.block.stmts.iter() {
-            self.build_stmt(stmt);
+            self.build_stmt(&function, stmt);
         }
     }
 
-    fn build_fun_args(&mut self, fun: &hir::Fun) {
-        for (idx, ty) in fun.def.arg_tys.iter().enumerate() {
+    fn build_fun_args(&mut self, function: &RefCell<Function<'ctx>>, fun: &hir::Fun) {
+        for (idx, ty) in fun.def.ty.as_fun().args.iter().enumerate() {
             let name = fun.args[idx].raw.clone();
-            let param = self.function().fn_value.get_nth_param(idx as u32).unwrap();
-            let ptr = self.builder().build_alloca(param.get_type(), &name);
-            self.builder().build_store(ptr, param);
-            self.function_mut().var_map.insert(
-                fun.args[idx].def.id(),
+            let param = function
+                .borrow()
+                .fn_value
+                .get_nth_param(idx as u32)
+                .unwrap();
+            let ptr = function
+                .borrow()
+                .builder
+                .build_alloca(param.get_type(), &name);
+            function.borrow().builder.build_store(ptr, param);
+            function.borrow_mut().var_map.insert(
+                fun.args[idx].def.id,
                 Variable::new(name, ty.clone(), true, ptr),
             );
         }
     }
 
-    fn build_stmt(&mut self, stmt: &hir::Stmt) {
+    fn build_stmt(&mut self, function: &RefCell<Function<'ctx>>, stmt: &hir::Stmt) {
         match stmt {
             hir::Stmt::VarDecl(var_decl) => {
                 let name = &var_decl.name.raw;
-                let val = self.build_expr(&var_decl.init);
-                let ptr = self
-                    .builder()
+                let val = self.build_expr(&function.borrow(), &var_decl.init);
+                let ptr = function
+                    .borrow()
+                    .builder
                     .build_alloca(self.llvm_basic_ty(&var_decl.def.ty), &name);
-                self.builder().build_store(ptr, val);
-                self.function_mut().var_map.insert(
+                function.borrow().builder.build_store(ptr, val);
+                function.borrow_mut().var_map.insert(
                     var_decl.def.id,
                     Variable::new(name.clone(), var_decl.def.ty.clone(), false, ptr),
                 );
             }
             hir::Stmt::Ret(ret) => match &ret.expr {
                 Some(expr) => {
-                    let val = self.build_expr(&expr);
-                    self.builder().build_return(Some(match val {
+                    let val = self.build_expr(&function.borrow(), &expr);
+                    function.borrow().builder.build_return(Some(match val {
                         BasicValueEnum::ArrayValue(ref value) => value,
                         BasicValueEnum::IntValue(ref value) => value,
                         BasicValueEnum::FloatValue(ref value) => value,
@@ -278,16 +314,16 @@ impl<'ctx> Codegen<'ctx> {
                     }));
                 }
                 None => {
-                    self.builder().build_return(None);
+                    function.borrow().builder.build_return(None);
                 }
             },
             hir::Stmt::Expr(expr) => {
-                self.build_expr(&expr);
+                self.build_expr(&function.borrow(), &expr);
             }
         }
     }
 
-    fn build_expr(&mut self, expr: &hir::Expr) -> BasicValueEnum<'ctx> {
+    fn build_expr(&mut self, function: &Function<'ctx>, expr: &hir::Expr) -> BasicValueEnum<'ctx> {
         match expr {
             hir::Expr::Lit(lit) => {
                 let basic_ty = self.llvm_basic_ty(&lit.ty);
@@ -317,30 +353,43 @@ impl<'ctx> Codegen<'ctx> {
                     // }
                 }
             }
-            hir::Expr::Ident(ident) => self.builder().build_load(
-                self.function().var_map.get(&ident.def.id()).unwrap().ptr,
-                &ident.raw,
-            ),
+            hir::Expr::Path(ident) => function
+                .builder
+                .build_load(function.var_map.get(&ident.def.id).unwrap().ptr, &ident.raw),
+            hir::Expr::Call(call) => {
+                let mut args = Vec::new();
+                for arg in &call.args {
+                    args.push(self.build_expr(&function, &arg));
+                }
+                let f = self.def_function_map.get(&call.def.id).unwrap();
+                function
+                    .builder
+                    .build_call(f.borrow().fn_value, &args, "")
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap()
+            }
             hir::Expr::Binary(binary) => {
-                let lhs = self.build_expr(&binary.lhs);
-                let rhs = self.build_expr(&binary.rhs);
+                let lhs = self.build_expr(function, &binary.lhs);
+                let rhs = self.build_expr(function, &binary.rhs);
                 match binary.ty {
                     ty::Type::Int(_) => {
                         let lhs = lhs.into_int_value();
                         let rhs = rhs.into_int_value();
                         match binary.op {
                             ast::BinOpKind::Add => {
-                                self.build_checked_int_arithmetic(lhs, rhs, "sadd")
+                                self.build_checked_int_arithmetic(function, lhs, rhs, "sadd")
                             }
                             ast::BinOpKind::Sub => {
-                                self.build_checked_int_arithmetic(lhs, rhs, "ssub")
+                                self.build_checked_int_arithmetic(function, lhs, rhs, "ssub")
                             }
                             ast::BinOpKind::Mul => {
-                                self.build_checked_int_arithmetic(lhs, rhs, "smul")
+                                self.build_checked_int_arithmetic(function, lhs, rhs, "smul")
                             }
-                            ast::BinOpKind::Div => {
-                                self.builder().build_int_signed_div(lhs, rhs, "sdiv").into()
-                            }
+                            ast::BinOpKind::Div => function
+                                .builder
+                                .build_int_signed_div(lhs, rhs, "sdiv")
+                                .into(),
                         }
                     }
                     ty::Type::Float(_) => {
@@ -348,16 +397,16 @@ impl<'ctx> Codegen<'ctx> {
                         let rhs = rhs.into_float_value();
                         match binary.op {
                             ast::BinOpKind::Add => {
-                                self.builder().build_float_add(lhs, rhs, "fadd").into()
+                                function.builder.build_float_add(lhs, rhs, "fadd").into()
                             }
                             ast::BinOpKind::Sub => {
-                                self.builder().build_float_sub(lhs, rhs, "fsub").into()
+                                function.builder.build_float_sub(lhs, rhs, "fsub").into()
                             }
                             ast::BinOpKind::Mul => {
-                                self.builder().build_float_mul(lhs, rhs, "fmul").into()
+                                function.builder.build_float_mul(lhs, rhs, "fmul").into()
                             }
                             ast::BinOpKind::Div => {
-                                self.builder().build_float_div(lhs, rhs, "fdiv").into()
+                                function.builder.build_float_div(lhs, rhs, "fdiv").into()
                             }
                         }
                     }
@@ -366,24 +415,24 @@ impl<'ctx> Codegen<'ctx> {
             }
             hir::Expr::Unary(unary) => match unary.op {
                 ast::UnaryOpKind::Minus => {
-                    let expr = self.build_expr(&unary.expr);
+                    let expr = self.build_expr(function, &unary.expr);
                     match unary.get_type() {
-                        ty::Type::Int(_) => self
-                            .builder()
+                        ty::Type::Int(_) => function
+                            .builder
                             .build_int_neg(expr.into_int_value(), "neg")
                             .into(),
-                        ty::Type::Float(_) => self
-                            .builder()
+                        ty::Type::Float(_) => function
+                            .builder
                             .build_float_neg(expr.into_float_value(), "neg")
                             .into(),
                         _ => unimplemented!(),
                     }
                 }
                 ast::UnaryOpKind::Not => {
-                    let expr = self.build_expr(&unary.expr);
+                    let expr = self.build_expr(function, &unary.expr);
                     match unary.get_type() {
-                        ty::Type::Bool => self
-                            .builder()
+                        ty::Type::Bool => function
+                            .builder
                             .build_int_neg(expr.into_int_value(), "neg")
                             .into(),
                         _ => unreachable!(),
@@ -393,8 +442,9 @@ impl<'ctx> Codegen<'ctx> {
         }
     }
 
-    pub fn build_checked_int_arithmetic<T: IntMathValue<'ctx>>(
+    fn build_checked_int_arithmetic<T: IntMathValue<'ctx>>(
         &mut self,
+        function: &Function<'ctx>,
         lhs: T,
         rhs: T,
         name: &str,
@@ -421,30 +471,34 @@ impl<'ctx> Codegen<'ctx> {
         let intrinsic_fn = self.get_llvm_intrinisic(&intrinsic_name, intrinsic_fn_type);
         let intrinsic_args = &[lhs.as_basic_value_enum(), rhs.as_basic_value_enum()];
 
-        let return_value = self
-            .builder()
+        let return_value = function
+            .builder
             .build_call(intrinsic_fn, intrinsic_args, "tmp_checked_result")
             .try_as_basic_value()
             .left()
             .unwrap()
             .into_struct_value();
 
-        let result_value = self
-            .builder()
+        let result_value = function
+            .builder
             .build_extract_value(return_value, 0, "tmp_result")
             .unwrap();
-        let is_overflow_vec = self
-            .builder()
+        let is_overflow_vec = function
+            .builder
             .build_extract_value(return_value, 1, "tmp_overflow")
             .unwrap();
-        let is_overflow = self.build_reduce("or", is_overflow_vec);
+        let is_overflow = self.build_reduce(&function.builder, "or", is_overflow_vec);
 
         self.build_conditional(
+            function,
             is_overflow,
             // Return an error if there is overflow.
             |this| {
-                this.intrinsic_puts(&format!("attempt to {} with overflow", name));
-                this.intrinsic_exit(1);
+                this.intrinsic_puts(
+                    &function.builder,
+                    &format!("attempt to {} with overflow", name),
+                );
+                this.intrinsic_exit(&function.builder, 1);
             },
             // Otherwise proceed.
             |_| (),
@@ -453,7 +507,7 @@ impl<'ctx> Codegen<'ctx> {
         result_value
     }
 
-    fn intrinsic_puts(&mut self, msg: &str) {
+    fn intrinsic_puts(&mut self, builder: &Builder<'ctx>, msg: &str) {
         let puts = self.get_llvm_intrinisic(
             "puts",
             self.context.i32_type().fn_type(
@@ -465,10 +519,9 @@ impl<'ctx> Codegen<'ctx> {
                 false,
             ),
         );
-        self.builder().build_call(
+        builder.build_call(
             puts,
-            &[self
-                .builder()
+            &[builder
                 .build_global_string_ptr(msg, "")
                 .as_pointer_value()
                 .into()],
@@ -476,21 +529,26 @@ impl<'ctx> Codegen<'ctx> {
         );
     }
 
-    fn intrinsic_exit(&mut self, status: u64) {
+    fn intrinsic_exit(&mut self, builder: &Builder<'ctx>, status: u64) {
         let exit = self.get_llvm_intrinisic(
             "exit",
             self.context
                 .void_type()
                 .fn_type(&[self.context.i32_type().into()], false),
         );
-        self.builder().build_call(
+        builder.build_call(
             exit,
             &[self.context.i32_type().const_int(status, true).into()],
             "exit",
         );
     }
 
-    pub fn build_reduce(&mut self, op: &str, value: BasicValueEnum<'ctx>) -> IntValue<'ctx> {
+    pub fn build_reduce(
+        &mut self,
+        builder: &Builder<'ctx>,
+        op: &str,
+        value: BasicValueEnum<'ctx>,
+    ) -> IntValue<'ctx> {
         match value {
             BasicValueEnum::ArrayValue(_) => unimplemented!(),
             BasicValueEnum::FloatValue(_) => unimplemented!(),
@@ -510,7 +568,7 @@ impl<'ctx> Codegen<'ctx> {
                     ),
                     fn_type,
                 );
-                self.builder()
+                builder
                     .build_call(reduce_fn, &[value], &format!("reduce_{}", op))
                     .try_as_basic_value()
                     .left()
@@ -520,9 +578,10 @@ impl<'ctx> Codegen<'ctx> {
         }
     }
 
-    pub fn build_conditional(
+    fn build_conditional(
         //<V: PhiMergeable<'ctx>>(
         &mut self,
+        function: &Function<'ctx>,
         cond_value: IntValue<'ctx>,
         build_then: impl FnOnce(&mut Self),
         build_else: impl FnOnce(&mut Self),
@@ -530,33 +589,33 @@ impl<'ctx> Codegen<'ctx> {
         // build_else: impl FnOnce(&mut Self) -> V,
         // ) -> V {
     ) {
-        let then_bb = self.append_basic_block("then");
-        let else_bb = self.append_basic_block("else");
-        let merge_bb = self.append_basic_block("endif");
+        let then_bb = self.append_basic_block(function, "then");
+        let else_bb = self.append_basic_block(function, "else");
+        let merge_bb = self.append_basic_block(function, "endif");
 
-        self.builder().build_switch(
+        function.builder.build_switch(
             cond_value,
             then_bb,
             &[(cond_value.get_type().const_zero(), else_bb)],
         );
 
-        self.builder().position_at_end(then_bb);
+        function.builder.position_at_end(then_bb);
         let value_then = build_then(self);
-        let then_end_bb = self.current_block();
-        let then_needs_terminator = self.needs_terminator();
+        let then_end_bb = function.current_block();
+        let then_needs_terminator = function.needs_terminator();
         if then_needs_terminator {
-            self.builder().build_unconditional_branch(merge_bb);
+            function.builder.build_unconditional_branch(merge_bb);
         }
 
-        self.builder().position_at_end(else_bb);
+        function.builder.position_at_end(else_bb);
         let value_else = build_else(self);
-        let else_end_bb = self.current_block();
-        let else_needs_terminator = self.needs_terminator();
+        let else_end_bb = function.current_block();
+        let else_needs_terminator = function.needs_terminator();
         if else_needs_terminator {
-            self.builder().build_unconditional_branch(merge_bb);
+            function.builder.build_unconditional_branch(merge_bb);
         }
 
-        self.builder().position_at_end(merge_bb);
+        function.builder.position_at_end(merge_bb);
         // let ret = match (then_needs_terminator, else_needs_terminator) {
         //     (true, false) => value_if_true,
         //     (false, true) => value_if_false,

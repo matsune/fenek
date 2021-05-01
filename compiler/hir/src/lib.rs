@@ -16,34 +16,31 @@ impl Module {
 
 pub struct Fun {
     pub id: ast::NodeId,
-    pub name: Ident,
+    pub name: String,
     pub args: FunArgs,
-    pub ret_ty: ty::Type,
     pub block: Block,
-    pub def: FunDef<ty::Type>,
+    pub def: Def<ty::Type>,
 }
 
 impl Fun {
     pub fn new(
         id: ast::NodeId,
-        name: Ident,
+        name: String,
         args: FunArgs,
-        ret_ty: ty::Type,
         block: Block,
-        def: FunDef<ty::Type>,
+        def: Def<ty::Type>,
     ) -> Self {
         Fun {
             id,
             name,
             args,
-            ret_ty,
             block,
             def,
         }
     }
 }
 
-pub type FunArgs = Vec<Ident>;
+pub type FunArgs = Vec<Path>;
 
 pub struct Block {
     pub id: ast::NodeId,
@@ -80,16 +77,11 @@ pub struct VarDecl {
     pub id: ast::NodeId,
     pub name: token::Token,
     pub init: Box<Expr>,
-    pub def: VarDef<ty::Type>,
+    pub def: Def<ty::Type>,
 }
 
 impl VarDecl {
-    pub fn new(
-        id: ast::NodeId,
-        name: token::Token,
-        init: Box<Expr>,
-        def: VarDef<ty::Type>,
-    ) -> Self {
+    pub fn new(id: ast::NodeId, name: token::Token, init: Box<Expr>, def: Def<ty::Type>) -> Self {
         Self {
             id,
             name,
@@ -138,7 +130,7 @@ macro_rules! Enum_with_type {
     }
 }
 
-Enum_with_type!(Expr [Lit, Ident, Binary, Unary]);
+Enum_with_type!(Expr [Lit, Path, Call, Binary, Unary]);
 
 pub struct Lit {
     pub id: ast::NodeId,
@@ -175,21 +167,34 @@ impl LitKind {
     }
 }
 
-pub struct Ident {
+pub struct Path {
     pub raw: String,
     pub def: Def<ty::Type>,
 }
 
-impl Ident {
+impl Path {
     pub fn new(raw: String, def: Def<ty::Type>) -> Self {
         Self { raw, def }
     }
 
     pub fn get_type(&self) -> &ty::Type {
-        match &self.def {
-            Def::Fun(fun_def) => &fun_def.ret_ty,
-            Def::Var(var_def) => &var_def.ty,
-        }
+        &self.def.ty
+    }
+}
+
+pub struct Call {
+    pub path: String,
+    pub args: Vec<Expr>,
+    pub def: Def<ty::Type>,
+}
+
+impl Call {
+    pub fn new(path: String, args: Vec<Expr>, def: Def<ty::Type>) -> Self {
+        Self { path, args, def }
+    }
+
+    pub fn get_type(&self) -> &ty::Type {
+        &self.def.ty
     }
 }
 

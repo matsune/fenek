@@ -26,7 +26,7 @@ impl ToString for Type {
 #[derive(Debug, PartialEq, Clone)]
 pub struct FunType {
     pub args: Vec<Type>,
-    pub ret: Option<Box<Type>>,
+    pub ret: Box<Type>,
 }
 
 impl ToString for FunType {
@@ -38,11 +38,14 @@ impl ToString for FunType {
                 .map(|arg| arg.to_string())
                 .collect::<Vec<String>>()
                 .join(", "),
-            self.ret
-                .as_ref()
-                .map(|b| b.to_string())
-                .unwrap_or_else(|| Type::Void.to_string())
+            self.ret.to_string()
         )
+    }
+}
+
+impl FunType {
+    pub fn new(args: Vec<Type>, ret: Box<Type>) -> Self {
+        Self { args, ret }
     }
 }
 

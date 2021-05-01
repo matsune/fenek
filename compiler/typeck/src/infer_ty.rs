@@ -1,5 +1,4 @@
 use std::cell::{Cell, Ref, RefCell};
-use std::fmt;
 use typed_arena::Arena;
 
 pub type InferTyID = usize;
@@ -14,24 +13,24 @@ pub type InferTyID = usize;
 /// same type.
 pub struct InferTy<'a> {
     pub id: InferTyID,
-    pub kind: InferTyKind,
+    pub kind: InferTyKind<'a>,
     to_node: Cell<Option<&'a InferTy<'a>>>,
     from_node: RefCell<Vec<&'a InferTy<'a>>>,
 }
 
-impl<'a> fmt::Debug for InferTy<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("GraphNode")
-            .field("id", &self.id)
-            .field("kind", &self.kind)
-            .field("to_node", &self.to_node)
-            .field("from_node count", &self.from_node.borrow().len())
-            .finish()
-    }
-}
+// impl<'a> fmt::Debug for InferTy<'a> {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         f.debug_struct("InferTy")
+//             .field("id", &self.id)
+//             .field("kind", &self.kind)
+//             .field("to_node", &self.to_node)
+//             .field("from_node count", &self.from_node.borrow().len())
+//             .finish()
+//     }
+// }
 
 impl<'a> InferTy<'a> {
-    pub fn new(id: InferTyID, kind: InferTyKind) -> Self {
+    pub fn new(id: InferTyID, kind: InferTyKind<'a>) -> Self {
         Self {
             id,
             kind,
@@ -40,9 +39,9 @@ impl<'a> InferTy<'a> {
         }
     }
 
-    pub fn is_void(&self) -> bool {
-        self.kind == InferTyKind::Void
-    }
+    // pub fn is_void(&self) -> bool {
+    // self.kind == InferTyKind::Void
+    // }
 
     /// Set the most tip node
     pub fn set_prune(&'a self, tip: &'a InferTy<'a>) {
@@ -68,8 +67,7 @@ impl<'a> InferTy<'a> {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum InferTyKind {
+pub enum InferTyKind<'a> {
     Var,
     Int(IntKind),
     IntLit,
@@ -77,9 +75,59 @@ pub enum InferTyKind {
     FloatLit,
     Bool,
     Void,
+    Fun(FunTy<'a>),
 }
 
-impl ToString for InferTyKind {
+impl<'a> PartialEq for InferTyKind<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        use InferTyKind::*;
+        match (self, other) {
+            (Var, Var) | (IntLit, IntLit) | (FloatLit, FloatLit) | (Bool, Bool) | (Void, Void) => {
+                true
+            }
+            (Int(il), Int(ir)) => il == ir,
+            (Float(il), Float(ir)) => il == ir,
+            (Fun(fl), Fun(fr)) => {
+                let fl_arg_tys: Vec<&InferTyKind<'a>> =
+                    fl.arg_tys.iter().map(|ty| &ty.kind).collect();
+                let fr_arg_tys: Vec<&InferTyKind<'a>> =
+                    fr.arg_tys.iter().map(|ty| &ty.kind).collect();
+                fl_arg_tys == fr_arg_tys && fl.ret_ty.kind == fr.ret_ty.kind
+            }
+            _ => false,
+        }
+    }
+}
+
+impl<'a> InferTyKind<'a> {
+    pub fn as_fun(&self) -> &FunTy<'a> {
+        match self {
+            Self::Fun(ty) => ty,
+            _ => panic!(),
+        }
+    }
+
+    pub fn is_fun(&self) -> bool {
+        matches!(self, Self::Fun(_))
+    }
+}
+
+pub struct FunTy<'a> {
+    pub arg_tys: Vec<&'a InferTy<'a>>,
+    pub ret_ty: &'a InferTy<'a>,
+}
+
+impl<'a> InferTyKind<'a> {
+    // types that can store in variable
+    pub fn is_variable(&self) -> bool {
+        match self {
+            Self::Void => false,
+            _ => true,
+        }
+    }
+}
+
+impl<'a> ToString for InferTyKind<'a> {
     fn to_string(&self) -> String {
         match self {
             Self::Var => "var".to_string(),
@@ -89,6 +137,8 @@ impl ToString for InferTyKind {
             Self::FloatLit => "float lit".to_string(),
             Self::Bool => "bool".to_string(),
             Self::Void => "void".to_string(),
+            // FIXME
+            Self::Fun(_) => "fun".to_string(),
         }
     }
 }
@@ -135,7 +185,7 @@ pub struct InferTyArena<'a> {
 }
 
 impl<'a> InferTyArena<'a> {
-    pub fn alloc(&self, kind: InferTyKind) -> &InferTy<'a> {
+    pub fn alloc(&self, kind: InferTyKind<'a>) -> &InferTy<'a> {
         self.inner.alloc(InferTy::new(self.inner.len(), kind))
     }
 
@@ -181,5 +231,13 @@ impl<'a> InferTyArena<'a> {
 
     pub fn alloc_void(&self) -> &InferTy<'a> {
         self.alloc(InferTyKind::Void)
+    }
+
+    pub fn alloc_fun(
+        &self,
+        arg_tys: Vec<&'a InferTy<'a>>,
+        ret_ty: &'a InferTy<'a>,
+    ) -> &InferTy<'a> {
+        self.alloc(InferTyKind::Fun(FunTy { arg_tys, ret_ty }))
     }
 }

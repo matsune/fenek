@@ -19,9 +19,9 @@ impl From<&hir::Module> for Module {
 pub struct Fun {
     id: ast::NodeId,
     def_id: hir::def::DefId,
+    ty: ty::Type,
     name: String,
     args: FunArgs,
-    ret_ty: ty::Type,
     block: Block,
 }
 
@@ -30,9 +30,10 @@ impl From<&hir::Fun> for Fun {
         Self {
             id: base.id,
             def_id: base.def.id,
-            name: base.name.raw.clone(),
+            ty: (&base.def.ty).into(),
+            name: base.name.clone(),
             args: base.args.iter().map(|ident| ident.raw.clone()).collect(),
-            ret_ty: (&base.ret_ty).into(),
+            // ret_ty: base.ret_ty.deref().into(),
             block: (&base.block).into(),
         }
     }
@@ -114,7 +115,7 @@ impl From<&hir::Ret> for Ret {
     }
 }
 
-Enum!(Expr [Lit, Ident, Binary, Unary]);
+Enum!(Expr [Lit, Path,Call, Binary, Unary]);
 
 #[derive(Serialize)]
 struct Lit {
@@ -159,24 +160,44 @@ impl From<&hir::LitKind> for LitKind {
 }
 
 #[derive(Serialize)]
-struct Ident {
+struct Path {
     raw: String,
     def_id: hir::def::DefId,
     ty: ty::Type,
 }
 
-impl From<&hir::Ident> for Ident {
-    fn from(base: &hir::Ident) -> Self {
+impl From<&hir::Path> for Path {
+    fn from(base: &hir::Path) -> Self {
         Self {
             raw: base.raw.clone(),
-            def_id: base.def.id(),
-            ty: match &base.def {
-                hir::def::Def::Fun(fun) => ty::Type::from(&hir::ty::Type::Fun(hir::ty::FunType {
-                    args: fun.arg_tys.clone(),
-                    ret: Some(Box::new(fun.ret_ty.clone())),
-                })),
-                hir::def::Def::Var(var) => (&var.ty).into(),
-            },
+            def_id: base.def.id,
+            ty: ty::Type::from(&base.def.ty),
+            // match &base.def {
+            // hir::def::Def::Fun(fun) => ty::Type::from(&hir::ty::Type::Fun(hir::ty::FunType {
+            //     args: fun.arg_tys.clone(),
+            //     ret: Some(Box::new(fun.ret_ty.clone())),
+            // })),
+            // hir::def::Def::Var(var) => (&var.ty).into(),
+            // },
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct Call {
+    path: String,
+    args: Vec<Expr>,
+    def_id: hir::def::DefId,
+    ty: ty::Type,
+}
+
+impl From<&hir::Call> for Call {
+    fn from(base: &hir::Call) -> Self {
+        Self {
+            path: base.path.clone(),
+            args: base.args.iter().map(|arg| arg.into()).collect(),
+            def_id: base.def.id,
+            ty: base.def.ty.as_fun().ret.deref().into(),
         }
     }
 }
