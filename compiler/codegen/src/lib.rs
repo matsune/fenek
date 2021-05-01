@@ -188,15 +188,15 @@ impl<'ctx> Codegen<'ctx> {
     fn llvm_basic_ty(&self, ty: &ty::Type) -> BasicTypeEnum<'ctx> {
         match ty {
             ty::Type::Int(int_ty) => match int_ty {
-                ty::IntKind::I8 => self.context.i8_type(),
-                ty::IntKind::I16 => self.context.i16_type(),
-                ty::IntKind::I32 => self.context.i32_type(),
-                ty::IntKind::I64 => self.context.i64_type(),
+                ty::IntType::I8 => self.context.i8_type(),
+                ty::IntType::I16 => self.context.i16_type(),
+                ty::IntType::I32 => self.context.i32_type(),
+                ty::IntType::I64 => self.context.i64_type(),
             }
             .into(),
             ty::Type::Float(float_ty) => match float_ty {
-                ty::FloatKind::F32 => self.context.f32_type(),
-                ty::FloatKind::F64 => self.context.f64_type(),
+                ty::FloatType::F32 => self.context.f32_type(),
+                ty::FloatType::F64 => self.context.f64_type(),
             }
             .into(),
             ty::Type::Bool => self.context.bool_type().into(),
@@ -216,15 +216,15 @@ impl<'ctx> Codegen<'ctx> {
             .collect();
         let fn_type = match ret_ty {
             ty::Type::Int(int_ty) => match int_ty {
-                ty::IntKind::I8 => self.context.i8_type(),
-                ty::IntKind::I16 => self.context.i16_type(),
-                ty::IntKind::I32 => self.context.i32_type(),
-                ty::IntKind::I64 => self.context.i64_type(),
+                ty::IntType::I8 => self.context.i8_type(),
+                ty::IntType::I16 => self.context.i16_type(),
+                ty::IntType::I32 => self.context.i32_type(),
+                ty::IntType::I64 => self.context.i64_type(),
             }
             .fn_type(&param_types, false),
             ty::Type::Float(float_ty) => match float_ty {
-                ty::FloatKind::F32 => self.context.f32_type(),
-                ty::FloatKind::F64 => self.context.f64_type(),
+                ty::FloatType::F32 => self.context.f32_type(),
+                ty::FloatType::F64 => self.context.f64_type(),
             }
             .fn_type(&param_types, false),
             ty::Type::Bool => self.context.bool_type().fn_type(&param_types, false),

@@ -6,15 +6,12 @@ use std::rc::Rc;
 
 pub type ArenaIdx = usize;
 
+#[derive(Default)]
 pub struct ScopeArena<T> {
     pub inner: Vec<ScopeTable<T>>,
 }
 
 impl<T> ScopeArena<T> {
-    pub fn new() -> Self {
-        Self { inner: Vec::new() }
-    }
-
     pub fn add_node(&mut self, parent: Option<ArenaIdx>) -> ArenaIdx {
         let idx = self.inner.len();
         self.inner.push(ScopeTable::new(idx, parent));

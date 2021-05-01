@@ -3,50 +3,31 @@ use std::string::ToString;
 #[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     Void,
-    Int(IntKind),
-    Float(FloatKind),
+    Int(IntType),
+    Float(FloatType),
     Bool,
     String,
     Fun(FunType),
 }
 
-impl ToString for Type {
-    fn to_string(&self) -> String {
-        match self {
-            Self::Void => "void".to_string(),
-            Self::Int(k) => k.to_string(),
-            Self::Float(k) => k.to_string(),
-            Self::Bool => "bool".to_string(),
-            Self::String => "string".to_string(),
-            Self::Fun(fun) => fun.to_string(),
-        }
-    }
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum IntType {
+    I8,
+    I16,
+    I32,
+    I64,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum FloatType {
+    F32,
+    F64,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct FunType {
     pub args: Vec<Type>,
     pub ret: Box<Type>,
-}
-
-impl ToString for FunType {
-    fn to_string(&self) -> String {
-        format!(
-            "({}) -> {}",
-            self.args
-                .iter()
-                .map(|arg| arg.to_string())
-                .collect::<Vec<String>>()
-                .join(", "),
-            self.ret.to_string()
-        )
-    }
-}
-
-impl FunType {
-    pub fn new(args: Vec<Type>, ret: Box<Type>) -> Self {
-        Self { args, ret }
-    }
 }
 
 impl Type {
@@ -70,44 +51,48 @@ impl Type {
         matches!(self, Type::Fun(_))
     }
 
-    pub fn into_int(self) -> IntKind {
-        match self {
-            Self::Int(v) => v,
-            _ => panic!(),
-        }
-    }
-
-    pub fn into_float(self) -> FloatKind {
-        match self {
-            Self::Float(v) => v,
-            _ => panic!(),
-        }
-    }
-
     pub fn as_fun(&self) -> &FunType {
         match self {
             Self::Fun(f) => f,
             _ => panic!(),
         }
     }
+}
 
-    pub fn into_fun(self) -> FunType {
+impl FunType {
+    pub fn new(args: Vec<Type>, ret: Box<Type>) -> Self {
+        Self { args, ret }
+    }
+}
+
+impl ToString for Type {
+    fn to_string(&self) -> String {
         match self {
-            Self::Fun(f) => f,
-            _ => panic!(),
+            Self::Void => "void".to_string(),
+            Self::Int(k) => k.to_string(),
+            Self::Float(k) => k.to_string(),
+            Self::Bool => "bool".to_string(),
+            Self::String => "string".to_string(),
+            Self::Fun(fun) => fun.to_string(),
         }
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum IntKind {
-    I8,
-    I16,
-    I32,
-    I64,
+impl ToString for FunType {
+    fn to_string(&self) -> String {
+        format!(
+            "({}) -> {}",
+            self.args
+                .iter()
+                .map(|arg| arg.to_string())
+                .collect::<Vec<String>>()
+                .join(", "),
+            self.ret.to_string()
+        )
+    }
 }
 
-impl ToString for IntKind {
+impl ToString for IntType {
     fn to_string(&self) -> String {
         match self {
             Self::I8 => "i8",
@@ -119,13 +104,7 @@ impl ToString for IntKind {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum FloatKind {
-    F32,
-    F64,
-}
-
-impl ToString for FloatKind {
+impl ToString for FloatType {
     fn to_string(&self) -> String {
         match self {
             Self::F32 => "f32",

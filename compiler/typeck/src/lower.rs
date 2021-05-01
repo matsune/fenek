@@ -1,6 +1,5 @@
 use super::analyze::TyAnalyzer;
 use crate::infer_ty::*;
-use crate::scope::*;
 use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
 use hir::ty;
@@ -9,7 +8,6 @@ use num_traits::Num;
 use pos::{Pos, SrcFile};
 use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::str::FromStr;
 
 fn compile_error(pos: Pos, typeck_err: TypeCkError) -> CompileError {
@@ -75,63 +73,10 @@ pub fn lower(src: &SrcFile, module: ast::Module) -> Result<hir::Module> {
         for (node_id, def) in analyzer.node_def_map.iter() {
             let def: &Def<_> = &def;
             let ty = analyzer.get_final_type(def.ty).unwrap();
-            // let def = match def {
-            //     Def::Fun(fun_def) => {
-            //         let mut arg_tys = Vec::new();
-            //         for arg_ty in fun_def.arg_tys.iter() {
-            //             arg_tys.push(analyzer.get_final_type(arg_ty).unwrap());
-            //         }
-            //         let ret_ty = analyzer.get_final_type(fun_def.ret_ty).unwrap();
-            //         FunDef::new(fun_def.id, ret_ty, arg_tys).into()
-            //     }
-            //     Def::Var(var_def) => VarDef::new(
-            //         var_def.id,
-            //         analyzer.get_final_type(var_def.ty).unwrap(),
-            //         var_def.is_mut,
-            //     )
-            //     .into(),
-            // };
             node_def_map.insert(*node_id, Def::new(def.id, ty, def.is_mut));
-            // let final_ty = analyzer.get_final_type(infer_ty).map_err(|err| {
-            //     let offset =
-            //         ast::visit::visit_module(&module, *node_id, |node| node.offset()).unwrap();
-            //     compile_error(src.pos_from_offset(offset), err)
-            // })?;
-            // node_ty_map.insert(*node_id, final_ty);
         }
 
-        // let mut scopes = Vec::with_capacity(analyzer.scopes.len());
-        // for scope in analyzer.scopes.iter() {
-        //     let mut _scope = ScopeTable::new(scope.idx, scope.parent);
-        //     for (k, v) in scope.table.iter() {
-        //         let def: &Def<_> = &v;
-        //         let def = match def {
-        //             Def::Fun(fun_def) => {
-        //                 let mut arg_tys = Vec::new();
-        //                 for arg_ty in fun_def.arg_tys.iter() {
-        //                     arg_tys.push(analyzer.get_final_type(arg_ty).unwrap());
-        //                 }
-        //                 let ret_ty = analyzer.get_final_type(fun_def.ret_ty).unwrap();
-        //                 FunDef::new(fun_def.id, ret_ty, arg_tys).into()
-        //             }
-        //             Def::Var(var_def) => VarDef::new(
-        //                 var_def.id,
-        //                 analyzer.get_final_type(var_def.ty).unwrap(),
-        //                 var_def.is_mut,
-        //             )
-        //             .into(),
-        //         };
-        //         _scope.insert(k.to_string(), def);
-        //     }
-        //     scopes.push(_scope);
-        // }
-        Lower::new(
-            &src,
-            node_ty_map,
-            node_def_map,
-            // analyzer.node_scope_map,
-            // scopes,
-        )
+        Lower::new(&src, node_ty_map, node_def_map)
     };
     lower.lower_module(&module)
 }
@@ -140,8 +85,6 @@ struct Lower<'src> {
     src: &'src SrcFile,
     ty_map: HashMap<ast::NodeId, ty::Type>,
     node_def_map: HashMap<ast::NodeId, Def<ty::Type>>,
-    // node_scope_map: HashMap<ast::NodeId, ArenaIdx>,
-    // scopes: Vec<ScopeTable<ty::Type>>,
 }
 
 impl<'src> Lower<'src> {
@@ -149,15 +92,11 @@ impl<'src> Lower<'src> {
         src: &'src SrcFile,
         ty_map: HashMap<ast::NodeId, ty::Type>,
         node_def_map: HashMap<ast::NodeId, Def<ty::Type>>,
-        // node_scope_map: HashMap<ast::NodeId, ArenaIdx>,
-        // scopes: Vec<ScopeTable<ty::Type>>,
     ) -> Self {
         Self {
             src,
             ty_map,
             node_def_map,
-            // scopes,
-            // node_scope_map,
         }
     }
 
@@ -172,23 +111,14 @@ impl<'src> Lower<'src> {
     fn lower_fun(&self, fun: &ast::Fun) -> Result<hir::Fun> {
         let id = fun.id;
         let def = self.node_def_map.get(&id).unwrap();
-        // let scope = self.scopes.get(0).unwrap();
-        // let fun_def = scope.lookup_fun(&fun.name.raw).unwrap().as_fun();
         let ret_ty = match &fun.ret_ty {
             Some(ty) => self.ty_map.get(&ty.id).unwrap().clone(),
             None => ty::Type::Void,
         };
-        // let scope: &ScopeTable<ty::Type> = self
-        //     .scopes
-        //     .get(*self.node_scope_map.get(&fun.block.id).unwrap())
-        //     .unwrap();
         let mut args = Vec::new();
         for arg in &fun.args {
             let def = self.node_def_map.get(&arg.id).unwrap();
-            args.push(hir::Path::new(
-                arg.name.raw.clone(),
-                Def::new(def.id, def.ty.clone(), def.is_mut).into(),
-            ));
+            args.push(hir::Path::new(arg.name.raw.clone(), def.clone()));
         }
         let mut stmts = Vec::new();
         let stmts_len = fun.block.stmts.len();
@@ -233,12 +163,6 @@ impl<'src> Lower<'src> {
             stmts.push(stmt);
         }
 
-        // let def = Def::new(
-        //     def.id,
-        //     def.ty,
-        //     // ret_ty.clone(),
-        //     // args.iter().map(|v| v.def.ty.clone()).collect(),
-        // );
         Ok(hir::Fun::new(
             id,
             fun.name.raw.clone(),
@@ -260,7 +184,6 @@ impl<'src> Lower<'src> {
                 let expr = self.lower_expr(&init)?;
                 let ty = expr.get_type().clone();
                 let def = self.node_def_map.get(&id).unwrap();
-                // let def = scope.lookup_var(&name.raw).unwrap().as_var();
                 hir::VarDecl::new(
                     id,
                     name.clone(),
@@ -301,7 +224,7 @@ impl<'src> Lower<'src> {
                 // to int
                 ty::Type::Int(kind) => match kind {
                     // to i8
-                    ty::IntKind::I8 => {
+                    ty::IntType::I8 => {
                         let n = parse_int_literal(*base, &literal).map_err(|err| {
                             if is_parse_int_overflow_error(err) {
                                 TypeCkError::OverflowInt(literal.to_string(), "i8".to_string())
@@ -312,7 +235,7 @@ impl<'src> Lower<'src> {
                         hir::LitKind::I8(n)
                     }
                     // to i16
-                    ty::IntKind::I16 => {
+                    ty::IntType::I16 => {
                         let n = parse_int_literal(*base, &literal).map_err(|err| {
                             if is_parse_int_overflow_error(err) {
                                 TypeCkError::OverflowInt(literal.to_string(), "i16".to_string())
@@ -323,7 +246,7 @@ impl<'src> Lower<'src> {
                         hir::LitKind::I16(n)
                     }
                     // to i32
-                    ty::IntKind::I32 => {
+                    ty::IntType::I32 => {
                         let n = parse_int_literal(*base, &literal).map_err(|err| {
                             if is_parse_int_overflow_error(err) {
                                 TypeCkError::OverflowInt(literal.to_string(), "i32".to_string())
@@ -334,7 +257,7 @@ impl<'src> Lower<'src> {
                         hir::LitKind::I32(n)
                     }
                     // to i64
-                    ty::IntKind::I64 => {
+                    ty::IntType::I64 => {
                         let n = parse_int_literal(*base, &literal).map_err(|err| {
                             if is_parse_int_overflow_error(err) {
                                 TypeCkError::OverflowInt(literal.to_string(), "i64".to_string())
@@ -347,7 +270,7 @@ impl<'src> Lower<'src> {
                 },
                 ty::Type::Float(kind) => match kind {
                     // to f32
-                    ty::FloatKind::F32 => {
+                    ty::FloatType::F32 => {
                         let v = f32::from_str(&literal)
                             .map_err(|_| TypeCkError::InvalidFloat(literal.to_string()))?;
                         if v == f32::INFINITY {
@@ -356,7 +279,7 @@ impl<'src> Lower<'src> {
                         hir::LitKind::F32(v)
                     }
                     // to f64
-                    ty::FloatKind::F64 => {
+                    ty::FloatType::F64 => {
                         let v = f64::from_str(&literal)
                             .map_err(|_| TypeCkError::InvalidFloat(literal.to_string()))?;
                         if v == f64::INFINITY {
@@ -371,7 +294,7 @@ impl<'src> Lower<'src> {
             ast::LitKind::Float => match ty {
                 ty::Type::Float(float_kind) => match float_kind {
                     // to f32
-                    ty::FloatKind::F32 => {
+                    ty::FloatType::F32 => {
                         let v = f32::from_str(&literal)
                             .map_err(|_| TypeCkError::InvalidFloat(literal.to_string()))?;
                         if v == f32::INFINITY {
@@ -380,7 +303,7 @@ impl<'src> Lower<'src> {
                         hir::LitKind::F32(v)
                     }
                     // to f64
-                    ty::FloatKind::F64 => {
+                    ty::FloatType::F64 => {
                         let v = f64::from_str(&literal)
                             .map_err(|_| TypeCkError::InvalidFloat(literal.to_string()))?;
                         if v == f64::INFINITY {

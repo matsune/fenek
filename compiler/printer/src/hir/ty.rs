@@ -89,13 +89,13 @@ pub enum IntKind {
     I64,
 }
 
-impl From<&hir::ty::IntKind> for IntKind {
-    fn from(kind: &hir::ty::IntKind) -> Self {
+impl From<&hir::ty::IntType> for IntKind {
+    fn from(kind: &hir::ty::IntType) -> Self {
         match kind {
-            hir::ty::IntKind::I8 => Self::I8,
-            hir::ty::IntKind::I16 => Self::I16,
-            hir::ty::IntKind::I32 => Self::I32,
-            hir::ty::IntKind::I64 => Self::I64,
+            hir::ty::IntType::I8 => Self::I8,
+            hir::ty::IntType::I16 => Self::I16,
+            hir::ty::IntType::I32 => Self::I32,
+            hir::ty::IntType::I64 => Self::I64,
         }
     }
 }
@@ -117,11 +117,11 @@ pub enum FloatKind {
     F64,
 }
 
-impl From<&hir::ty::FloatKind> for FloatKind {
-    fn from(kind: &hir::ty::FloatKind) -> Self {
+impl From<&hir::ty::FloatType> for FloatKind {
+    fn from(kind: &hir::ty::FloatType) -> Self {
         match kind {
-            hir::ty::FloatKind::F32 => Self::F32,
-            hir::ty::FloatKind::F64 => Self::F64,
+            hir::ty::FloatType::F32 => Self::F32,
+            hir::ty::FloatType::F64 => Self::F64,
         }
     }
 }

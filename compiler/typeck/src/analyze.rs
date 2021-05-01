@@ -15,9 +15,8 @@ pub struct TyAnalyzer<'src, 'infer> {
     src: &'src SrcFile,
     ty_arena: &'infer InferTyArena<'infer>,
     pub node_ty_map: HashMap<ast::NodeId, &'infer InferTy<'infer>>,
-    pub node_scope_map: HashMap<ast::NodeId, ArenaIdx>,
     pub node_def_map: HashMap<ast::NodeId, Rc<Def<&'infer InferTy<'infer>>>>,
-    pub scopes: Vec<ScopeTable<&'infer InferTy<'infer>>>,
+    scopes: Vec<ScopeTable<&'infer InferTy<'infer>>>,
     scope_idx: ArenaIdx,
     def_id: DefId,
 }
@@ -31,7 +30,6 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         TyAnalyzer {
             src,
             ty_arena,
-            node_scope_map: HashMap::new(),
             node_ty_map: HashMap::new(),
             node_def_map: HashMap::new(),
             scopes,
@@ -173,7 +171,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
     fn analyze_fun(&mut self, fun: &ast::Fun) -> Result<()> {
         let fun_def = self.lookup_fun(&fun.name.raw).unwrap();
         self.push_scope();
-        self.node_scope_map.insert(fun.block.id, self.scope_idx);
+        // self.node_scope_map.insert(fun.block.id, self.scope_idx);
 
         for (idx, arg) in fun.args.iter().enumerate() {
             let ty = fun_def.ty.kind.as_fun().arg_tys[idx];
@@ -313,17 +311,17 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 return Err(TypeCkError::UnresolvedType);
             }
             InferTyKind::Int(int_kind) => match int_kind {
-                IntKind::I8 => ty::Type::Int(ty::IntKind::I8),
-                IntKind::I16 => ty::Type::Int(ty::IntKind::I16),
-                IntKind::I32 => ty::Type::Int(ty::IntKind::I32),
-                IntKind::I64 => ty::Type::Int(ty::IntKind::I64),
+                IntKind::I8 => ty::Type::Int(ty::IntType::I8),
+                IntKind::I16 => ty::Type::Int(ty::IntType::I16),
+                IntKind::I32 => ty::Type::Int(ty::IntType::I32),
+                IntKind::I64 => ty::Type::Int(ty::IntType::I64),
             },
-            InferTyKind::IntLit => ty::Type::Int(ty::IntKind::I64),
+            InferTyKind::IntLit => ty::Type::Int(ty::IntType::I64),
             InferTyKind::Float(kind) => match kind {
-                FloatKind::F32 => ty::Type::Float(ty::FloatKind::F32),
-                FloatKind::F64 => ty::Type::Float(ty::FloatKind::F64),
+                FloatKind::F32 => ty::Type::Float(ty::FloatType::F32),
+                FloatKind::F64 => ty::Type::Float(ty::FloatType::F64),
             },
-            InferTyKind::FloatLit => ty::Type::Float(ty::FloatKind::F64),
+            InferTyKind::FloatLit => ty::Type::Float(ty::FloatType::F64),
             InferTyKind::Bool => ty::Type::Bool,
             InferTyKind::Void => ty::Type::Void,
             InferTyKind::Fun(fun_ty) => {
