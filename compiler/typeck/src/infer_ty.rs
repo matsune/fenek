@@ -18,17 +18,6 @@ pub struct InferTy<'a> {
     from_node: RefCell<Vec<&'a InferTy<'a>>>,
 }
 
-// impl<'a> fmt::Debug for InferTy<'a> {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         f.debug_struct("InferTy")
-//             .field("id", &self.id)
-//             .field("kind", &self.kind)
-//             .field("to_node", &self.to_node)
-//             .field("from_node count", &self.from_node.borrow().len())
-//             .finish()
-//     }
-// }
-
 impl<'a> InferTy<'a> {
     pub fn new(id: InferTyID, kind: InferTyKind<'a>) -> Self {
         Self {
@@ -38,10 +27,6 @@ impl<'a> InferTy<'a> {
             from_node: RefCell::new(Vec::new()),
         }
     }
-
-    // pub fn is_void(&self) -> bool {
-    // self.kind == InferTyKind::Void
-    // }
 
     /// Set the most tip node
     pub fn set_prune(&'a self, tip: &'a InferTy<'a>) {
@@ -120,10 +105,7 @@ pub struct FunTy<'a> {
 impl<'a> InferTyKind<'a> {
     // types that can store in variable
     pub fn is_variable(&self) -> bool {
-        match self {
-            Self::Void => false,
-            _ => true,
-        }
+        !matches!(self, Self::Void)
     }
 }
 

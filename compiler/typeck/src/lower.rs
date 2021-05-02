@@ -1,4 +1,4 @@
-use super::analyze::TyAnalyzer;
+use super::analyze::{get_final_type, DefArena, TyAnalyzer};
 use crate::infer_ty::*;
 use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
@@ -53,15 +53,21 @@ type LowerResult<T> = Result<T, (ast::NodeId, TypeCkError)>;
 
 pub fn lower(src: &SrcFile, module: ast::Module) -> Result<hir::Module> {
     let lower = {
-        // lifetime 'infer
+        // lifetime 'infer equals with this block
         let ty_arena = InferTyArena::default();
-        let mut analyzer = TyAnalyzer::new(src, &ty_arena);
-        analyzer.analyze_module(&module)?;
+        let def_arena = DefArena::new();
 
-        // Finalyze InferTy into ty::Type
-        let mut node_ty_map = HashMap::with_capacity(analyzer.node_ty_map.len());
-        for (node_id, infer_ty) in analyzer.node_ty_map.iter() {
-            let final_ty = analyzer.get_final_type(infer_ty).map_err(|err| {
+        // analyze AST and make hash maps to infer types of each nodes
+        let (node_infer_ty_map, node_infer_def_map) = {
+            let mut analyzer = TyAnalyzer::new(src, &ty_arena, &def_arena);
+            analyzer.analyze_module(&module)?;
+            analyzer.drop()
+        };
+
+        // finalize InferTy into ty::Type
+        let mut node_ty_map = HashMap::with_capacity(node_infer_ty_map.len());
+        for (node_id, infer_ty) in node_infer_ty_map.iter() {
+            let final_ty = get_final_type(infer_ty).map_err(|err| {
                 let offset =
                     ast::visit::visit_module(&module, *node_id, |node| node.offset()).unwrap();
                 compile_error(src.pos_from_offset(offset), err)
@@ -69,10 +75,10 @@ pub fn lower(src: &SrcFile, module: ast::Module) -> Result<hir::Module> {
             node_ty_map.insert(*node_id, final_ty);
         }
 
-        let mut node_def_map = HashMap::with_capacity(analyzer.node_def_map.len());
-        for (node_id, def) in analyzer.node_def_map.iter() {
+        let mut node_def_map = HashMap::with_capacity(node_infer_def_map.len());
+        for (node_id, def) in node_infer_def_map.iter() {
             let def: &Def<_> = &def;
-            let ty = analyzer.get_final_type(def.ty).unwrap();
+            let ty = get_final_type(def.ty).unwrap();
             node_def_map.insert(*node_id, Def::new(def.id, ty, def.is_mut));
         }
 
@@ -333,7 +339,7 @@ impl<'src> Lower<'src> {
             ast::ExprKind::Lit(lit) => self.lower_lit(id, lit).map(|v| v.into()),
             ast::ExprKind::Path(tok) => {
                 let def = self.node_def_map.get(&expr.id).unwrap();
-                Ok(hir::Path::new(tok.raw.clone(), Def::new(def.id, ty, def.is_mut).into()).into())
+                Ok(hir::Path::new(tok.raw.clone(), Def::new(def.id, ty, def.is_mut)).into())
             }
             ast::ExprKind::Call(path, args) => {
                 let path = path.raw.clone();

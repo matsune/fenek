@@ -5,24 +5,44 @@ use hir::def::*;
 use hir::ty;
 use pos::{Pos, SrcFile};
 use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
+use typed_arena::Arena;
 
 fn compile_error(pos: Pos, typeck_err: TypeCkError) -> CompileError {
     CompileError::new(pos, Box::new(typeck_err))
 }
 
+pub struct DefArena<Ty> {
+    pub inner: Arena<Def<Ty>>,
+}
+
+impl<Ty> DefArena<Ty> {
+    pub fn new() -> Self {
+        Self {
+            inner: Arena::new(),
+        }
+    }
+
+    pub fn alloc(&self, ty: Ty, is_mut: bool) -> &Def<Ty> {
+        self.inner.alloc(Def::new(self.inner.len(), ty, is_mut))
+    }
+}
+
 pub struct TyAnalyzer<'src, 'infer> {
     src: &'src SrcFile,
     ty_arena: &'infer InferTyArena<'infer>,
-    pub node_ty_map: HashMap<ast::NodeId, &'infer InferTy<'infer>>,
-    pub node_def_map: HashMap<ast::NodeId, Rc<Def<&'infer InferTy<'infer>>>>,
-    scopes: Vec<ScopeTable<&'infer InferTy<'infer>>>,
+    def_arena: &'infer DefArena<&'infer InferTy<'infer>>,
+    node_ty_map: HashMap<ast::NodeId, &'infer InferTy<'infer>>,
+    node_def_map: HashMap<ast::NodeId, &'infer Def<&'infer InferTy<'infer>>>,
+    scopes: Vec<ScopeTable<'infer, &'infer InferTy<'infer>>>,
     scope_idx: ArenaIdx,
-    def_id: DefId,
 }
 
 impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
-    pub fn new(src: &'src SrcFile, ty_arena: &'infer InferTyArena<'infer>) -> Self {
+    pub fn new(
+        src: &'src SrcFile,
+        ty_arena: &'infer InferTyArena<'infer>,
+        def_arena: &'infer DefArena<&'infer InferTy<'infer>>,
+    ) -> Self {
         let mut scopes = Vec::new();
         let scope_idx = scopes.len();
         // add global scope
@@ -30,12 +50,21 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         TyAnalyzer {
             src,
             ty_arena,
+            def_arena,
             node_ty_map: HashMap::new(),
             node_def_map: HashMap::new(),
             scopes,
             scope_idx,
-            def_id: 0,
         }
+    }
+
+    pub fn drop(
+        self,
+    ) -> (
+        HashMap<ast::NodeId, &'infer InferTy<'infer>>,
+        HashMap<ast::NodeId, &'infer Def<&'infer InferTy<'infer>>>,
+    ) {
+        (self.node_ty_map, self.node_def_map)
     }
 
     fn push_scope(&mut self) {
@@ -48,18 +77,12 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         self.scope_idx = self.scopes[self.scope_idx].parent.unwrap();
     }
 
-    fn get_scope(&self) -> &ScopeTable<&'infer InferTy<'infer>> {
+    fn get_scope(&self) -> &ScopeTable<'infer, &'infer InferTy<'infer>> {
         &self.scopes[self.scope_idx]
     }
 
-    fn get_scope_mut(&mut self) -> &mut ScopeTable<&'infer InferTy<'infer>> {
+    fn get_scope_mut(&mut self) -> &mut ScopeTable<'infer, &'infer InferTy<'infer>> {
         &mut self.scopes[self.scope_idx]
-    }
-
-    fn gen_def_id(&mut self) -> DefId {
-        let id = self.def_id;
-        self.def_id += 1;
-        id
     }
 
     fn get_type_from_ty(&self, ty: &ast::Ty) -> Option<&'infer InferTy<'infer>> {
@@ -80,13 +103,13 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         Some(infer_ty)
     }
 
-    fn lookup_fun(&self, name: &str) -> Option<Rc<Def<&'infer InferTy<'infer>>>> {
+    fn lookup_fun(&self, name: &str) -> Option<&'infer Def<&'infer InferTy<'infer>>> {
         let scopes = &self.scopes;
         let mut tmp_idx = self.scope_idx;
         while let Some(scope_table) = scopes.get(tmp_idx) {
             match scope_table.lookup_fun(name) {
                 Some(fun_def) => {
-                    return Some(fun_def.clone());
+                    return Some(fun_def);
                 }
                 None => match scope_table.parent {
                     Some(parent_idx) => tmp_idx = parent_idx,
@@ -106,10 +129,8 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 ));
             }
             let fun_def = self.make_fun_def(&fun)?;
-            let rc = self
-                .get_scope_mut()
-                .insert_fun(fun.name.raw.clone(), fun_def);
-            self.node_def_map.insert(fun.id, rc);
+            self.get_scope_mut().insert(fun.name.raw.clone(), fun_def);
+            self.node_def_map.insert(fun.id, fun_def);
         }
 
         for fun in &module.funs {
@@ -118,7 +139,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         Ok(())
     }
 
-    fn make_fun_def(&mut self, fun: &ast::Fun) -> Result<Def<&'infer InferTy<'infer>>> {
+    fn make_fun_def(&mut self, fun: &ast::Fun) -> Result<&'infer Def<&'infer InferTy<'infer>>> {
         let mut arg_tys = Vec::new();
         let mut arg_names = HashSet::new();
         for arg in &fun.args {
@@ -161,22 +182,19 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
             None => self.ty_arena.alloc_void(),
         };
 
-        Ok(Def::new(
-            self.gen_def_id(),
-            self.ty_arena.alloc_fun(arg_tys, ret_ty),
-            false,
-        ))
+        Ok(self
+            .def_arena
+            .alloc(self.ty_arena.alloc_fun(arg_tys, ret_ty), false))
     }
 
     fn analyze_fun(&mut self, fun: &ast::Fun) -> Result<()> {
         let fun_def = self.lookup_fun(&fun.name.raw).unwrap();
         self.push_scope();
-        // self.node_scope_map.insert(fun.block.id, self.scope_idx);
 
         for (idx, arg) in fun.args.iter().enumerate() {
             let ty = fun_def.ty.kind.as_fun().arg_tys[idx];
-            let def = Def::new(self.gen_def_id(), ty, false);
-            let def = self.get_scope_mut().insert_var(arg.name.raw.clone(), def);
+            let def = self.def_arena.alloc(ty, false);
+            self.get_scope_mut().insert(arg.name.raw.clone(), def);
             self.node_def_map.insert(arg.id, def);
         }
 
@@ -210,10 +228,9 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 }
                 let init_ty = self.analyze_expr(&init)?;
                 let var_ty = self.ty_arena.alloc_var();
-                let def_id = self.gen_def_id();
                 init_ty.set_prune(var_ty);
-                let def = Def::new(def_id, init_ty, true);
-                let def = self.get_scope_mut().insert_var(name.raw.clone(), def);
+                let def = self.def_arena.alloc(init_ty, true);
+                self.get_scope_mut().insert(name.raw.clone(), def);
                 self.node_def_map.insert(stmt.id, def);
             }
             ast::StmtKind::Ret { keyword: _, expr } => {
@@ -262,7 +279,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                         TypeCkError::InvalidArgsCount,
                     ));
                 }
-                self.node_def_map.insert(expr.id, def.clone());
+                self.node_def_map.insert(expr.id, def);
                 let ty = self.ty_arena.alloc_var();
                 let arg_tys = &def.ty.kind.as_fun().arg_tys;
                 for (idx, arg) in args.iter().enumerate() {
@@ -291,50 +308,47 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         self.node_ty_map.insert(expr.id, ty);
         Ok(ty)
     }
+}
 
-    fn unify_ty(
-        &self,
-        ty: &'infer InferTy<'infer>,
-    ) -> Result<&'infer InferTy<'infer>, TypeCkError> {
-        let mut ty = ty;
-        for r_ty in ty.borrow_from_nodes().iter() {
-            ty = unify(ty, self.unify_ty(r_ty)?)?;
+fn unify_ty<'infer>(ty: &'infer InferTy<'infer>) -> Result<&'infer InferTy<'infer>, TypeCkError> {
+    let mut ty = ty;
+    for r_ty in ty.borrow_from_nodes().iter() {
+        ty = unify(ty, unify_ty(r_ty)?)?;
+    }
+    Ok(ty)
+}
+
+pub fn get_final_type<'infer>(ty: &'infer InferTy<'infer>) -> Result<ty::Type, TypeCkError> {
+    let top_ty = ty.prune();
+    let final_kind = &unify_ty(top_ty)?.kind;
+    let final_ty = match final_kind {
+        InferTyKind::Var => {
+            return Err(TypeCkError::UnresolvedType);
         }
-        Ok(ty)
-    }
-
-    pub fn get_final_type(&self, ty: &'infer InferTy<'infer>) -> Result<ty::Type, TypeCkError> {
-        let top_ty = ty.prune();
-        let final_kind = &self.unify_ty(top_ty)?.kind;
-        let final_ty = match final_kind {
-            InferTyKind::Var => {
-                return Err(TypeCkError::UnresolvedType);
+        InferTyKind::Int(int_kind) => match int_kind {
+            IntKind::I8 => ty::Type::Int(ty::IntType::I8),
+            IntKind::I16 => ty::Type::Int(ty::IntType::I16),
+            IntKind::I32 => ty::Type::Int(ty::IntType::I32),
+            IntKind::I64 => ty::Type::Int(ty::IntType::I64),
+        },
+        InferTyKind::IntLit => ty::Type::Int(ty::IntType::I64),
+        InferTyKind::Float(kind) => match kind {
+            FloatKind::F32 => ty::Type::Float(ty::FloatType::F32),
+            FloatKind::F64 => ty::Type::Float(ty::FloatType::F64),
+        },
+        InferTyKind::FloatLit => ty::Type::Float(ty::FloatType::F64),
+        InferTyKind::Bool => ty::Type::Bool,
+        InferTyKind::Void => ty::Type::Void,
+        InferTyKind::Fun(fun_ty) => {
+            let mut arg_tys = Vec::new();
+            for arg_ty in &fun_ty.arg_tys {
+                arg_tys.push(get_final_type(arg_ty)?);
             }
-            InferTyKind::Int(int_kind) => match int_kind {
-                IntKind::I8 => ty::Type::Int(ty::IntType::I8),
-                IntKind::I16 => ty::Type::Int(ty::IntType::I16),
-                IntKind::I32 => ty::Type::Int(ty::IntType::I32),
-                IntKind::I64 => ty::Type::Int(ty::IntType::I64),
-            },
-            InferTyKind::IntLit => ty::Type::Int(ty::IntType::I64),
-            InferTyKind::Float(kind) => match kind {
-                FloatKind::F32 => ty::Type::Float(ty::FloatType::F32),
-                FloatKind::F64 => ty::Type::Float(ty::FloatType::F64),
-            },
-            InferTyKind::FloatLit => ty::Type::Float(ty::FloatType::F64),
-            InferTyKind::Bool => ty::Type::Bool,
-            InferTyKind::Void => ty::Type::Void,
-            InferTyKind::Fun(fun_ty) => {
-                let mut arg_tys = Vec::new();
-                for arg_ty in &fun_ty.arg_tys {
-                    arg_tys.push(self.get_final_type(arg_ty)?);
-                }
-                let ret_ty = self.get_final_type(&fun_ty.ret_ty)?;
-                ty::Type::Fun(ty::FunType::new(arg_tys, Box::new(ret_ty)))
-            }
-        };
-        Ok(final_ty)
-    }
+            let ret_ty = get_final_type(&fun_ty.ret_ty)?;
+            ty::Type::Fun(ty::FunType::new(arg_tys, Box::new(ret_ty)))
+        }
+    };
+    Ok(final_ty)
 }
 
 fn unify<'infer>(
