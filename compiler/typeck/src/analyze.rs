@@ -3,6 +3,7 @@ use crate::infer::*;
 use crate::scope::*;
 use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
+use lex::token;
 use pos::{Pos, SrcFile};
 use std::collections::{HashMap, HashSet};
 
@@ -158,7 +159,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 self.analyze_expr(&expr)?;
             }
             ast::StmtKind::VarDecl {
-                keyword: _,
+                keyword,
                 name,
                 init,
             } => {
@@ -171,7 +172,10 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 let init_ty = self.analyze_expr(&init)?;
                 let var_ty = self.ty_arena.alloc_var();
                 init_ty.set_prune(var_ty);
-                let def = self.def_arena.alloc(init_ty, true);
+                let def = self.def_arena.alloc(
+                    init_ty,
+                    token::Keyword::try_from(&keyword.raw).unwrap() == token::Keyword::Var,
+                );
                 self.scopes.insert(name.raw.clone(), def);
                 self.node_def_map.insert(stmt.id, def);
             }
