@@ -250,7 +250,22 @@ impl<'src> Parser<'src> {
                     ))
                 }
             },
-            _ => Stmt::new(self.gen_id(), StmtKind::Expr(self.parse_expr()?)),
+            _ => {
+                let expr = self.parse_expr()?;
+                self.skip_spaces();
+                if self
+                    .bump_if(|tok| tok.kind == token::TokenKind::Eq)
+                    .is_some()
+                {
+                    // assign
+                    self.skip_spaces();
+                    let right = self.parse_expr()?;
+                    self.skip_spaces();
+                    Stmt::new_assign(self.gen_id(), expr, right)
+                } else {
+                    Stmt::new_expr(self.gen_id(), expr)
+                }
+            }
         };
         self.bump_if(|tok| tok.kind == token::TokenKind::Semi)
             .ok_or_else(|| self.expected_err(";"))?;

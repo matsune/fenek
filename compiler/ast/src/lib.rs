@@ -151,6 +151,20 @@ impl Stmt {
         }
     }
 
+    pub fn new_assign(id: NodeId, left: Expr, right: Expr) -> Self {
+        Self {
+            id,
+            kind: StmtKind::Assign(left, right),
+        }
+    }
+
+    pub fn new_expr(id: NodeId, expr: Expr) -> Self {
+        Self {
+            id,
+            kind: StmtKind::Expr(expr),
+        }
+    }
+
     pub fn offset(&self) -> Offset {
         self.kind.offset()
     }
@@ -167,20 +181,23 @@ pub enum StmtKind {
         name: token::Token,
         init: Expr,
     },
+    Assign(Expr, Expr),
     Empty(Offset),
 }
 
 impl StmtKind {
     pub fn offset(&self) -> Offset {
+        use StmtKind::*;
         match self {
-            Self::Expr(expr) => expr.offset(),
-            Self::Ret { keyword, expr: _ } => keyword.offset,
-            Self::VarDecl {
+            Expr(expr) => expr.offset(),
+            Ret { keyword, expr: _ } => keyword.offset,
+            VarDecl {
                 keyword,
                 name: _,
                 init: _,
             } => keyword.offset,
-            Self::Empty(offset) => *offset,
+            Assign(l, _) => l.offset(),
+            Empty(offset) => *offset,
         }
     }
 }

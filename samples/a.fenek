@@ -4,5 +4,6 @@ fun sum(a: i32, b: i32) -> i32 {
 
 fun main() -> i32 {
   var a = -(-12 + 3) * 4;
+  a = 3;
   ret sum(a, 12);
 }

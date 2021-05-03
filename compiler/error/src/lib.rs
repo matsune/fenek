@@ -94,6 +94,8 @@ pub enum TypeCkError {
     InvalidArgsCount,
     #[error("invalid return type")]
     InvalidReturnType,
+    #[error("invalid assign statement")]
+    InvalidAssign,
     #[error("must be ret statement")]
     MustBeRetStmt,
     #[error("invalid binary types")]

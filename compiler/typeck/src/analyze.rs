@@ -182,6 +182,11 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 };
                 ty.set_prune(current_fn_ret_ty);
             }
+            ast::StmtKind::Assign(left, right) => {
+                let left_ty = self.analyze_expr(&left)?;
+                let right_ty = self.analyze_expr(&right)?;
+                left_ty.set_prune(right_ty);
+            }
             ast::StmtKind::Empty(_) => {}
         };
         Ok(())

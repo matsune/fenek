@@ -119,6 +119,7 @@ enum StmtKind {
     Expr(Expr),
     Ret(Option<Expr>),
     VarDecl { name: String, init: Expr },
+    Assign(Expr, Expr),
     Empty,
 }
 
@@ -135,6 +136,7 @@ impl From<&ast::StmtKind> for StmtKind {
                 name: name.raw.clone(),
                 init: init.into(),
             },
+            ast::StmtKind::Assign(left, right) => Self::Assign(left.into(), right.into()),
             ast::StmtKind::Empty(_) => Self::Empty,
         }
     }

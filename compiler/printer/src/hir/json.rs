@@ -77,7 +77,7 @@ macro_rules! Enum {
     }
 }
 
-Enum!(Stmt [VarDecl, Ret, Expr]);
+Enum!(Stmt [VarDecl, Ret, Expr, Assign]);
 
 #[derive(Serialize)]
 struct VarDecl {
@@ -108,9 +108,26 @@ struct Ret {
 
 impl From<&hir::Ret> for Ret {
     fn from(base: &hir::Ret) -> Self {
-        Ret {
+        Self {
             id: base.id,
             expr: base.expr.as_ref().map(|expr| expr.into()),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct Assign {
+    id: ast::NodeId,
+    left: Expr,
+    right: Expr,
+}
+
+impl From<&hir::Assign> for Assign {
+    fn from(base: &hir::Assign) -> Self {
+        Self {
+            id: base.id,
+            left: base.left.deref().into(),
+            right: base.left.deref().into(),
         }
     }
 }

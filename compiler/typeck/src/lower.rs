@@ -193,13 +193,7 @@ impl<'src> Lower<'src> {
                 let expr = self.lower_expr(&init)?;
                 let ty = expr.get_type().clone();
                 let def = self.node_def_map.get(&id).unwrap();
-                hir::VarDecl::new(
-                    id,
-                    name.clone(),
-                    Box::new(expr),
-                    Def::new(def.id, ty, def.is_mut),
-                )
-                .into()
+                hir::VarDecl::new(id, name.clone(), expr, Def::new(def.id, ty, def.is_mut)).into()
             }
             ast::StmtKind::Ret { keyword, expr } => {
                 let expr = match expr {
@@ -207,6 +201,14 @@ impl<'src> Lower<'src> {
                     None => None,
                 };
                 hir::Ret::new(id, expr).into()
+            }
+            ast::StmtKind::Assign(left, right) => {
+                let left = self.lower_expr(&left)?;
+                if !left.is_assignable() {
+                    return Err((id, TypeCkError::InvalidAssign));
+                }
+                let right = self.lower_expr(&right)?;
+                hir::Assign::new(id, left, right).into()
             }
             ast::StmtKind::Empty(_) => unreachable!(),
         };

@@ -317,9 +317,21 @@ impl<'ctx> Codegen<'ctx> {
                     function.borrow().builder.build_return(None);
                 }
             },
+            hir::Stmt::Assign(assign) => {
+                let right = self.build_expr(&function.borrow(), &assign.right);
+                let left = self.get_ptr(&function.borrow(), &assign.left);
+                function.borrow().builder.build_store(left, right);
+            }
             hir::Stmt::Expr(expr) => {
                 self.build_expr(&function.borrow(), &expr);
             }
+        }
+    }
+
+    fn get_ptr(&self, function: &Function<'ctx>, expr: &hir::Expr) -> PointerValue<'ctx> {
+        match expr {
+            hir::Expr::Path(ident) => function.var_map.get(&ident.def.id).unwrap().ptr,
+            _ => unreachable!(),
         }
     }
 

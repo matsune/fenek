@@ -115,6 +115,10 @@ fn visit_stmt<'a, T, F: Fn(Node<'a>) -> T>(stmt: &'a Stmt, id: NodeId, callback:
         StmtKind::Expr(expr) => {
             return_if_some!(visit_expr(expr, id, &callback));
         }
+        StmtKind::Assign(left, right) => {
+            return_if_some!(visit_expr(left, id, &callback));
+            return_if_some!(visit_expr(right, id, &callback));
+        }
         _ => {}
     };
     None

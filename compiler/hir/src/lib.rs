@@ -71,7 +71,23 @@ macro_rules! Enum {
     }
 }
 
-Enum!(Stmt [VarDecl, Ret, Expr]);
+Enum!(Stmt [VarDecl, Ret, Expr, Assign]);
+
+pub struct Assign {
+    pub id: ast::NodeId,
+    pub left: Box<Expr>,
+    pub right: Box<Expr>,
+}
+
+impl Assign {
+    pub fn new(id: ast::NodeId, left: Expr, right: Expr) -> Self {
+        Self {
+            id,
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+}
 
 pub struct VarDecl {
     pub id: ast::NodeId,
@@ -81,11 +97,11 @@ pub struct VarDecl {
 }
 
 impl VarDecl {
-    pub fn new(id: ast::NodeId, name: token::Token, init: Box<Expr>, def: Def<ty::Type>) -> Self {
+    pub fn new(id: ast::NodeId, name: token::Token, init: Expr, def: Def<ty::Type>) -> Self {
         Self {
             id,
             name,
-            init,
+            init: Box::new(init),
             def,
         }
     }
@@ -131,6 +147,15 @@ macro_rules! Enum_with_type {
 }
 
 Enum_with_type!(Expr [Lit, Path, Call, Binary, Unary]);
+
+impl Expr {
+    pub fn is_assignable(&self) -> bool {
+        match self {
+            Self::Path(path) => path.def.is_mut,
+            _ => false,
+        }
+    }
+}
 
 pub struct Lit {
     pub id: ast::NodeId,
