@@ -1,8 +1,7 @@
-use crate::infer_ty::*;
+use crate::infer::*;
 use crate::scope::*;
 use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
-use hir::ty;
 use pos::{Pos, SrcFile};
 use std::collections::{HashMap, HashSet};
 use typed_arena::Arena;
@@ -307,80 +306,5 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         };
         self.node_ty_map.insert(expr.id, ty);
         Ok(ty)
-    }
-}
-
-fn unify_ty<'infer>(ty: &'infer InferTy<'infer>) -> Result<&'infer InferTy<'infer>, TypeCkError> {
-    let mut ty = ty;
-    for r_ty in ty.borrow_from_nodes().iter() {
-        ty = unify(ty, unify_ty(r_ty)?)?;
-    }
-    Ok(ty)
-}
-
-pub fn get_final_type<'infer>(ty: &'infer InferTy<'infer>) -> Result<ty::Type, TypeCkError> {
-    let top_ty = ty.prune();
-    let final_kind = &unify_ty(top_ty)?.kind;
-    let final_ty = match final_kind {
-        InferTyKind::Var => {
-            return Err(TypeCkError::UnresolvedType);
-        }
-        InferTyKind::Int(int_kind) => match int_kind {
-            IntKind::I8 => ty::Type::Int(ty::IntType::I8),
-            IntKind::I16 => ty::Type::Int(ty::IntType::I16),
-            IntKind::I32 => ty::Type::Int(ty::IntType::I32),
-            IntKind::I64 => ty::Type::Int(ty::IntType::I64),
-        },
-        InferTyKind::IntLit => ty::Type::Int(ty::IntType::I64),
-        InferTyKind::Float(kind) => match kind {
-            FloatKind::F32 => ty::Type::Float(ty::FloatType::F32),
-            FloatKind::F64 => ty::Type::Float(ty::FloatType::F64),
-        },
-        InferTyKind::FloatLit => ty::Type::Float(ty::FloatType::F64),
-        InferTyKind::Bool => ty::Type::Bool,
-        InferTyKind::Void => ty::Type::Void,
-        InferTyKind::Fun(fun_ty) => {
-            let mut arg_tys = Vec::new();
-            for arg_ty in &fun_ty.arg_tys {
-                arg_tys.push(get_final_type(arg_ty)?);
-            }
-            let ret_ty = get_final_type(&fun_ty.ret_ty)?;
-            ty::Type::Fun(ty::FunType::new(arg_tys, Box::new(ret_ty)))
-        }
-    };
-    Ok(final_ty)
-}
-
-fn unify<'infer>(
-    a: &'infer InferTy<'infer>,
-    b: &'infer InferTy<'infer>,
-) -> Result<&'infer InferTy<'infer>, TypeCkError> {
-    match (&a.kind, &b.kind) {
-        // Var
-        (InferTyKind::Var, _) => Ok(b),
-        (_, InferTyKind::Var) => unify(b, a),
-
-        // IntLit
-        (InferTyKind::IntLit, InferTyKind::Int(_))
-        | (InferTyKind::IntLit, InferTyKind::IntLit)
-        | (InferTyKind::IntLit, InferTyKind::Float(_))
-        | (InferTyKind::IntLit, InferTyKind::FloatLit) => Ok(b),
-        (_, InferTyKind::IntLit) => unify(b, a),
-
-        // FloatLit
-        (InferTyKind::FloatLit, InferTyKind::FloatLit)
-        | (InferTyKind::FloatLit, InferTyKind::Float(_)) => Ok(b),
-        (_, InferTyKind::FloatLit) => unify(b, a),
-
-        (a_kind, b_kind) => {
-            if a_kind == b_kind {
-                Ok(a)
-            } else {
-                Err(TypeCkError::ConflictTypes(
-                    a_kind.to_string(),
-                    b_kind.to_string(),
-                ))
-            }
-        }
     }
 }

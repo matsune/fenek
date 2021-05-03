@@ -1,5 +1,6 @@
 mod analyze;
-mod infer_ty;
+mod finalize;
+mod infer;
 mod lower;
 pub mod scope;
 

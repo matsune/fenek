@@ -1,3 +1,5 @@
+use error::TypeCkError;
+use hir::ty;
 use std::cell::{Cell, Ref, RefCell};
 use typed_arena::Arena;
 
@@ -11,6 +13,7 @@ pub type InferTyID = usize;
 /// Connection means that those nodes will be same type after
 /// resolving type inference, so all nodes of a tree must have
 /// same type.
+#[derive(Debug)]
 pub struct InferTy<'a> {
     pub id: InferTyID,
     pub kind: InferTyKind<'a>,
@@ -35,6 +38,19 @@ impl<'a> InferTy<'a> {
             // prevent self reference
             return;
         }
+
+        match (&t.kind, &tip.kind) {
+            (InferTyKind::Fun(t_fun), InferTyKind::Fun(tip_fun))
+                if t_fun.arg_tys.len() == tip_fun.arg_tys.len() =>
+            {
+                for i in 0..t_fun.arg_tys.len() {
+                    t_fun.arg_tys[i].set_prune(tip_fun.arg_tys[i]);
+                }
+                t_fun.ret_ty.set_prune(tip_fun.ret_ty);
+            }
+            _ => {}
+        }
+
         tip.from_node.borrow_mut().push(t);
         t.to_node.set(Some(tip));
     }
@@ -52,6 +68,7 @@ impl<'a> InferTy<'a> {
     }
 }
 
+#[derive(Debug)]
 pub enum InferTyKind<'a> {
     Var,
     Int(IntKind),
@@ -97,6 +114,7 @@ impl<'a> InferTyKind<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct FunTy<'a> {
     pub arg_tys: Vec<&'a InferTy<'a>>,
     pub ret_ty: &'a InferTy<'a>,

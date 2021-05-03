@@ -5,7 +5,6 @@ authors = ["Yuma Matsune <yuma.matsune@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-paste = "1.0"
 error = { path = "../error" }
 pos = { path = "../pos" }
 ast = { path = "../ast" }

@@ -1,5 +1,6 @@
-use super::analyze::{get_final_type, DefArena, TyAnalyzer};
-use crate::infer_ty::*;
+use super::analyze::{DefArena, TyAnalyzer};
+use super::finalize::TyFinalizer;
+use crate::infer::*;
 use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
 use hir::ty;
@@ -52,22 +53,24 @@ fn parse_int_literal<T: Num>(base: token::IntBase, literal: &str) -> Result<T, T
 type LowerResult<T> = Result<T, (ast::NodeId, TypeCkError)>;
 
 pub fn lower(src: &SrcFile, module: ast::Module) -> Result<hir::Module> {
-    let lower = {
-        // lifetime 'infer equals with this block
-        let ty_arena = InferTyArena::default();
-        let def_arena = DefArena::new();
+    // lifetime 'infer equals with this block
+    let ty_arena = InferTyArena::default();
+    let def_arena = DefArena::new();
 
-        // analyze AST and make hash maps to infer types of each nodes
+    let (node_ty_map, node_def_map) = {
+        // 1. analyze AST and make hash maps to infer types of each nodes
         let (node_infer_ty_map, node_infer_def_map) = {
             let mut analyzer = TyAnalyzer::new(src, &ty_arena, &def_arena);
             analyzer.analyze_module(&module)?;
             analyzer.drop()
         };
 
-        // finalize InferTy into ty::Type
+        // 2. finalize inferring type into concrete ty::Type
+        let finalizer = TyFinalizer::new(&ty_arena);
+
         let mut node_ty_map = HashMap::with_capacity(node_infer_ty_map.len());
         for (node_id, infer_ty) in node_infer_ty_map.iter() {
-            let final_ty = get_final_type(infer_ty).map_err(|err| {
+            let final_ty = finalizer.finalize_type(infer_ty).map_err(|err| {
                 let offset =
                     ast::visit::visit_module(&module, *node_id, |node| node.offset()).unwrap();
                 compile_error(src.pos_from_offset(offset), err)
@@ -77,14 +80,14 @@ pub fn lower(src: &SrcFile, module: ast::Module) -> Result<hir::Module> {
 
         let mut node_def_map = HashMap::with_capacity(node_infer_def_map.len());
         for (node_id, def) in node_infer_def_map.iter() {
-            let def: &Def<_> = &def;
-            let ty = get_final_type(def.ty).unwrap();
+            let ty = finalizer.finalize_type(def.ty).unwrap();
             node_def_map.insert(*node_id, Def::new(def.id, ty, def.is_mut));
         }
 
-        Lower::new(&src, node_ty_map, node_def_map)
+        (node_ty_map, node_def_map)
     };
-    lower.lower_module(&module)
+
+    Lower::new(&src, node_ty_map, node_def_map).lower_module(&module)
 }
 
 struct Lower<'src> {

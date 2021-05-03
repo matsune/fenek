@@ -309,7 +309,6 @@ dependencies = [
  "ast",
  "error",
  "lex",
- "paste",
  "pos",
 ]
 
@@ -545,6 +544,7 @@ dependencies = [
  "lex",
  "num-traits",
  "parse",
+ "paste",
  "pos",
  "typed-arena",
 ]

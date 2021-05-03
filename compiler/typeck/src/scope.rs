@@ -1,4 +1,4 @@
-use crate::infer_ty::InferTy;
+use crate::infer::InferTy;
 use hir::def::Def;
 use hir::ty;
 use std::collections::HashMap;
