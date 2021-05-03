@@ -1,3 +1,4 @@
+use super::arena::InferTyArena;
 use super::infer::*;
 use error::{Result, TypeCkError};
 use hir::ty;

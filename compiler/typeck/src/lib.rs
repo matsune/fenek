@@ -1,4 +1,5 @@
 mod analyze;
+mod arena;
 mod finalize;
 mod infer;
 mod lower;

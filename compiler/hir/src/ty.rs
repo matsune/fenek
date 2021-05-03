@@ -51,6 +51,10 @@ impl Type {
         matches!(self, Type::Fun(_))
     }
 
+    pub fn is_var(&self) -> bool {
+        !self.is_fun()
+    }
+
     pub fn as_fun(&self) -> &FunType {
         match self {
             Self::Fun(f) => f,

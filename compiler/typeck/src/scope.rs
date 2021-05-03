@@ -70,7 +70,7 @@ impl<'a> ScopeTable<'a, ty::Type> {
     pub fn lookup_var(&self, symbol: &str) -> Option<&'a Def<ty::Type>> {
         match self.table.get(symbol) {
             Some(def) => {
-                if !def.ty.is_fun() {
+                if def.ty.is_var() {
                     Some(def)
                 } else {
                     None
@@ -98,7 +98,7 @@ impl<'infer> ScopeTable<'infer, &'infer InferTy<'infer>> {
     pub fn lookup_var(&self, symbol: &str) -> Option<&'infer Def<&'infer InferTy<'infer>>> {
         match self.table.get(symbol) {
             Some(def) => {
-                if !def.ty.kind.is_fun() {
+                if def.ty.kind.is_var() {
                     Some(def)
                 } else {
                     None

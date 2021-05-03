@@ -1,37 +1,23 @@
+use super::arena::*;
 use crate::infer::*;
 use crate::scope::*;
 use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
 use pos::{Pos, SrcFile};
 use std::collections::{HashMap, HashSet};
-use typed_arena::Arena;
+
+pub type NodeMap<T> = HashMap<ast::NodeId, T>;
 
 fn compile_error(pos: Pos, typeck_err: TypeCkError) -> CompileError {
     CompileError::new(pos, Box::new(typeck_err))
-}
-
-pub struct DefArena<Ty> {
-    pub inner: Arena<Def<Ty>>,
-}
-
-impl<Ty> DefArena<Ty> {
-    pub fn new() -> Self {
-        Self {
-            inner: Arena::new(),
-        }
-    }
-
-    pub fn alloc(&self, ty: Ty, is_mut: bool) -> &Def<Ty> {
-        self.inner.alloc(Def::new(self.inner.len(), ty, is_mut))
-    }
 }
 
 pub struct TyAnalyzer<'src, 'infer> {
     src: &'src SrcFile,
     ty_arena: &'infer InferTyArena<'infer>,
     def_arena: &'infer DefArena<&'infer InferTy<'infer>>,
-    node_ty_map: HashMap<ast::NodeId, &'infer InferTy<'infer>>,
-    node_def_map: HashMap<ast::NodeId, &'infer Def<&'infer InferTy<'infer>>>,
+    node_ty_map: NodeMap<&'infer InferTy<'infer>>,
+    node_def_map: NodeMap<&'infer Def<&'infer InferTy<'infer>>>,
     scopes: Vec<ScopeTable<'infer, &'infer InferTy<'infer>>>,
     scope_idx: ArenaIdx,
 }
@@ -50,20 +36,11 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
             src,
             ty_arena,
             def_arena,
-            node_ty_map: HashMap::new(),
-            node_def_map: HashMap::new(),
+            node_ty_map: NodeMap::new(),
+            node_def_map: NodeMap::new(),
             scopes,
             scope_idx,
         }
-    }
-
-    pub fn drop(
-        self,
-    ) -> (
-        HashMap<ast::NodeId, &'infer InferTy<'infer>>,
-        HashMap<ast::NodeId, &'infer Def<&'infer InferTy<'infer>>>,
-    ) {
-        (self.node_ty_map, self.node_def_map)
     }
 
     fn push_scope(&mut self) {
@@ -76,12 +53,8 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         self.scope_idx = self.scopes[self.scope_idx].parent.unwrap();
     }
 
-    fn get_scope(&self) -> &ScopeTable<'infer, &'infer InferTy<'infer>> {
-        &self.scopes[self.scope_idx]
-    }
-
-    fn get_scope_mut(&mut self) -> &mut ScopeTable<'infer, &'infer InferTy<'infer>> {
-        &mut self.scopes[self.scope_idx]
+    fn insert_def(&mut self, name: String, def: &'infer Def<&'infer InferTy<'infer>>) {
+        self.scopes[self.scope_idx].insert(name, def)
     }
 
     fn get_type_from_ty(&self, ty: &ast::Ty) -> Option<&'infer InferTy<'infer>> {
@@ -107,8 +80,8 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         let mut tmp_idx = self.scope_idx;
         while let Some(scope_table) = scopes.get(tmp_idx) {
             match scope_table.lookup_fun(name) {
-                Some(fun_def) => {
-                    return Some(fun_def);
+                Some(def) => {
+                    return Some(def);
                 }
                 None => match scope_table.parent {
                     Some(parent_idx) => tmp_idx = parent_idx,
@@ -119,7 +92,38 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         None
     }
 
-    pub fn analyze_module(&mut self, module: &ast::Module) -> Result<()> {
+    fn lookup_var(
+        &self,
+        name: &str,
+        only_this: bool,
+    ) -> Option<&'infer Def<&'infer InferTy<'infer>>> {
+        if only_this {
+            return self.scopes[self.scope_idx].lookup_var(name);
+        }
+
+        let scopes = &self.scopes;
+        let mut tmp_idx = self.scope_idx;
+        while let Some(scope_table) = scopes.get(tmp_idx) {
+            match scope_table.lookup_var(name) {
+                Some(def) => {
+                    return Some(def);
+                }
+                None => match scope_table.parent {
+                    Some(parent_idx) => tmp_idx = parent_idx,
+                    None => break,
+                },
+            }
+        }
+        None
+    }
+
+    pub fn analyze_module(
+        mut self,
+        module: &ast::Module,
+    ) -> Result<(
+        NodeMap<&'infer InferTy<'infer>>,
+        NodeMap<&'infer Def<&'infer InferTy<'infer>>>,
+    )> {
         for fun in &module.funs {
             if self.lookup_fun(&fun.name.raw).is_some() {
                 return Err(compile_error(
@@ -128,14 +132,15 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 ));
             }
             let fun_def = self.make_fun_def(&fun)?;
-            self.get_scope_mut().insert(fun.name.raw.clone(), fun_def);
+            self.insert_def(fun.name.raw.clone(), fun_def);
             self.node_def_map.insert(fun.id, fun_def);
         }
 
         for fun in &module.funs {
             self.analyze_fun(&fun)?;
         }
-        Ok(())
+
+        Ok((self.node_ty_map, self.node_def_map))
     }
 
     fn make_fun_def(&mut self, fun: &ast::Fun) -> Result<&'infer Def<&'infer InferTy<'infer>>> {
@@ -193,7 +198,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         for (idx, arg) in fun.args.iter().enumerate() {
             let ty = fun_def.ty.kind.as_fun().arg_tys[idx];
             let def = self.def_arena.alloc(ty, false);
-            self.get_scope_mut().insert(arg.name.raw.clone(), def);
+            self.insert_def(arg.name.raw.clone(), def);
             self.node_def_map.insert(arg.id, def);
         }
 
@@ -219,7 +224,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 name,
                 init,
             } => {
-                if self.get_scope().lookup_var(&name.raw).is_some() {
+                if self.lookup_var(&name.raw, true).is_some() {
                     return Err(compile_error(
                         self.src.pos_from_offset(name.offset),
                         TypeCkError::AlreadyDefinedVariable(name.raw.clone()),
@@ -229,7 +234,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 let var_ty = self.ty_arena.alloc_var();
                 init_ty.set_prune(var_ty);
                 let def = self.def_arena.alloc(init_ty, true);
-                self.get_scope_mut().insert(name.raw.clone(), def);
+                self.insert_def(name.raw.clone(), def);
                 self.node_def_map.insert(stmt.id, def);
             }
             ast::StmtKind::Ret { keyword: _, expr } => {
@@ -252,7 +257,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 ast::LitKind::Bool => self.ty_arena.alloc_bool(),
                 ast::LitKind::String => unimplemented!(),
             },
-            ast::ExprKind::Path(tok) => match self.get_scope().lookup_var(&tok.raw) {
+            ast::ExprKind::Path(tok) => match self.lookup_var(&tok.raw, false) {
                 Some(var_def) => {
                     let ty = var_def.ty;
                     self.node_def_map.insert(expr.id, var_def);
