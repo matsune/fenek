@@ -260,6 +260,10 @@ impl<'ctx> Codegen<'ctx> {
         }
     }
 
+    pub fn verify(&self) -> Result<(), LLVMString> {
+        self.module.verify()
+    }
+
     pub fn build_fun(&mut self, fun: hir::Fun) {
         let function = self.def_function_map.get(&fun.def.id).unwrap().clone();
         // append and set basic block

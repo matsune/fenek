@@ -37,6 +37,7 @@ fn run_main() -> Result<(), Box<dyn Error>> {
     let ctx = Context::create();
     let mut codegen = Codegen::new(&ctx);
     codegen.build_module(module);
+    codegen.verify()?;
     if opts.emit.contains(&opts::Emit::LlvmIr) {
         let mut out = src.path.clone();
         out.set_extension("ll");
