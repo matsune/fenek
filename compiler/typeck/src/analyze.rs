@@ -3,7 +3,6 @@ use crate::infer::*;
 use crate::scope::*;
 use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
-use lex::token;
 use pos::{Pos, SrcFile};
 use std::collections::{HashMap, HashSet};
 

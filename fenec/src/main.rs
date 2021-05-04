@@ -38,9 +38,24 @@ fn run_main() -> Result<(), Box<dyn Error>> {
     let mut codegen = Codegen::new(&ctx);
     codegen.build_module(module);
     if opts.emit.contains(&opts::Emit::LlvmIr) {
-        let mut out = src.path;
+        let mut out = src.path.clone();
         out.set_extension("ll");
-        codegen.output_to_file(out)?;
+        codegen.emit_llvm_ir(out)?;
+    }
+    if opts.emit.contains(&opts::Emit::LlvmBc) {
+        let mut out = src.path.clone();
+        out.set_extension("bc");
+        codegen.emit_llvm_bc(out);
+    }
+    if opts.emit.contains(&opts::Emit::Asm) {
+        let mut out = src.path.clone();
+        out.set_extension("s");
+        codegen.emit_asm(out)?;
+    }
+    if opts.emit.contains(&opts::Emit::Obj) {
+        let mut out = src.path;
+        out.set_extension("o");
+        codegen.emit_obj(out)?;
     }
 
     Ok(())

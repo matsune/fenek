@@ -5,9 +5,12 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::support::LLVMString;
+use inkwell::targets::{
+    CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine,
+};
 use inkwell::types::{BasicType, BasicTypeEnum, FunctionType};
 use inkwell::values::{BasicValueEnum, FunctionValue, IntMathValue, IntValue, PointerValue};
-use inkwell::AddressSpace;
+use inkwell::{AddressSpace, OptimizationLevel};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -53,6 +56,10 @@ impl<'ctx> Function<'ctx> {
             .unwrap()
             .get_terminator()
             .is_none()
+    }
+
+    fn set_basic_block(&self, basic_block: BasicBlock<'ctx>) {
+        self.builder.position_at_end(basic_block);
     }
 }
 
@@ -115,8 +122,25 @@ impl<'ctx> Variable<'ctx> {
 pub struct Codegen<'ctx> {
     context: &'ctx Context,
     module: Module<'ctx>,
-    // function: Option<&Function<'ctx>>,
     def_function_map: HashMap<DefId, Rc<RefCell<Function<'ctx>>>>,
+    machine: TargetMachine,
+}
+
+fn get_default_machine() -> TargetMachine {
+    Target::initialize_native(&InitializationConfig::default()).unwrap();
+
+    let triple = TargetMachine::get_default_triple();
+    let target = Target::from_triple(&triple).unwrap();
+    target
+        .create_target_machine(
+            &triple,
+            &TargetMachine::get_host_cpu_name().to_string(),
+            &TargetMachine::get_host_cpu_features().to_string(),
+            OptimizationLevel::None,
+            RelocMode::Default,
+            CodeModel::Default,
+        )
+        .unwrap()
 }
 
 impl<'ctx> Codegen<'ctx> {
@@ -124,49 +148,32 @@ impl<'ctx> Codegen<'ctx> {
         Self {
             context,
             module: context.create_module("fenec"),
-            // function: None,
             def_function_map: HashMap::new(),
+            machine: get_default_machine(),
         }
     }
 
-    pub fn output_to_file<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), LLVMString> {
+    pub fn emit_llvm_ir<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), LLVMString> {
         self.module.print_to_file(path)
     }
 
-    // fn function(&self) -> &Function<'ctx> {
-    //     self.function.as_ref().unwrap()
-    // }
+    pub fn emit_llvm_bc<P: AsRef<std::path::Path>>(&self, path: P) -> bool {
+        self.module.write_bitcode_to_path(path.as_ref())
+    }
 
-    // fn function_mut(&mut self) -> &mut Function<'ctx> {
-    //     self.function.as_mut().unwrap()
-    // }
+    pub fn emit_asm<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), LLVMString> {
+        self.machine
+            .write_to_file(&self.module, FileType::Assembly, path.as_ref())
+    }
 
-    // fn builder(&self) -> &Builder<'ctx> {
-    //     &self.function().builder
-    // }
+    pub fn emit_obj<P: AsRef<std::path::Path>>(&self, path: P) -> Result<(), LLVMString> {
+        self.machine
+            .write_to_file(&self.module, FileType::Object, path.as_ref())
+    }
 
     fn append_basic_block(&self, function: &Function<'ctx>, name: &str) -> BasicBlock<'ctx> {
         self.context.append_basic_block(function.fn_value, name)
     }
-    // fn append_basic_block(&self, name: &str) -> BasicBlock<'ctx> {
-    //     self.context
-    //         .append_basic_block(self.function().fn_value, name)
-    // }
-
-    fn set_basic_block(&self, function: &Function<'ctx>, basic_block: BasicBlock<'ctx>) {
-        function.builder.position_at_end(basic_block);
-    }
-    // fn set_basic_block(&self, basic_block: BasicBlock<'ctx>) {
-    //     self.function().builder.position_at_end(basic_block);
-    // }
-
-    // fn needs_terminator(&mut self) -> bool {
-    //     self.builder()
-    //         .get_insert_block()
-    //         .unwrap()
-    //         .get_terminator()
-    //         .is_none()
-    // }
 
     pub fn get_llvm_intrinisic(
         &mut self,
@@ -257,7 +264,7 @@ impl<'ctx> Codegen<'ctx> {
         let function = self.def_function_map.get(&fun.def.id).unwrap().clone();
         // append and set basic block
         let start_bb = self.append_basic_block(&function.borrow(), "start");
-        self.set_basic_block(&function.borrow(), start_bb);
+        function.borrow().set_basic_block(start_bb);
         // args
         self.build_fun_args(&function, &fun);
         // block
