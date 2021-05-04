@@ -74,6 +74,13 @@ impl Ty {
         }
     }
 
+    pub fn new_ptr(id: NodeId, ty: Ty, offset: Offset) -> Self {
+        Self {
+            id,
+            kind: TyKind::Ptr(Box::new(ty), offset),
+        }
+    }
+
     pub fn offset(&self) -> Offset {
         self.kind.offset()
     }
@@ -81,6 +88,7 @@ impl Ty {
 
 pub enum TyKind {
     Basic(token::Token),
+    Ptr(Box<Ty>, Offset),
     // Lambda, Tuple...
 }
 
@@ -88,6 +96,7 @@ impl ToString for TyKind {
     fn to_string(&self) -> String {
         match self {
             Self::Basic(tok) => tok.raw.clone(),
+            Self::Ptr(ty, _) => format!("*{}", ty.to_string()),
         }
     }
 }
@@ -96,6 +105,7 @@ impl TyKind {
     pub fn offset(&self) -> Offset {
         match self {
             Self::Basic(tok) => tok.offset,
+            Self::Ptr(_, offset) => *offset,
         }
     }
 }

@@ -51,6 +51,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 "void" => self.ty_arena.alloc_void(),
                 _ => return None,
             },
+            ast::TyKind::Ptr(ty, _) => self.ty_arena.alloc_ptr(self.get_type_from_ty(ty)?),
         };
         Some(infer_ty)
     }

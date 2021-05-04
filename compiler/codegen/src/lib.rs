@@ -207,7 +207,11 @@ impl<'ctx> Codegen<'ctx> {
             }
             .into(),
             ty::Type::Bool => self.context.bool_type().into(),
-            _ => unimplemented!(),
+            ty::Type::Ptr(ty) => {
+                let ty = self.llvm_basic_ty(ty);
+                ty.ptr_type(AddressSpace::Generic).into()
+            }
+            _ => unreachable!(),
         }
     }
 

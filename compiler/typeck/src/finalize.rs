@@ -1,7 +1,7 @@
 use super::arena::InferTyArena;
 use super::infer::*;
 use error::{Result, TypeCkError};
-use hir::ty;
+use hir::ty::*;
 
 #[cfg(test)]
 mod tests;
@@ -15,37 +15,46 @@ impl<'a> TyFinalizer<'a> {
         Self { arena }
     }
 
-    pub fn finalize_type(&self, ty: &'a InferTy<'a>) -> Result<ty::Type, TypeCkError> {
-        let top_ty = ty.prune();
-        let final_kind = &self.unify_tree(top_ty)?.kind;
-        let final_ty = match final_kind {
+    fn type_from_kind(&self, kind: &InferTyKind<'a>) -> Result<Type, TypeCkError> {
+        let ty = match kind {
             InferTyKind::Var => {
                 return Err(TypeCkError::UnresolvedType);
             }
             InferTyKind::Int(int_kind) => match int_kind {
-                IntKind::I8 => ty::Type::Int(ty::IntType::I8),
-                IntKind::I16 => ty::Type::Int(ty::IntType::I16),
-                IntKind::I32 => ty::Type::Int(ty::IntType::I32),
-                IntKind::I64 => ty::Type::Int(ty::IntType::I64),
+                IntKind::I8 => Type::Int(IntType::I8),
+                IntKind::I16 => Type::Int(IntType::I16),
+                IntKind::I32 => Type::Int(IntType::I32),
+                IntKind::I64 => Type::Int(IntType::I64),
             },
             // FIXME: architecture bit width
-            InferTyKind::IntLit => ty::Type::Int(ty::IntType::I64),
+            InferTyKind::IntLit => Type::Int(IntType::I64),
             InferTyKind::Float(kind) => match kind {
-                FloatKind::F32 => ty::Type::Float(ty::FloatType::F32),
-                FloatKind::F64 => ty::Type::Float(ty::FloatType::F64),
+                FloatKind::F32 => Type::Float(FloatType::F32),
+                FloatKind::F64 => Type::Float(FloatType::F64),
             },
-            InferTyKind::FloatLit => ty::Type::Float(ty::FloatType::F64),
-            InferTyKind::Bool => ty::Type::Bool,
-            InferTyKind::Void => ty::Type::Void,
+            InferTyKind::FloatLit => Type::Float(FloatType::F64),
+            InferTyKind::Bool => Type::Bool,
+            InferTyKind::Void => Type::Void,
             InferTyKind::Fun(fun_ty) => {
                 let mut arg_tys = Vec::new();
                 for arg_ty in &fun_ty.arg_tys {
                     arg_tys.push(self.finalize_type(arg_ty)?);
                 }
                 let ret_ty = self.finalize_type(&fun_ty.ret_ty)?;
-                ty::Type::Fun(ty::FunType::new(arg_tys, Box::new(ret_ty)))
+                Type::Fun(FunType::new(arg_tys, Box::new(ret_ty)))
+            }
+            InferTyKind::Ptr(ty) => {
+                let ty = self.type_from_kind(&ty)?;
+                Type::Ptr(Box::new(ty))
             }
         };
+        Ok(ty)
+    }
+
+    pub fn finalize_type(&self, ty: &'a InferTy<'a>) -> Result<Type, TypeCkError> {
+        let top_ty = ty.prune();
+        let final_kind = &self.unify_tree(top_ty)?.kind;
+        let final_ty = self.type_from_kind(final_kind)?;
         Ok(final_ty)
     }
 

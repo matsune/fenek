@@ -168,10 +168,19 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_ty(&mut self) -> Result<Ty> {
-        let ty = self
-            .bump_if(|tok| tok.is_ident() && !tok.is_keyword())
-            .ok_or_else(|| self.compile_error(ParseError::InvalidTyName))?;
-        Ok(Ty::new_basic(self.gen_id(), ty))
+        let ty = if self.is_next_kind(token::TokenKind::Star) {
+            // pointer type
+            let offset = self.bump().unwrap().offset;
+            self.skip_spaces();
+            let ty = self.parse_ty()?;
+            Ty::new_ptr(self.gen_id(), ty, offset)
+        } else {
+            let ty = self
+                .bump_if(|tok| tok.is_ident() && !tok.is_keyword())
+                .ok_or_else(|| self.compile_error(ParseError::InvalidTyName))?;
+            Ty::new_basic(self.gen_id(), ty)
+        };
+        Ok(ty)
     }
 
     fn parse_block(&mut self) -> Result<Block> {

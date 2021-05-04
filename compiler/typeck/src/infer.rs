@@ -75,6 +75,7 @@ pub enum InferTyKind<'a> {
     Bool,
     Void,
     Fun(FunTy<'a>),
+    Ptr(&'a InferTyKind<'a>),
 }
 
 impl<'a> PartialEq for InferTyKind<'a> {
@@ -93,6 +94,7 @@ impl<'a> PartialEq for InferTyKind<'a> {
                     fr.arg_tys.iter().map(|ty| &ty.kind).collect();
                 fl_arg_tys == fr_arg_tys && fl.ret_ty.kind == fr.ret_ty.kind
             }
+            (Ptr(l), Ptr(r)) => l == r,
             _ => false,
         }
     }
@@ -140,6 +142,7 @@ impl<'a> ToString for InferTyKind<'a> {
             Self::Void => "void".to_string(),
             // FIXME
             Self::Fun(_) => "fun".to_string(),
+            Self::Ptr(k) => format!("*{}", k.to_string()),
         }
     }
 }

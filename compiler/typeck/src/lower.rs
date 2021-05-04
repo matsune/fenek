@@ -157,7 +157,7 @@ impl<'src> Lower<'src> {
                         ));
                     }
                 }
-                hir::Stmt::Ret(ret) if !is_last => {
+                hir::Stmt::Ret(_) if !is_last => {
                     // warning? ret statement should not be in the middle of block
                 }
                 _ if is_last && !ret_ty.is_void() => {
@@ -186,16 +186,16 @@ impl<'src> Lower<'src> {
         let stmt = match &stmt.kind {
             ast::StmtKind::Expr(expr) => self.lower_expr(&expr)?.into(),
             ast::StmtKind::VarDecl {
-                keyword,
+                keyword: _,
                 name,
-                ty,
+                ty: _,
                 init,
             } => {
                 let expr = self.lower_expr(&init)?;
                 let def = self.node_def_map.get(&id).unwrap();
                 hir::VarDecl::new(id, name.clone(), expr, def.clone()).into()
             }
-            ast::StmtKind::Ret { keyword, expr } => {
+            ast::StmtKind::Ret { keyword: _, expr } => {
                 let expr = match expr {
                     Some(expr) => Some(self.lower_expr(&expr)?),
                     None => None,

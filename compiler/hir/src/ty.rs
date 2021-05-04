@@ -8,6 +8,7 @@ pub enum Type {
     Bool,
     String,
     Fun(FunType),
+    Ptr(Box<Type>),
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -78,6 +79,7 @@ impl ToString for Type {
             Self::Bool => "bool".to_string(),
             Self::String => "string".to_string(),
             Self::Fun(fun) => fun.to_string(),
+            Self::Ptr(ty) => format!("*{}", ty.to_string()),
         }
     }
 }
