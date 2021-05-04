@@ -65,25 +65,45 @@ pub enum TokenKind {
     LineComment,
     Ident,
     Lit(LitKind),
+    // /
     Slash,
+    // ;
     Semi,
+    // ,
     Comma,
+    // (
     LParen,
+    // )
     RParen,
+    // {
     LBrace,
+    // }
     RBrace,
+    // :
     Colon,
+    // =
     Eq,
+    // !
     Not,
+    // <
     Lt,
+    // >
     Gt,
+    // -
     Minus,
+    // &
     And,
+    // |
     Or,
+    // +
     Plus,
+    // *
     Star,
+    // ^
     Caret,
+    // %
     Percent,
+    // ->
     Arrow,
 }
 

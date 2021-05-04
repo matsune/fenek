@@ -118,7 +118,11 @@ impl From<&ast::Stmt> for Stmt {
 enum StmtKind {
     Expr(Expr),
     Ret(Option<Expr>),
-    VarDecl { name: String, init: Expr },
+    VarDecl {
+        name: String,
+        ty: Option<Ty>,
+        init: Expr,
+    },
     Assign(Expr, Expr),
     Empty,
 }
@@ -131,9 +135,11 @@ impl From<&ast::StmtKind> for StmtKind {
             ast::StmtKind::VarDecl {
                 keyword: _,
                 name,
+                ty,
                 init,
             } => Self::VarDecl {
                 name: name.raw.clone(),
+                ty: ty.as_ref().map(|v| v.into()),
                 init: init.into(),
             },
             ast::StmtKind::Assign(left, right) => Self::Assign(left.into(), right.into()),

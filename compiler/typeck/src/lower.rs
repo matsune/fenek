@@ -188,12 +188,12 @@ impl<'src> Lower<'src> {
             ast::StmtKind::VarDecl {
                 keyword,
                 name,
+                ty,
                 init,
             } => {
                 let expr = self.lower_expr(&init)?;
-                let ty = expr.get_type().clone();
                 let def = self.node_def_map.get(&id).unwrap();
-                hir::VarDecl::new(id, name.clone(), expr, Def::new(def.id, ty, def.is_mut)).into()
+                hir::VarDecl::new(id, name.clone(), expr, def.clone()).into()
             }
             ast::StmtKind::Ret { keyword, expr } => {
                 let expr = match expr {

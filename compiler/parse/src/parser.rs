@@ -58,6 +58,10 @@ impl<'src> Parser<'src> {
         None
     }
 
+    fn bump_if_kind(&mut self, kind: token::TokenKind) -> Option<token::Token> {
+        self.bump_if(|tok| tok.kind == kind)
+    }
+
     fn skip_spaces(&mut self) {
         loop {
             match self.peek() {
@@ -118,7 +122,7 @@ impl<'src> Parser<'src> {
             None
         } else {
             // has return type
-            self.bump_if(|tok| tok.is_kind(token::TokenKind::Arrow))
+            self.bump_if_kind(token::TokenKind::Arrow)
                 .ok_or_else(|| self.expected_err("->"))?;
             self.skip_spaces();
             Some(self.parse_ty()?)
@@ -131,15 +135,12 @@ impl<'src> Parser<'src> {
 
     // must start with '('
     fn parse_fun_args(&mut self) -> Result<FunArgs> {
-        self.bump_if(|tok| tok.is_kind(token::TokenKind::LParen))
+        self.bump_if_kind(token::TokenKind::LParen)
             .ok_or_else(|| self.expected_err("("))?;
         self.skip_spaces();
 
         let mut args = Vec::new();
-        if self
-            .bump_if(|tok| tok.is_kind(token::TokenKind::RParen))
-            .is_some()
-        {
+        if self.bump_if_kind(token::TokenKind::RParen).is_some() {
             return Ok(args);
         }
 
@@ -148,23 +149,20 @@ impl<'src> Parser<'src> {
                 .bump_if(|tok| tok.is_ident() && !tok.is_keyword())
                 .ok_or_else(|| self.compile_error(ParseError::InvalidArgName))?;
             self.skip_spaces();
-            self.bump_if(|tok| tok.is_kind(token::TokenKind::Colon))
+            self.bump_if_kind(token::TokenKind::Colon)
                 .ok_or_else(|| self.expected_err(":"))?;
             self.skip_spaces();
             let arg_ty = self.parse_ty()?;
             args.push(FunArg::new(self.gen_id(), arg_name, arg_ty));
             self.skip_spaces();
-            if self
-                .bump_if(|tok| tok.is_kind(token::TokenKind::Comma))
-                .is_some()
-            {
+            if self.bump_if_kind(token::TokenKind::Comma).is_some() {
                 // has next arg
                 self.skip_spaces();
             } else {
                 break;
             }
         }
-        self.bump_if(|tok| tok.is_kind(token::TokenKind::RParen))
+        self.bump_if_kind(token::TokenKind::RParen)
             .ok_or_else(|| self.expected_err(")"))?;
         Ok(args)
     }
@@ -178,7 +176,7 @@ impl<'src> Parser<'src> {
 
     fn parse_block(&mut self) -> Result<Block> {
         let lbrace = self
-            .bump_if(|tok| tok.is_kind(token::TokenKind::LBrace))
+            .bump_if_kind(token::TokenKind::LBrace)
             .ok_or_else(|| self.expected_err("{"))?;
         let mut stmts = Vec::new();
         loop {
@@ -193,7 +191,7 @@ impl<'src> Parser<'src> {
                 },
             }
         }
-        self.bump_if(|tok| tok.is_kind(token::TokenKind::RBrace))
+        self.bump_if_kind(token::TokenKind::RBrace)
             .ok_or_else(|| self.expected_err("}"))?;
 
         Ok(Block::new(self.gen_id(), lbrace, stmts))
@@ -201,23 +199,25 @@ impl<'src> Parser<'src> {
 
     fn parse_var_decl(&mut self) -> Result<Stmt> {
         let keyword = self
-            .bump_if(|tok| {
-                matches!(
-                    tok.try_as_keyword(),
-                    Some(token::Keyword::Var) | Some(token::Keyword::Let)
-                )
-            })
+            .bump_if(|tok| tok.raw == "var" || tok.raw == "let")
             .ok_or_else(|| self.expected_err("var or let"))?;
         self.skip_spaces();
         let name = self
             .bump_if(|tok| tok.is_ident() && !tok.is_keyword())
             .ok_or_else(|| self.compile_error(ParseError::InvalidVarDecl))?;
         self.skip_spaces();
-        self.bump_if(|tok| tok.is_kind(token::TokenKind::Eq))
+        let ty = if self.bump_if_kind(token::TokenKind::Colon).is_some() {
+            self.skip_spaces();
+            Some(self.parse_ty()?)
+        } else {
+            None
+        };
+        self.skip_spaces();
+        self.bump_if_kind(token::TokenKind::Eq)
             .ok_or_else(|| self.expected_err("="))?;
         self.skip_spaces();
         let init = self.parse_expr()?;
-        Ok(Stmt::new_var_decl(self.gen_id(), keyword, name, init))
+        Ok(Stmt::new_var_decl(self.gen_id(), keyword, name, ty, init))
     }
 
     fn parse_ret(&mut self) -> Result<Stmt> {
@@ -363,7 +363,7 @@ impl<'src> Parser<'src> {
                         Some(tok) => {
                             return Err(CompileError::new(
                                 self.src.pos_from_offset(tok.offset),
-                                ParseError::Expected(")` or `,".to_string()).into(),
+                                ParseError::Expected(") or ,".to_string()).into(),
                             ))
                         }
                         None => {

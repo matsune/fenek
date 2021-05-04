@@ -140,12 +140,19 @@ impl Stmt {
         }
     }
 
-    pub fn new_var_decl(id: NodeId, keyword: token::Token, name: token::Token, init: Expr) -> Self {
+    pub fn new_var_decl(
+        id: NodeId,
+        keyword: token::Token,
+        name: token::Token,
+        ty: Option<Ty>,
+        init: Expr,
+    ) -> Self {
         Self {
             id,
             kind: StmtKind::VarDecl {
                 keyword,
                 name,
+                ty,
                 init,
             },
         }
@@ -179,6 +186,7 @@ pub enum StmtKind {
     VarDecl {
         keyword: token::Token,
         name: token::Token,
+        ty: Option<Ty>,
         init: Expr,
     },
     Assign(Expr, Expr),
@@ -194,6 +202,7 @@ impl StmtKind {
             VarDecl {
                 keyword,
                 name: _,
+                ty: _,
                 init: _,
             } => keyword.offset,
             Assign(l, _) => l.offset(),

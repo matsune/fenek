@@ -161,6 +161,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
             ast::StmtKind::VarDecl {
                 keyword,
                 name,
+                ty,
                 init,
             } => {
                 if self.scopes.lookup_var(&name.raw, true).is_some() {
@@ -170,12 +171,27 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                     ));
                 }
                 let init_ty = self.analyze_expr(&init)?;
-                let var_ty = self.ty_arena.alloc_var();
+                let var_ty = match ty {
+                    Some(ty) => {
+                        let offset = ty.offset();
+                        let ty = self.get_type_from_ty(&ty).ok_or_else(|| {
+                            compile_error(
+                                self.src.pos_from_offset(offset),
+                                TypeCkError::UndefinedType(ty.to_string()),
+                            )
+                        })?;
+                        if !ty.kind.is_variable() {
+                            return Err(compile_error(
+                                self.src.pos_from_offset(offset),
+                                TypeCkError::InvalidType,
+                            ));
+                        }
+                        ty
+                    }
+                    None => self.ty_arena.alloc_var(),
+                };
                 init_ty.set_prune(var_ty);
-                let def = self.def_arena.alloc(
-                    init_ty,
-                    token::Keyword::try_from(&keyword.raw).unwrap() == token::Keyword::Var,
-                );
+                let def = self.def_arena.alloc(init_ty, keyword.raw == "var");
                 self.scopes.insert(name.raw.clone(), def);
                 self.node_def_map.insert(stmt.id, def);
             }

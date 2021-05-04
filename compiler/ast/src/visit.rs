@@ -108,6 +108,7 @@ fn visit_stmt<'a, T, F: Fn(Node<'a>) -> T>(stmt: &'a Stmt, id: NodeId, callback:
         StmtKind::VarDecl {
             keyword: _,
             name: _,
+            ty: _,
             init,
         } => {
             return_if_some!(visit_expr(init, id, &callback));
