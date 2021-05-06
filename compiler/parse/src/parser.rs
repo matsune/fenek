@@ -3,6 +3,7 @@ use error::{CompileError, ParseError, Result};
 use lex::token;
 use pos::{Offset, Pos, SrcFile};
 use std::collections::VecDeque;
+use std::convert::TryFrom;
 
 pub struct Parser<'src> {
     src: &'src SrcFile,
@@ -330,14 +331,13 @@ impl<'src> Parser<'src> {
         let tok = self
             .peek()
             .ok_or_else(|| self.compile_error(ParseError::UnexpectedEof))?;
-        match tok.kind {
-            token::TokenKind::Minus | token::TokenKind::Not => {
-                let op = self.bump().unwrap();
-                self.skip_spaces();
-                let expr = self.parse_prefix_expr()?;
-                Ok(Expr::new_unary(self.gen_id(), op, Box::new(expr)))
-            }
-            _ => self.parse_postfix_expr(),
+        if ast::UnOpKind::try_from(tok.kind).is_ok() {
+            let op = self.bump().unwrap();
+            self.skip_spaces();
+            let expr = self.parse_prefix_expr()?;
+            Ok(Expr::new_unary(self.gen_id(), op, Box::new(expr)))
+        } else {
+            self.parse_postfix_expr()
         }
     }
 

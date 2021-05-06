@@ -243,7 +243,7 @@ impl From<&hir::Binary> for Binary {
 #[derive(Serialize)]
 struct Unary {
     id: ast::NodeId,
-    op: crate::ast::UnaryOpKind,
+    op: crate::ast::UnOpKind,
     expr: Box<Expr>,
 }
 

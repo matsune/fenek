@@ -3,8 +3,8 @@ use std::cell::{Cell, Ref, RefCell};
 pub type InferTyID = usize;
 
 /// `InferTy` represents a temporary type during inferencing
-/// actual type by `TyAnalyzer`. This is also a node of type tree
-/// which lives under `InferTyArena`.
+/// actual type by analyzer. Each instances will be allocated
+/// and live under lifetime of arena.
 ///
 /// Each connected node has a reference from and to next node.
 /// Connection means that those nodes will be same type after
@@ -14,8 +14,8 @@ pub type InferTyID = usize;
 pub struct InferTy<'a> {
     pub id: InferTyID,
     pub kind: InferTyKind<'a>,
-    to_node: Cell<Option<&'a InferTy<'a>>>,
-    from_node: RefCell<Vec<&'a InferTy<'a>>>,
+    pub next: Cell<Option<&'a InferTy<'a>>>,
+    pub prevs: RefCell<Vec<&'a InferTy<'a>>>,
 }
 
 impl<'a> InferTy<'a> {
@@ -23,45 +23,21 @@ impl<'a> InferTy<'a> {
         Self {
             id,
             kind,
-            to_node: Cell::new(None),
-            from_node: RefCell::new(Vec::new()),
+            next: Cell::new(None),
+            prevs: RefCell::new(Vec::new()),
         }
-    }
-
-    /// Set the most tip node
-    pub fn set_prune(&'a self, tip: &'a InferTy<'a>) {
-        let t = self.prune();
-        if t.id == tip.id {
-            // prevent self reference
-            return;
-        }
-
-        match (&t.kind, &tip.kind) {
-            (InferTyKind::Fun(t_fun), InferTyKind::Fun(tip_fun))
-                if t_fun.arg_tys.len() == tip_fun.arg_tys.len() =>
-            {
-                for i in 0..t_fun.arg_tys.len() {
-                    t_fun.arg_tys[i].set_prune(tip_fun.arg_tys[i]);
-                }
-                t_fun.ret_ty.set_prune(tip_fun.ret_ty);
-            }
-            _ => {}
-        }
-
-        tip.from_node.borrow_mut().push(t);
-        t.to_node.set(Some(tip));
     }
 
     /// Get the most tip node from this node.
     pub fn prune(&'a self) -> &'a InferTy<'a> {
-        match self.to_node.get() {
-            Some(to_node) => to_node.prune(),
-            None => self,
-        }
+        self.next
+            .get()
+            .map(|to_node| to_node.prune())
+            .unwrap_or(self)
     }
 
-    pub fn borrow_from_nodes(&self) -> Ref<'_, Vec<&'a InferTy<'a>>> {
-        self.from_node.borrow()
+    pub fn borrow_prevs(&self) -> Ref<'_, Vec<&'a InferTy<'a>>> {
+        self.prevs.borrow()
     }
 }
 
@@ -75,7 +51,7 @@ pub enum InferTyKind<'a> {
     Bool,
     Void,
     Fun(FunTy<'a>),
-    Ptr(&'a InferTyKind<'a>),
+    Ptr(&'a InferTy<'a>),
 }
 
 impl<'a> PartialEq for InferTyKind<'a> {
@@ -94,7 +70,7 @@ impl<'a> PartialEq for InferTyKind<'a> {
                     fr.arg_tys.iter().map(|ty| &ty.kind).collect();
                 fl_arg_tys == fr_arg_tys && fl.ret_ty.kind == fr.ret_ty.kind
             }
-            (Ptr(l), Ptr(r)) => l == r,
+            (Ptr(l), Ptr(r)) => l.kind == r.kind,
             _ => false,
         }
     }
@@ -115,15 +91,7 @@ impl<'a> InferTyKind<'a> {
     pub fn is_var(&self) -> bool {
         !self.is_fun()
     }
-}
 
-#[derive(Debug)]
-pub struct FunTy<'a> {
-    pub arg_tys: Vec<&'a InferTy<'a>>,
-    pub ret_ty: &'a InferTy<'a>,
-}
-
-impl<'a> InferTyKind<'a> {
     // types that can store in variable
     pub fn is_variable(&self) -> bool {
         !matches!(self, Self::Void)
@@ -140,11 +108,24 @@ impl<'a> ToString for InferTyKind<'a> {
             Self::FloatLit => "float lit".to_string(),
             Self::Bool => "bool".to_string(),
             Self::Void => "void".to_string(),
-            // FIXME
-            Self::Fun(_) => "fun".to_string(),
-            Self::Ptr(k) => format!("*{}", k.to_string()),
+            Self::Fun(fun) => format!(
+                "({}) -> {}",
+                fun.arg_tys
+                    .iter()
+                    .map(|ty| ty.kind.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", "),
+                fun.ret_ty.kind.to_string()
+            ),
+            Self::Ptr(k) => format!("{}*", k.kind.to_string()),
         }
     }
+}
+
+#[derive(Debug)]
+pub struct FunTy<'a> {
+    pub arg_tys: Vec<&'a InferTy<'a>>,
+    pub ret_ty: &'a InferTy<'a>,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

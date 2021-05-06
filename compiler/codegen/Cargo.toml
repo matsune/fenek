@@ -13,3 +13,4 @@ typeck = { path = "../typeck" }
 printer = { path = "../printer" }
 hir = { path = "../hir" }
 ast = { path = "../ast" }
+types = { path = "../types" }

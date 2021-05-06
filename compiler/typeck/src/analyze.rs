@@ -1,10 +1,11 @@
 use super::arena::*;
-use crate::infer::*;
 use crate::scope::*;
 use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
 use pos::{Pos, SrcFile};
 use std::collections::{HashMap, HashSet};
+use types::infer::*;
+use types::solve::Solver;
 
 pub type NodeMap<T> = HashMap<ast::NodeId, T>;
 
@@ -14,7 +15,7 @@ fn compile_error(pos: Pos, typeck_err: TypeCkError) -> CompileError {
 
 pub struct TyAnalyzer<'src, 'infer> {
     src: &'src SrcFile,
-    ty_arena: &'infer InferTyArena<'infer>,
+    solver: &'infer Solver<'infer>,
     def_arena: &'infer DefArena<&'infer InferTy<'infer>>,
     node_ty_map: NodeMap<&'infer InferTy<'infer>>,
     node_def_map: NodeMap<&'infer Def<&'infer InferTy<'infer>>>,
@@ -24,12 +25,12 @@ pub struct TyAnalyzer<'src, 'infer> {
 impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
     pub fn new(
         src: &'src SrcFile,
-        ty_arena: &'infer InferTyArena<'infer>,
+        solver: &'infer Solver<'infer>,
         def_arena: &'infer DefArena<&'infer InferTy<'infer>>,
     ) -> Self {
         TyAnalyzer {
             src,
-            ty_arena,
+            solver,
             def_arena,
             node_ty_map: NodeMap::new(),
             node_def_map: NodeMap::new(),
@@ -40,18 +41,18 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
     fn get_type_from_ty(&self, ty: &ast::Ty) -> Option<&'infer InferTy<'infer>> {
         let infer_ty = match &ty.kind {
             ast::TyKind::Basic(tok) => match tok.raw.as_str() {
-                "i8" => self.ty_arena.alloc_i8(),
-                "i16" => self.ty_arena.alloc_i16(),
-                "i32" => self.ty_arena.alloc_i32(),
-                "i64" => self.ty_arena.alloc_i64(),
-                "f32" => self.ty_arena.alloc_f32(),
-                "f64" => self.ty_arena.alloc_f64(),
-                "bool" => self.ty_arena.alloc_bool(),
-                // "string" => self.ty_arena.alloc_string(),
-                "void" => self.ty_arena.alloc_void(),
+                "i8" => self.solver.arena.alloc_i8(),
+                "i16" => self.solver.arena.alloc_i16(),
+                "i32" => self.solver.arena.alloc_i32(),
+                "i64" => self.solver.arena.alloc_i64(),
+                "f32" => self.solver.arena.alloc_f32(),
+                "f64" => self.solver.arena.alloc_f64(),
+                "bool" => self.solver.arena.alloc_bool(),
+                // "string" => self.solver.arena.alloc_string(),
+                "void" => self.solver.arena.alloc_void(),
                 _ => return None,
             },
-            ast::TyKind::Ptr(ty, _) => self.ty_arena.alloc_ptr(self.get_type_from_ty(ty)?),
+            ast::TyKind::Ptr(ty, _) => self.solver.arena.alloc_ptr(self.get_type_from_ty(ty)?),
         };
         Some(infer_ty)
     }
@@ -122,12 +123,12 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 self.node_ty_map.insert(ret_ty_id, ty);
                 ty
             }
-            None => self.ty_arena.alloc_void(),
+            None => self.solver.arena.alloc_void(),
         };
 
         Ok(self
             .def_arena
-            .alloc(self.ty_arena.alloc_fun(arg_tys, ret_ty), false))
+            .alloc(self.solver.arena.alloc_fun(arg_tys, ret_ty), false))
     }
 
     fn analyze_fun(&mut self, fun: &ast::Fun) -> Result<()> {
@@ -188,24 +189,34 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                         }
                         ty
                     }
-                    None => self.ty_arena.alloc_var(),
+                    None => self.solver.arena.alloc_var(),
                 };
-                init_ty.set_prune(var_ty);
+                self.solver.bind(var_ty, init_ty).map_err(|err| {
+                    CompileError::new(self.src.pos_from_offset(name.offset), err.into())
+                })?;
                 let def = self.def_arena.alloc(init_ty, keyword.raw == "var");
                 self.scopes.insert(name.raw.clone(), def);
                 self.node_def_map.insert(stmt.id, def);
             }
-            ast::StmtKind::Ret { keyword: _, expr } => {
+            ast::StmtKind::Ret { keyword, expr } => {
                 let ty = match &expr {
                     Some(expr) => self.analyze_expr(&expr)?,
-                    None => self.ty_arena.alloc_void(),
+                    None => self.solver.arena.alloc_void(),
                 };
-                ty.set_prune(current_fn_ret_ty);
+                let offset = match &expr {
+                    Some(expr) => expr.offset(),
+                    None => keyword.offset,
+                };
+                self.solver.bind(ty, current_fn_ret_ty).map_err(|err| {
+                    CompileError::new(self.src.pos_from_offset(offset), err.into())
+                })?;
             }
             ast::StmtKind::Assign(left, right) => {
                 let left_ty = self.analyze_expr(&left)?;
                 let right_ty = self.analyze_expr(&right)?;
-                left_ty.set_prune(right_ty);
+                self.solver.bind(left_ty, right_ty).map_err(|err| {
+                    CompileError::new(self.src.pos_from_offset(left.offset()), err.into())
+                })?;
             }
             ast::StmtKind::Empty(_) => {}
         };
@@ -215,9 +226,9 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
     fn analyze_expr(&mut self, expr: &ast::Expr) -> Result<&'infer InferTy<'infer>> {
         let ty = match &expr.kind {
             ast::ExprKind::Lit(lit) => match lit.kind {
-                ast::LitKind::Int(_) => self.ty_arena.alloc_int_lit(),
-                ast::LitKind::Float => self.ty_arena.alloc_float_lit(),
-                ast::LitKind::Bool => self.ty_arena.alloc_bool(),
+                ast::LitKind::Int(_) => self.solver.arena.alloc_int_lit(),
+                ast::LitKind::Float => self.solver.arena.alloc_float_lit(),
+                ast::LitKind::Bool => self.solver.arena.alloc_bool(),
                 ast::LitKind::String => unimplemented!(),
             },
             ast::ExprKind::Path(tok) => match self.scopes.lookup_var(&tok.raw, false) {
@@ -247,29 +258,54 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                     ));
                 }
                 self.node_def_map.insert(expr.id, def);
-                let ty = self.ty_arena.alloc_var();
+                let ty = self.solver.arena.alloc_var();
                 let arg_tys = &def.ty.kind.as_fun().arg_tys;
                 for (idx, arg) in args.iter().enumerate() {
                     let ty = arg_tys[idx];
                     let arg_ty = self.analyze_expr(&arg)?;
-                    arg_ty.set_prune(ty);
+                    self.solver.bind(arg_ty, ty).map_err(|err| {
+                        CompileError::new(self.src.pos_from_offset(arg.offset()), err.into())
+                    })?;
                 }
-                ty.set_prune(&def.ty.kind.as_fun().ret_ty);
+                self.solver
+                    .bind(ty, &def.ty.kind.as_fun().ret_ty)
+                    .map_err(|err| {
+                        CompileError::new(self.src.pos_from_offset(path.offset), err.into())
+                    })?;
                 ty
             }
             ast::ExprKind::Binary(_, lhs, rhs) => {
-                let binary_ty = self.ty_arena.alloc_var();
+                let binary_ty = self.solver.arena.alloc_var();
                 let lhs_ty = self.analyze_expr(&lhs)?;
                 let rhs_ty = self.analyze_expr(&rhs)?;
-                lhs_ty.set_prune(binary_ty);
-                rhs_ty.set_prune(binary_ty);
+                self.solver.bind(binary_ty, lhs_ty).map_err(|err| {
+                    CompileError::new(self.src.pos_from_offset(lhs.offset()), err.into())
+                })?;
+                self.solver.bind(binary_ty, rhs_ty).map_err(|err| {
+                    CompileError::new(self.src.pos_from_offset(rhs.offset()), err.into())
+                })?;
                 binary_ty
             }
-            ast::ExprKind::Unary(_, expr) => {
-                let unary_ty = self.ty_arena.alloc_var();
+            ast::ExprKind::Unary(op, expr) => {
                 let expr_ty = self.analyze_expr(&expr)?;
-                expr_ty.set_prune(unary_ty);
-                unary_ty
+                match op.op_kind() {
+                    ast::UnOpKind::Ref => self.solver.arena.alloc_ptr(expr_ty),
+                    ast::UnOpKind::Deref => {
+                        let derefed_ty = self.solver.arena.alloc_var();
+                        let ptr_ty = self.solver.arena.alloc_ptr(derefed_ty);
+                        self.solver.bind(expr_ty, ptr_ty).map_err(|err| {
+                            CompileError::new(self.src.pos_from_offset(expr.offset()), err.into())
+                        })?;
+                        derefed_ty
+                    }
+                    _ => {
+                        let ty = self.solver.arena.alloc_var();
+                        self.solver.bind(ty, expr_ty).map_err(|err| {
+                            CompileError::new(self.src.pos_from_offset(expr.offset()), err.into())
+                        })?;
+                        ty
+                    }
+                }
             }
         };
         self.node_ty_map.insert(expr.id, ty);

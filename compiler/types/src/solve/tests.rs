@@ -1,10 +1,9 @@
 use super::*;
-use hir::ty::*;
 
 #[test]
-fn test_finalize() {
+fn test_solve() {
     let arena = InferTyArena::default();
-    let finalizer = TyFinalizer::new(&arena);
+    let solver = Solver::new(&arena);
 
     macro_rules! alloc {
         ($ty:ident: $($name:ident),*) => {
@@ -16,8 +15,8 @@ fn test_finalize() {
         }
     }
     macro_rules! bind {
-        ($a:ident -> $b:ident) => {
-            $a.set_prune($b);
+        ($a:ident -> $b:expr) => {
+            solver.bind($a, $b).unwrap();
         };
     }
 
@@ -25,7 +24,7 @@ fn test_finalize() {
         ($($v:expr),* ; $ty:expr) => {
             $(
                 assert_eq!(
-                    finalizer.finalize_type($v).unwrap(),
+                    solver.solve_type($v).unwrap(),
                     $ty
                 );
             )*
@@ -35,7 +34,7 @@ fn test_finalize() {
     macro_rules! test_unresolved {
         ($($v:expr),*) => {
             $(
-                assert!(finalizer.finalize_type($v).is_err());
+                assert!(solver.solve_type($v).is_err());
             )*
         }
     }
@@ -107,10 +106,59 @@ fn test_finalize() {
         let a = arena.alloc_fun([b, c].into(), d);
         let e = arena.alloc_fun([f, g].into(), h);
         bind!(a -> e);
-        let expect = ty::Type::Fun(FunType::new(
+        let expect = Type::Fun(FunType::new(
             [Type::Int(IntType::I64), Type::Int(IntType::I8)].into(),
             Box::new(Type::Int(IntType::I32)),
         ));
         test_type!(a, e; expect);
+    }
+
+    // test ptr types
+    //
+    // a
+    // b = &a
+    // c = b*
+    // d = i8
+    //
+    // a -> d
+    //
+    // => a = i8
+    //    b = i8*
+    //    c = i8
+    //    d = i8
+    {
+        alloc!(var: a);
+        // b = &a
+        let b = arena.alloc_ptr(a);
+        // c = b*
+        // => b = &c
+        alloc!(var: c);
+        bind!(b -> arena.alloc_ptr(c));
+
+        alloc!(i8: d);
+        bind!(a -> d);
+
+        test_type!(a, c, d; Type::Int(IntType::I8));
+        test_type!(b; Type::Ptr(Box::new(Type::Int(IntType::I8))));
+    }
+
+    // test ptr types
+    //
+    // a
+    // b = &a
+    // c = &&i32
+    //
+    // b -> c
+    //
+    // => a = i8*
+    //    b = i8**
+    //    c = i8**
+    {
+        alloc!(var: a);
+        let b = arena.alloc_ptr(a);
+        let c = arena.alloc_ptr(arena.alloc_ptr(arena.alloc_i32()));
+        bind!(b -> c);
+        test_type!(a; Type::Ptr(Box::new(Type::Int(IntType::I32))));
+        test_type!(b, c; Type::Ptr(Box::new(Type::Ptr(Box::new(Type::Int(IntType::I32))))));
     }
 }

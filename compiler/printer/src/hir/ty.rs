@@ -29,17 +29,17 @@ pub enum Type {
     Ptr(Box<Type>),
 }
 
-impl From<&hir::ty::Type> for Type {
-    fn from(ty: &hir::ty::Type) -> Self {
+impl From<&types::ty::Type> for Type {
+    fn from(ty: &types::ty::Type) -> Self {
         match ty {
-            hir::ty::Type::Void => Self::Void,
-            hir::ty::Type::Int(kind) => Self::Int(kind.into()),
-            hir::ty::Type::Float(kind) => Self::Float(kind.into()),
-            hir::ty::Type::Bool => Self::Bool,
-            hir::ty::Type::String => Self::String,
-            hir::ty::Type::Fun(fun) => Self::Fun(fun.into()),
-            hir::ty::Type::Ptr(ty) => {
-                let ty: &hir::ty::Type = &ty;
+            types::ty::Type::Void => Self::Void,
+            types::ty::Type::Int(kind) => Self::Int(kind.into()),
+            types::ty::Type::Float(kind) => Self::Float(kind.into()),
+            types::ty::Type::Bool => Self::Bool,
+            types::ty::Type::String => Self::String,
+            types::ty::Type::Fun(fun) => Self::Fun(fun.into()),
+            types::ty::Type::Ptr(ty) => {
+                let ty: &types::ty::Type = &ty;
                 Self::Ptr(Box::new(ty.into()))
             }
         }
@@ -65,8 +65,8 @@ pub struct FunType {
     ret: Box<Type>,
 }
 
-impl From<&hir::ty::FunType> for FunType {
-    fn from(fun: &hir::ty::FunType) -> Self {
+impl From<&types::ty::FunType> for FunType {
+    fn from(fun: &types::ty::FunType) -> Self {
         Self {
             args: fun.args.iter().map(|arg| arg.into()).collect(),
             ret: Box::new(fun.ret.deref().into()),
@@ -95,13 +95,13 @@ pub enum IntKind {
     I64,
 }
 
-impl From<&hir::ty::IntType> for IntKind {
-    fn from(kind: &hir::ty::IntType) -> Self {
+impl From<&types::ty::IntType> for IntKind {
+    fn from(kind: &types::ty::IntType) -> Self {
         match kind {
-            hir::ty::IntType::I8 => Self::I8,
-            hir::ty::IntType::I16 => Self::I16,
-            hir::ty::IntType::I32 => Self::I32,
-            hir::ty::IntType::I64 => Self::I64,
+            types::ty::IntType::I8 => Self::I8,
+            types::ty::IntType::I16 => Self::I16,
+            types::ty::IntType::I32 => Self::I32,
+            types::ty::IntType::I64 => Self::I64,
         }
     }
 }
@@ -123,11 +123,11 @@ pub enum FloatKind {
     F64,
 }
 
-impl From<&hir::ty::FloatType> for FloatKind {
-    fn from(kind: &hir::ty::FloatType) -> Self {
+impl From<&types::ty::FloatType> for FloatKind {
+    fn from(kind: &types::ty::FloatType) -> Self {
         match kind {
-            hir::ty::FloatType::F32 => Self::F32,
-            hir::ty::FloatType::F64 => Self::F64,
+            types::ty::FloatType::F32 => Self::F32,
+            types::ty::FloatType::F64 => Self::F64,
         }
     }
 }

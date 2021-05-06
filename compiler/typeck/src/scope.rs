@@ -1,6 +1,6 @@
-use crate::infer::InferTy;
 use hir::def::Def;
 use std::collections::HashMap;
+use types::infer::InferTy;
 
 pub type ArenaIdx = usize;
 

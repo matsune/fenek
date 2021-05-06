@@ -1,14 +1,14 @@
 use super::analyze::{NodeMap, TyAnalyzer};
 use super::arena::*;
-use super::finalize::TyFinalizer;
 use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
-use hir::ty;
 use lex::token;
 use num_traits::Num;
 use pos::{Pos, SrcFile};
-use std::borrow::Borrow;
 use std::str::FromStr;
+use types::infer::InferTyArena;
+use types::solve::Solver;
+use types::ty;
 
 fn compile_error(pos: Pos, typeck_err: TypeCkError) -> CompileError {
     CompileError::new(pos, Box::new(typeck_err))
@@ -54,30 +54,29 @@ type LowerResult<T> = Result<T, (ast::NodeId, TypeCkError)>;
 pub fn lower(src: &SrcFile, module: ast::Module) -> Result<hir::Module> {
     // lifetime 'infer equals with this block
     let ty_arena = InferTyArena::default();
+    let solver = Solver::new(&ty_arena);
     let def_arena = DefArena::new();
 
     let lower = {
         // 1. analyze AST and make hash maps to infer types of each nodes
         let (node_infer_ty_map, node_infer_def_map) =
-            TyAnalyzer::new(src, &ty_arena, &def_arena).analyze_module(&module)?;
+            TyAnalyzer::new(src, &solver, &def_arena).analyze_module(&module)?;
 
         // 2. finalize inferring type into concrete ty::Type
         let (node_ty_map, node_def_map) = {
-            let finalizer = TyFinalizer::new(&ty_arena);
-
             let mut node_ty_map = NodeMap::with_capacity(node_infer_ty_map.len());
             for (node_id, infer_ty) in node_infer_ty_map.iter() {
-                let final_ty = finalizer.finalize_type(infer_ty).map_err(|err| {
+                let final_ty = solver.solve_type(infer_ty).map_err(|err| {
                     let offset =
                         ast::visit::visit_module(&module, *node_id, |node| node.offset()).unwrap();
-                    compile_error(src.pos_from_offset(offset), err)
+                    CompileError::new(src.pos_from_offset(offset), err.into())
                 })?;
                 node_ty_map.insert(*node_id, final_ty);
             }
 
             let mut node_def_map = NodeMap::with_capacity(node_infer_def_map.len());
             for (node_id, def) in node_infer_def_map.iter() {
-                let ty = finalizer.finalize_type(def.ty).unwrap();
+                let ty = solver.solve_type(def.ty).unwrap();
                 node_def_map.insert(*node_id, Def::new(def.id, ty, def.is_mut));
             }
 
@@ -145,12 +144,12 @@ impl<'src> Lower<'src> {
                 hir::Stmt::Ret(ret) if is_last => {
                     let mut expr_ty = match &ret.expr {
                         Some(expr) => expr.get_type(),
-                        None => &ty::Type::Void,
+                        None => ty::Type::Void,
                     };
                     if expr_ty.is_fun() {
-                        expr_ty = expr_ty.as_fun().ret.borrow();
+                        expr_ty = *expr_ty.into_fun().ret;
                     }
-                    if *expr_ty != ret_ty {
+                    if expr_ty != ret_ty {
                         return Err(compile_error(
                             self.src.pos_from_offset(stmt_offset),
                             TypeCkError::InvalidReturnType,
@@ -360,7 +359,7 @@ impl<'src> Lower<'src> {
                 match &expr.kind {
                     ast::ExprKind::Lit(lit) => {
                         match op.op_kind() {
-                            ast::UnaryOpKind::Minus => {
+                            ast::UnOpKind::Neg => {
                                 // - should have number
                                 if !ty.is_int() && !ty.is_float() {
                                     return Err((id, TypeCkError::InvalidUnaryTypes));
@@ -371,7 +370,7 @@ impl<'src> Lower<'src> {
                                     .map(|lit_kind| hir::Lit::new(id, lit_kind, ty).into())
                                     .map_err(|err| (id, err))
                             }
-                            ast::UnaryOpKind::Not => {
+                            ast::UnOpKind::Not => {
                                 // ! should have bool
                                 if !ty.is_bool() {
                                     return Err((id, TypeCkError::InvalidUnaryTypes));
@@ -383,24 +382,33 @@ impl<'src> Lower<'src> {
                                     v.into()
                                 })
                             }
+                            ast::UnOpKind::Ref => {
+                                if ty.is_void() {
+                                    return Err((id, TypeCkError::InvalidUnaryTypes));
+                                }
+                                unimplemented!()
+                            }
+                            ast::UnOpKind::Deref => unimplemented!(),
                         }
                     }
                     _ => {
                         let expr = self.lower_expr(&expr)?;
                         let expr_ty = expr.get_type();
                         match op.op_kind() {
-                            ast::UnaryOpKind::Minus => {
+                            ast::UnOpKind::Neg => {
                                 // + and - should have number
                                 if !expr_ty.is_int() && !expr_ty.is_float() {
                                     return Err((id, TypeCkError::InvalidUnaryTypes));
                                 }
                             }
-                            ast::UnaryOpKind::Not => {
+                            ast::UnOpKind::Not => {
                                 // ! should have bool
                                 if !expr_ty.is_bool() {
                                     return Err((id, TypeCkError::InvalidUnaryTypes));
                                 }
                             }
+                            ast::UnOpKind::Ref => unimplemented!(),
+                            ast::UnOpKind::Deref => unimplemented!(),
                         }
                         Ok(hir::Unary::new(id, op.op_kind(), expr).into())
                     }

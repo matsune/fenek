@@ -56,6 +56,13 @@ impl Type {
         !self.is_fun()
     }
 
+    pub fn into_fun(self) -> FunType {
+        match self {
+            Self::Fun(f) => f,
+            _ => panic!(),
+        }
+    }
+
     pub fn as_fun(&self) -> &FunType {
         match self {
             Self::Fun(f) => f,
@@ -79,7 +86,7 @@ impl ToString for Type {
             Self::Bool => "bool".to_string(),
             Self::String => "string".to_string(),
             Self::Fun(fun) => fun.to_string(),
-            Self::Ptr(ty) => format!("*{}", ty.to_string()),
+            Self::Ptr(ty) => format!("{}*", ty.to_string()),
         }
     }
 }

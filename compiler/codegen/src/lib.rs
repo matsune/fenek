@@ -1,5 +1,4 @@
 use hir::def::DefId;
-use hir::ty;
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -14,6 +13,7 @@ use inkwell::{AddressSpace, OptimizationLevel};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use types::ty;
 
 fn llvm_intrinsic_type_name(ty: BasicTypeEnum) -> String {
     match ty {
@@ -441,7 +441,7 @@ impl<'ctx> Codegen<'ctx> {
                 }
             }
             hir::Expr::Unary(unary) => match unary.op {
-                ast::UnaryOpKind::Minus => {
+                ast::UnOpKind::Neg => {
                     let expr = self.build_expr(function, &unary.expr);
                     match unary.get_type() {
                         ty::Type::Int(_) => function
@@ -455,7 +455,7 @@ impl<'ctx> Codegen<'ctx> {
                         _ => unimplemented!(),
                     }
                 }
-                ast::UnaryOpKind::Not => {
+                ast::UnOpKind::Not => {
                     let expr = self.build_expr(function, &unary.expr);
                     match unary.get_type() {
                         ty::Type::Bool => function
@@ -465,6 +465,8 @@ impl<'ctx> Codegen<'ctx> {
                         _ => unreachable!(),
                     }
                 }
+                ast::UnOpKind::Ref => unimplemented!(),
+                ast::UnOpKind::Deref => unimplemented!(),
             },
         }
     }

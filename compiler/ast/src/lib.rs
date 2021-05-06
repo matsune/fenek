@@ -1,7 +1,8 @@
-pub mod visit;
-
 use lex::token;
 use pos::Offset;
+use std::convert::TryFrom;
+
+pub mod visit;
 
 pub type NodeId = usize;
 
@@ -262,7 +263,7 @@ impl Expr {
     pub fn new_unary(id: NodeId, op_raw: token::Token, expr: Box<Expr>) -> Self {
         Self {
             id,
-            kind: ExprKind::Unary(UnaryOp::new(op_raw), expr),
+            kind: ExprKind::Unary(UnOp::new(op_raw), expr),
         }
     }
 
@@ -278,7 +279,7 @@ pub enum ExprKind {
     Call(token::Token, Vec<Expr>),
     Lit(Lit),
     Binary(BinOp, Box<Expr>, Box<Expr>),
-    Unary(UnaryOp, Box<Expr>),
+    Unary(UnOp, Box<Expr>),
 }
 
 impl ExprKind {
@@ -387,32 +388,43 @@ impl Assoc {
     }
 }
 
-pub struct UnaryOp {
+pub struct UnOp {
     pub raw: token::Token,
 }
 
-impl UnaryOp {
+impl UnOp {
     fn new(raw: token::Token) -> Self {
         Self { raw }
     }
 
-    pub fn op_kind(&self) -> UnaryOpKind {
-        UnaryOpKind::from(self.raw.kind)
+    pub fn op_kind(&self) -> UnOpKind {
+        UnOpKind::try_from(self.raw.kind).unwrap()
     }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum UnaryOpKind {
-    Minus,
+pub enum UnOpKind {
+    // -
+    Neg,
+    // !
     Not,
+    // &
+    Ref,
+    // *
+    Deref,
 }
 
-impl From<token::TokenKind> for UnaryOpKind {
-    fn from(k: token::TokenKind) -> Self {
-        match k {
-            token::TokenKind::Minus => Self::Minus,
+impl TryFrom<token::TokenKind> for UnOpKind {
+    type Error = &'static str;
+
+    fn try_from(k: token::TokenKind) -> Result<Self, Self::Error> {
+        let kind = match k {
+            token::TokenKind::Minus => Self::Neg,
             token::TokenKind::Not => Self::Not,
-            _ => panic!(),
-        }
+            token::TokenKind::And => Self::Ref,
+            token::TokenKind::Star => Self::Deref,
+            _ => return Err("unknown unary op"),
+        };
+        Ok(kind)
     }
 }

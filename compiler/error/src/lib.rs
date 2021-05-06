@@ -77,6 +77,14 @@ pub enum ParseError {
 }
 
 #[derive(Error, Debug)]
+pub enum TypeError {
+    #[error("conflict types {0} and {1}")]
+    ConflictTypes(String, String),
+    #[error("unresolved type")]
+    UnresolvedType,
+}
+
+#[derive(Error, Debug)]
 pub enum TypeCkError {
     #[error("already defined function `{0}`")]
     AlreadyDefinedFun(String),
@@ -102,10 +110,6 @@ pub enum TypeCkError {
     InvalidBinaryTypes,
     #[error("invalid unary types")]
     InvalidUnaryTypes,
-    #[error("conflict types {0} and {1}")]
-    ConflictTypes(String, String),
-    #[error("unresolved type")]
-    UnresolvedType,
     #[error("overflow {0}")]
     Overflow(String),
     #[error("constant {0} overflows {1}")]

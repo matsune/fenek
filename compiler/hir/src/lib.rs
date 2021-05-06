@@ -1,8 +1,9 @@
 pub mod def;
-pub mod ty;
 
 use def::*;
 use lex::token;
+use std::ops::Deref;
+use types::ty;
 
 pub struct Module {
     pub funs: Vec<Fun>,
@@ -127,7 +128,7 @@ macro_rules! Enum_with_type {
         }
 
         impl $name {
-            pub fn get_type(&self) -> &ty::Type {
+            pub fn get_type(&self) -> ty::Type {
                 match self {
                     $(
                     $name::$Var(v) => v.get_type(),
@@ -168,8 +169,8 @@ impl Lit {
         Self { id, kind, ty }
     }
 
-    pub fn get_type(&self) -> &ty::Type {
-        &self.ty
+    pub fn get_type(&self) -> ty::Type {
+        self.ty.clone()
     }
 }
 
@@ -202,8 +203,8 @@ impl Path {
         Self { raw, def }
     }
 
-    pub fn get_type(&self) -> &ty::Type {
-        &self.def.ty
+    pub fn get_type(&self) -> ty::Type {
+        self.def.ty.clone()
     }
 }
 
@@ -218,8 +219,8 @@ impl Call {
         Self { path, args, def }
     }
 
-    pub fn get_type(&self) -> &ty::Type {
-        &self.def.ty
+    pub fn get_type(&self) -> ty::Type {
+        self.def.ty.clone()
     }
 }
 
@@ -242,19 +243,19 @@ impl Binary {
         }
     }
 
-    pub fn get_type(&self) -> &ty::Type {
-        &self.ty
+    pub fn get_type(&self) -> ty::Type {
+        self.ty.clone()
     }
 }
 
 pub struct Unary {
     pub id: ast::NodeId,
-    pub op: ast::UnaryOpKind,
+    pub op: ast::UnOpKind,
     pub expr: Box<Expr>,
 }
 
 impl Unary {
-    pub fn new(id: ast::NodeId, op: ast::UnaryOpKind, expr: Expr) -> Self {
+    pub fn new(id: ast::NodeId, op: ast::UnOpKind, expr: Expr) -> Self {
         Unary {
             id,
             op,
@@ -262,7 +263,15 @@ impl Unary {
         }
     }
 
-    pub fn get_type(&self) -> &ty::Type {
-        &self.expr.get_type()
+    pub fn get_type(&self) -> ty::Type {
+        let expr_ty = self.expr.get_type();
+        match self.op {
+            ast::UnOpKind::Ref => ty::Type::Ptr(Box::new(expr_ty)),
+            ast::UnOpKind::Deref => match expr_ty {
+                ty::Type::Ptr(ty) => ty.deref().clone(),
+                _ => unreachable!(),
+            },
+            _ => expr_ty,
+        }
     }
 }

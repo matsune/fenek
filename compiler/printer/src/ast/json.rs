@@ -182,7 +182,7 @@ enum ExprKind {
         rhs: Box<Expr>,
     },
     Unary {
-        unary_op: UnaryOpKind,
+        unary_op: UnOpKind,
         expr: Box<Expr>,
     },
 }
@@ -304,12 +304,14 @@ impl From<ast::BinOpKind> for BinOpKind {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum UnaryOpKind {
+pub enum UnOpKind {
     Minus,
     Not,
+    Ref,
+    Deref,
 }
 
-impl Serialize for UnaryOpKind {
+impl Serialize for UnOpKind {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -317,15 +319,20 @@ impl Serialize for UnaryOpKind {
         serializer.serialize_str(match *self {
             Self::Minus => "-",
             Self::Not => "!",
+            Self::Ref => "&",
+            Self::Deref => "*",
         })
     }
 }
 
-impl From<ast::UnaryOpKind> for UnaryOpKind {
-    fn from(op: ast::UnaryOpKind) -> Self {
+impl From<ast::UnOpKind> for UnOpKind {
+    fn from(op: ast::UnOpKind) -> Self {
+        use ast::UnOpKind::*;
         match op {
-            ast::UnaryOpKind::Minus => Self::Minus,
-            ast::UnaryOpKind::Not => Self::Not,
+            Minus => Self::Minus,
+            Not => Self::Not,
+            Ref => Self::Ref,
+            Deref => Self::Deref,
         }
     }
 }

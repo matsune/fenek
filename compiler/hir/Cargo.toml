@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 ast = { path = "../ast" }
 lex = { path = "../lex" }
+types = { path = "../types" }

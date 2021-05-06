@@ -14,3 +14,4 @@ ast = { path = "../ast" }
 lex = { path = "../lex" }
 typeck = { path = "../typeck" }
 hir = { path = "../hir" }
+types = { path = "../types" }
