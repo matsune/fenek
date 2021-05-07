@@ -11,11 +11,11 @@ pub type DefId = usize;
 pub struct Def<Ty> {
     pub id: DefId,
     pub ty: Ty,
-    pub is_mut: bool,
+    pub is_var: bool,
 }
 
 impl<Ty> Def<Ty> {
-    pub fn new(id: DefId, ty: Ty, is_mut: bool) -> Self {
-        Self { id, ty, is_mut }
+    pub fn new(id: DefId, ty: Ty, is_var: bool) -> Self {
+        Self { id, ty, is_var }
     }
 }

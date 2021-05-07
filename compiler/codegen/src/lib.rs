@@ -343,9 +343,18 @@ impl<'ctx> Codegen<'ctx> {
         }
     }
 
-    fn get_ptr(&self, function: &Function<'ctx>, expr: &hir::Expr) -> PointerValue<'ctx> {
+    fn get_ptr(&mut self, function: &Function<'ctx>, expr: &hir::Expr) -> PointerValue<'ctx> {
         match expr {
             hir::Expr::Path(ident) => function.var_map.get(&ident.def.id).unwrap().ptr,
+            hir::Expr::Unary(unary) => match unary.op {
+                ast::UnOpKind::Ref => self.get_ptr(function, &unary.expr),
+                ast::UnOpKind::Deref => {
+                    let ptr = self.build_expr(function, &unary.expr);
+                    ptr.into_pointer_value()
+                    // function.builder.build_load(, "")
+                }
+                _ => unreachable!(),
+            },
             _ => unreachable!(),
         }
     }
@@ -465,8 +474,11 @@ impl<'ctx> Codegen<'ctx> {
                         _ => unreachable!(),
                     }
                 }
-                ast::UnOpKind::Ref => unimplemented!(),
-                ast::UnOpKind::Deref => unimplemented!(),
+                ast::UnOpKind::Ref => self.get_ptr(function, &unary.expr).into(),
+                ast::UnOpKind::Deref => {
+                    let ptr = self.build_expr(function, &unary.expr);
+                    function.builder.build_load(ptr.into_pointer_value(), "")
+                }
             },
         }
     }

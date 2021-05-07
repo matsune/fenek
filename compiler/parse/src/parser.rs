@@ -209,8 +209,8 @@ impl<'src> Parser<'src> {
 
     fn parse_var_decl(&mut self) -> Result<Stmt> {
         let keyword = self
-            .bump_if(|tok| tok.raw == "var" || tok.raw == "let")
-            .ok_or_else(|| self.expected_err("var or let"))?;
+            .bump_if(|tok| tok.raw == "var")
+            .ok_or_else(|| self.expected_err("var"))?;
         self.skip_spaces();
         let name = self
             .bump_if(|tok| tok.is_ident() && !tok.is_keyword())
@@ -257,7 +257,7 @@ impl<'src> Parser<'src> {
             }
             token::TokenKind::Ident if tok.is_keyword() => match tok.try_as_keyword().unwrap() {
                 token::Keyword::Ret => self.parse_ret()?,
-                token::Keyword::Var | token::Keyword::Let => self.parse_var_decl()?,
+                token::Keyword::Var => self.parse_var_decl()?,
                 token::Keyword::Fun => {
                     return Err(CompileError::new(
                         self.src.pos_from_offset(tok.offset),

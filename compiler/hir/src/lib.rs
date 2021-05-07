@@ -150,9 +150,13 @@ macro_rules! Enum_with_type {
 Enum_with_type!(Expr [Lit, Path, Call, Binary, Unary]);
 
 impl Expr {
-    pub fn is_assignable(&self) -> bool {
+    pub fn is_lvalue(&self) -> bool {
         match self {
-            Self::Path(path) => path.def.is_mut,
+            Self::Path(path) => path.def.is_var,
+            Self::Unary(unary) => match unary.op {
+                ast::UnOpKind::Ref | ast::UnOpKind::Deref => unary.expr.is_lvalue(),
+                _ => false,
+            },
             _ => false,
         }
     }

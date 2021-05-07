@@ -12,7 +12,7 @@ impl<Ty> DefArena<Ty> {
         }
     }
 
-    pub fn alloc(&self, ty: Ty, is_mut: bool) -> &Def<Ty> {
-        self.inner.alloc(Def::new(self.inner.len(), ty, is_mut))
+    pub fn alloc(&self, ty: Ty, is_var: bool) -> &Def<Ty> {
+        self.inner.alloc(Def::new(self.inner.len(), ty, is_var))
     }
 }

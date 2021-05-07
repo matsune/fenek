@@ -189,13 +189,6 @@ impl From<&hir::Path> for Path {
             raw: base.raw.clone(),
             def_id: base.def.id,
             ty: ty::Type::from(&base.def.ty),
-            // match &base.def {
-            // hir::def::Def::Fun(fun) => ty::Type::from(&hir::ty::Type::Fun(hir::ty::FunType {
-            //     args: fun.arg_tys.clone(),
-            //     ret: Some(Box::new(fun.ret_ty.clone())),
-            // })),
-            // hir::def::Def::Var(var) => (&var.ty).into(),
-            // },
         }
     }
 }

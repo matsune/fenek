@@ -102,8 +102,8 @@ pub enum TypeCkError {
     InvalidArgsCount,
     #[error("invalid return type")]
     InvalidReturnType,
-    #[error("invalid assign statement")]
-    InvalidAssign,
+    // #[error("invalid assign statement")]
+    // InvalidAssign,
     #[error("must be ret statement")]
     MustBeRetStmt,
     #[error("invalid binary types")]
@@ -118,4 +118,6 @@ pub enum TypeCkError {
     InvalidInt(String),
     #[error("invalid float literal {0}")]
     InvalidFloat(String),
+    #[error("lvalue required")]
+    LvalueRequired,
 }

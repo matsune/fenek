@@ -77,7 +77,7 @@ pub fn lower(src: &SrcFile, module: ast::Module) -> Result<hir::Module> {
             let mut node_def_map = NodeMap::with_capacity(node_infer_def_map.len());
             for (node_id, def) in node_infer_def_map.iter() {
                 let ty = solver.solve_type(def.ty).unwrap();
-                node_def_map.insert(*node_id, Def::new(def.id, ty, def.is_mut));
+                node_def_map.insert(*node_id, Def::new(def.id, ty, false));
             }
 
             (node_ty_map, node_def_map)
@@ -203,8 +203,8 @@ impl<'src> Lower<'src> {
             }
             ast::StmtKind::Assign(left, right) => {
                 let left = self.lower_expr(&left)?;
-                if !left.is_assignable() {
-                    return Err((id, TypeCkError::InvalidAssign));
+                if !left.is_lvalue() {
+                    return Err((id, TypeCkError::LvalueRequired));
                 }
                 let right = self.lower_expr(&right)?;
                 hir::Assign::new(id, left, right).into()
@@ -343,7 +343,7 @@ impl<'src> Lower<'src> {
             ast::ExprKind::Lit(lit) => self.lower_lit(id, lit).map(|v| v.into()),
             ast::ExprKind::Path(tok) => {
                 let def = self.node_def_map.get(&expr.id).unwrap();
-                Ok(hir::Path::new(tok.raw.clone(), Def::new(def.id, ty, def.is_mut)).into())
+                Ok(hir::Path::new(tok.raw.clone(), Def::new(def.id, ty, true)).into())
             }
             ast::ExprKind::Call(path, args) => {
                 let path = path.raw.clone();
@@ -382,13 +382,9 @@ impl<'src> Lower<'src> {
                                     v.into()
                                 })
                             }
-                            ast::UnOpKind::Ref => {
-                                if ty.is_void() {
-                                    return Err((id, TypeCkError::InvalidUnaryTypes));
-                                }
-                                unimplemented!()
+                            ast::UnOpKind::Ref | ast::UnOpKind::Deref => {
+                                Err((id, TypeCkError::LvalueRequired))
                             }
-                            ast::UnOpKind::Deref => unimplemented!(),
                         }
                     }
                     _ => {
@@ -407,8 +403,22 @@ impl<'src> Lower<'src> {
                                     return Err((id, TypeCkError::InvalidUnaryTypes));
                                 }
                             }
-                            ast::UnOpKind::Ref => unimplemented!(),
-                            ast::UnOpKind::Deref => unimplemented!(),
+                            ast::UnOpKind::Ref => {
+                                if expr_ty.is_void() {
+                                    return Err((id, TypeCkError::InvalidUnaryTypes));
+                                }
+                                if !expr.is_lvalue() {
+                                    return Err((id, TypeCkError::LvalueRequired));
+                                }
+                            }
+                            ast::UnOpKind::Deref => {
+                                if !expr_ty.is_ptr() {
+                                    return Err((id, TypeCkError::InvalidUnaryTypes));
+                                }
+                                if !expr.is_lvalue() {
+                                    return Err((id, TypeCkError::LvalueRequired));
+                                }
+                            }
                         }
                         Ok(hir::Unary::new(id, op.op_kind(), expr).into())
                     }

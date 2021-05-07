@@ -52,6 +52,10 @@ impl Type {
         matches!(self, Type::Fun(_))
     }
 
+    pub fn is_ptr(&self) -> bool {
+        matches!(self, Type::Ptr(_))
+    }
+
     pub fn is_var(&self) -> bool {
         !self.is_fun()
     }

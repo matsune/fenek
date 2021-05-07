@@ -137,7 +137,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
 
         for (idx, arg) in fun.args.iter().enumerate() {
             let ty = fun_def.ty.kind.as_fun().arg_tys[idx];
-            let def = self.def_arena.alloc(ty, false);
+            let def = self.def_arena.alloc(ty, true);
             self.scopes.insert(arg.name.raw.clone(), def);
             self.node_def_map.insert(arg.id, def);
         }
@@ -160,7 +160,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 self.analyze_expr(&expr)?;
             }
             ast::StmtKind::VarDecl {
-                keyword,
+                keyword: _,
                 name,
                 ty,
                 init,
@@ -194,7 +194,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 self.solver.bind(var_ty, init_ty).map_err(|err| {
                     CompileError::new(self.src.pos_from_offset(name.offset), err.into())
                 })?;
-                let def = self.def_arena.alloc(init_ty, keyword.raw == "var");
+                let def = self.def_arena.alloc(init_ty, true);
                 self.scopes.insert(name.raw.clone(), def);
                 self.node_def_map.insert(stmt.id, def);
             }
