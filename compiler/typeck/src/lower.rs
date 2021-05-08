@@ -382,9 +382,7 @@ impl<'src> Lower<'src> {
                                     v.into()
                                 })
                             }
-                            ast::UnOpKind::Ref | ast::UnOpKind::Deref => {
-                                Err((id, TypeCkError::LvalueRequired))
-                            }
+                            ast::UnOpKind::Ref => Err((id, TypeCkError::LvalueRequired)),
                         }
                     }
                     _ => {
@@ -405,14 +403,6 @@ impl<'src> Lower<'src> {
                             }
                             ast::UnOpKind::Ref => {
                                 if expr_ty.is_void() {
-                                    return Err((id, TypeCkError::InvalidUnaryTypes));
-                                }
-                                if !expr.is_lvalue() {
-                                    return Err((id, TypeCkError::LvalueRequired));
-                                }
-                            }
-                            ast::UnOpKind::Deref => {
-                                if !expr_ty.is_ptr() {
                                     return Err((id, TypeCkError::InvalidUnaryTypes));
                                 }
                                 if !expr.is_lvalue() {

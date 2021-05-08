@@ -51,29 +51,7 @@ pub enum InferTyKind<'a> {
     Bool,
     Void,
     Fun(FunTy<'a>),
-    Ptr(&'a InferTy<'a>),
-}
-
-impl<'a> PartialEq for InferTyKind<'a> {
-    fn eq(&self, other: &Self) -> bool {
-        use InferTyKind::*;
-        match (self, other) {
-            (Var, Var) | (IntLit, IntLit) | (FloatLit, FloatLit) | (Bool, Bool) | (Void, Void) => {
-                true
-            }
-            (Int(il), Int(ir)) => il == ir,
-            (Float(il), Float(ir)) => il == ir,
-            (Fun(fl), Fun(fr)) => {
-                let fl_arg_tys: Vec<&InferTyKind<'a>> =
-                    fl.arg_tys.iter().map(|ty| &ty.kind).collect();
-                let fr_arg_tys: Vec<&InferTyKind<'a>> =
-                    fr.arg_tys.iter().map(|ty| &ty.kind).collect();
-                fl_arg_tys == fr_arg_tys && fl.ret_ty.kind == fr.ret_ty.kind
-            }
-            (Ptr(l), Ptr(r)) => l.kind == r.kind,
-            _ => false,
-        }
-    }
+    Ref(&'a InferTy<'a>),
 }
 
 impl<'a> InferTyKind<'a> {
@@ -117,7 +95,7 @@ impl<'a> ToString for InferTyKind<'a> {
                     .join(", "),
                 fun.ret_ty.kind.to_string()
             ),
-            Self::Ptr(k) => format!("{}*", k.kind.to_string()),
+            Self::Ref(k) => format!("&{}", k.kind.to_string()),
         }
     }
 }

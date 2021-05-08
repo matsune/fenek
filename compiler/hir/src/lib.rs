@@ -154,7 +154,7 @@ impl Expr {
         match self {
             Self::Path(path) => path.def.is_var,
             Self::Unary(unary) => match unary.op {
-                ast::UnOpKind::Ref | ast::UnOpKind::Deref => unary.expr.is_lvalue(),
+                ast::UnOpKind::Ref => unary.expr.is_lvalue(),
                 _ => false,
             },
             _ => false,
@@ -270,11 +270,7 @@ impl Unary {
     pub fn get_type(&self) -> ty::Type {
         let expr_ty = self.expr.get_type();
         match self.op {
-            ast::UnOpKind::Ref => ty::Type::Ptr(Box::new(expr_ty)),
-            ast::UnOpKind::Deref => match expr_ty {
-                ty::Type::Ptr(ty) => ty.deref().clone(),
-                _ => unreachable!(),
-            },
+            ast::UnOpKind::Ref => ty::Type::Ref(Box::new(expr_ty)),
             _ => expr_ty,
         }
     }

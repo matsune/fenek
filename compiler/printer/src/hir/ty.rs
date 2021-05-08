@@ -26,7 +26,7 @@ pub enum Type {
     Bool,
     String,
     Fun(FunType),
-    Ptr(Box<Type>),
+    Ref(Box<Type>),
 }
 
 impl From<&types::ty::Type> for Type {
@@ -38,9 +38,9 @@ impl From<&types::ty::Type> for Type {
             types::ty::Type::Bool => Self::Bool,
             types::ty::Type::String => Self::String,
             types::ty::Type::Fun(fun) => Self::Fun(fun.into()),
-            types::ty::Type::Ptr(ty) => {
+            types::ty::Type::Ref(ty) => {
                 let ty: &types::ty::Type = &ty;
-                Self::Ptr(Box::new(ty.into()))
+                Self::Ref(Box::new(ty.into()))
             }
         }
     }
@@ -55,7 +55,7 @@ impl ToString for Type {
             Self::Bool => "bool".to_string(),
             Self::String => "string".to_string(),
             Self::Fun(fun) => fun.to_string(),
-            Self::Ptr(ty) => format!("*{}", ty.to_string()),
+            Self::Ref(ty) => format!("&{}", ty.to_string()),
         }
     }
 }

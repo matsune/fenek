@@ -52,7 +52,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 "void" => self.solver.arena.alloc_void(),
                 _ => return None,
             },
-            ast::TyKind::Ptr(ty, _) => self.solver.arena.alloc_ptr(self.get_type_from_ty(ty)?),
+            ast::TyKind::Ref(ty, _) => self.solver.arena.alloc_ref(self.get_type_from_ty(ty)?),
         };
         Some(infer_ty)
     }
@@ -289,15 +289,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
             ast::ExprKind::Unary(op, expr) => {
                 let expr_ty = self.analyze_expr(&expr)?;
                 match op.op_kind() {
-                    ast::UnOpKind::Ref => self.solver.arena.alloc_ptr(expr_ty),
-                    ast::UnOpKind::Deref => {
-                        let derefed_ty = self.solver.arena.alloc_var();
-                        let ptr_ty = self.solver.arena.alloc_ptr(derefed_ty);
-                        self.solver.bind(expr_ty, ptr_ty).map_err(|err| {
-                            CompileError::new(self.src.pos_from_offset(expr.offset()), err.into())
-                        })?;
-                        derefed_ty
-                    }
+                    ast::UnOpKind::Ref => self.solver.arena.alloc_ref(expr_ty),
                     _ => {
                         let ty = self.solver.arena.alloc_var();
                         self.solver.bind(ty, expr_ty).map_err(|err| {

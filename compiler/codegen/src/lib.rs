@@ -207,7 +207,7 @@ impl<'ctx> Codegen<'ctx> {
             }
             .into(),
             ty::Type::Bool => self.context.bool_type().into(),
-            ty::Type::Ptr(ty) => {
+            ty::Type::Ref(ty) => {
                 let ty = self.llvm_basic_ty(ty);
                 ty.ptr_type(AddressSpace::Generic).into()
             }
@@ -348,11 +348,6 @@ impl<'ctx> Codegen<'ctx> {
             hir::Expr::Path(ident) => function.var_map.get(&ident.def.id).unwrap().ptr,
             hir::Expr::Unary(unary) => match unary.op {
                 ast::UnOpKind::Ref => self.get_ptr(function, &unary.expr),
-                ast::UnOpKind::Deref => {
-                    let ptr = self.build_expr(function, &unary.expr);
-                    ptr.into_pointer_value()
-                    // function.builder.build_load(, "")
-                }
                 _ => unreachable!(),
             },
             _ => unreachable!(),
@@ -475,10 +470,6 @@ impl<'ctx> Codegen<'ctx> {
                     }
                 }
                 ast::UnOpKind::Ref => self.get_ptr(function, &unary.expr).into(),
-                ast::UnOpKind::Deref => {
-                    let ptr = self.build_expr(function, &unary.expr);
-                    function.builder.build_load(ptr.into_pointer_value(), "")
-                }
             },
         }
     }

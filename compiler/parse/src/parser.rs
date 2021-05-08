@@ -169,12 +169,16 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_ty(&mut self) -> Result<Ty> {
-        let ty = if self.is_next_kind(token::TokenKind::Star) {
-            // pointer type
+        let ty = if self.is_next_kind(token::TokenKind::And) {
+            // ref type
             let offset = self.bump().unwrap().offset;
             self.skip_spaces();
             let ty = self.parse_ty()?;
-            Ty::new_ptr(self.gen_id(), ty, offset)
+            if ty.kind.is_ref() {
+                // not allowed multiple ref type, like &&i8
+                return Err(self.compile_error(ParseError::InvalidTyName));
+            }
+            Ty::new_ref(self.gen_id(), ty, offset)
         } else {
             let ty = self
                 .bump_if(|tok| tok.is_ident() && !tok.is_keyword())

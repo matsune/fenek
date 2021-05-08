@@ -75,10 +75,10 @@ impl Ty {
         }
     }
 
-    pub fn new_ptr(id: NodeId, ty: Ty, offset: Offset) -> Self {
+    pub fn new_ref(id: NodeId, ty: Ty, offset: Offset) -> Self {
         Self {
             id,
-            kind: TyKind::Ptr(Box::new(ty), offset),
+            kind: TyKind::Ref(Box::new(ty), offset),
         }
     }
 
@@ -89,7 +89,7 @@ impl Ty {
 
 pub enum TyKind {
     Basic(token::Token),
-    Ptr(Box<Ty>, Offset),
+    Ref(Box<Ty>, Offset),
     // Lambda, Tuple...
 }
 
@@ -97,7 +97,7 @@ impl ToString for TyKind {
     fn to_string(&self) -> String {
         match self {
             Self::Basic(tok) => tok.raw.clone(),
-            Self::Ptr(ty, _) => format!("*{}", ty.to_string()),
+            Self::Ref(ty, _) => format!("&{}", ty.to_string()),
         }
     }
 }
@@ -106,8 +106,12 @@ impl TyKind {
     pub fn offset(&self) -> Offset {
         match self {
             Self::Basic(tok) => tok.offset,
-            Self::Ptr(_, offset) => *offset,
+            Self::Ref(_, offset) => *offset,
         }
+    }
+
+    pub fn is_ref(&self) -> bool {
+        matches!(self, Self::Ref(_, _))
     }
 }
 
@@ -410,8 +414,6 @@ pub enum UnOpKind {
     Not,
     // &
     Ref,
-    // *
-    Deref,
 }
 
 impl TryFrom<token::TokenKind> for UnOpKind {
@@ -422,7 +424,6 @@ impl TryFrom<token::TokenKind> for UnOpKind {
             token::TokenKind::Minus => Self::Neg,
             token::TokenKind::Not => Self::Not,
             token::TokenKind::And => Self::Ref,
-            token::TokenKind::Star => Self::Deref,
             _ => return Err("unknown unary op"),
         };
         Ok(kind)

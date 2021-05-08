@@ -113,52 +113,25 @@ fn test_solve() {
         test_type!(a, e; expect);
     }
 
-    // test ptr types
+    // test ref type
     //
     // a
     // b = &a
-    // c = b*
-    // d = i8
+    // c = i8
     //
-    // a -> d
+    // a -> c
     //
     // => a = i8
-    //    b = i8*
+    //    b = &i8
     //    c = i8
-    //    d = i8
     {
         alloc!(var: a);
         // b = &a
-        let b = arena.alloc_ptr(a);
-        // c = b*
-        // => b = &c
-        alloc!(var: c);
-        bind!(b -> arena.alloc_ptr(c));
+        let b = arena.alloc_ref(a);
+        alloc!(i8: c);
+        bind!(a -> c);
 
-        alloc!(i8: d);
-        bind!(a -> d);
-
-        test_type!(a, c, d; Type::Int(IntType::I8));
-        test_type!(b; Type::Ptr(Box::new(Type::Int(IntType::I8))));
-    }
-
-    // test ptr types
-    //
-    // a
-    // b = &a
-    // c = &&i32
-    //
-    // b -> c
-    //
-    // => a = i8*
-    //    b = i8**
-    //    c = i8**
-    {
-        alloc!(var: a);
-        let b = arena.alloc_ptr(a);
-        let c = arena.alloc_ptr(arena.alloc_ptr(arena.alloc_i32()));
-        bind!(b -> c);
-        test_type!(a; Type::Ptr(Box::new(Type::Int(IntType::I32))));
-        test_type!(b, c; Type::Ptr(Box::new(Type::Ptr(Box::new(Type::Int(IntType::I32))))));
+        test_type!(a, c; Type::Int(IntType::I8));
+        test_type!(b; Type::Ref(Box::new(Type::Int(IntType::I8))));
     }
 }

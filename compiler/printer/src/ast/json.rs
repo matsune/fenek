@@ -73,14 +73,14 @@ impl From<&ast::Ty> for Ty {
 #[derive(Serialize)]
 enum TyKind {
     Basic(String),
-    Ptr(Box<TyKind>),
+    Ref(Box<TyKind>),
 }
 
 impl From<&ast::TyKind> for TyKind {
     fn from(k: &ast::TyKind) -> Self {
         match k {
             ast::TyKind::Basic(tok) => Self::Basic(tok.raw.clone()),
-            ast::TyKind::Ptr(ty, _) => Self::Ptr(Box::new((&ty.kind).into())),
+            ast::TyKind::Ref(ty, _) => Self::Ref(Box::new((&ty.kind).into())),
         }
     }
 }
@@ -308,7 +308,6 @@ pub enum UnOpKind {
     Minus,
     Not,
     Ref,
-    Deref,
 }
 
 impl Serialize for UnOpKind {
@@ -320,19 +319,16 @@ impl Serialize for UnOpKind {
             Self::Minus => "-",
             Self::Not => "!",
             Self::Ref => "&",
-            Self::Deref => "*",
         })
     }
 }
 
 impl From<ast::UnOpKind> for UnOpKind {
     fn from(op: ast::UnOpKind) -> Self {
-        use ast::UnOpKind::*;
         match op {
-            Minus => Self::Minus,
-            Not => Self::Not,
-            Ref => Self::Ref,
-            Deref => Self::Deref,
+            ast::UnOpKind::Neg => Self::Minus,
+            ast::UnOpKind::Not => Self::Not,
+            ast::UnOpKind::Ref => Self::Ref,
         }
     }
 }
