@@ -126,7 +126,11 @@ impl<'src> Lower<'src> {
         let mut args = Vec::new();
         for arg in &fun.args {
             let def = self.node_def_map.get(&arg.id).unwrap();
-            args.push(hir::Path::new(arg.name.raw.clone(), def.clone()));
+            args.push(hir::Path::new(
+                arg.name.raw.clone(),
+                def.clone(),
+                def.ty.clone(),
+            ));
         }
         let mut stmts = Vec::new();
         let stmts_len = fun.block.stmts.len();
@@ -343,7 +347,10 @@ impl<'src> Lower<'src> {
             ast::ExprKind::Lit(lit) => self.lower_lit(id, lit).map(|v| v.into()),
             ast::ExprKind::Path(tok) => {
                 let def = self.node_def_map.get(&expr.id).unwrap();
-                Ok(hir::Path::new(tok.raw.clone(), Def::new(def.id, ty, true)).into())
+                Ok(
+                    hir::Path::new(tok.raw.clone(), Def::new(def.id, def.ty.clone(), true), ty)
+                        .into(),
+                )
             }
             ast::ExprKind::Call(path, args) => {
                 let path = path.raw.clone();

@@ -14,30 +14,28 @@ impl<'a> Solver<'a> {
         Self { arena }
     }
 
-    fn bind_unify(
-        &self,
-        a: &'a InferTy<'a>,
-        b: &'a InferTy<'a>,
-    ) -> Result<&'a InferTy<'a>, TypeError> {
+    pub fn bind(&self, a: &'a InferTy<'a>, b: &'a InferTy<'a>) -> Result<(), TypeError> {
+        let a = a.prune();
+        let b = b.prune();
+        if a.id == b.id {
+            return Ok(());
+        }
+
         use InferTyKind::*;
-        let ty = match (&a.kind, &b.kind) {
-            // Var
+        let unified_ty = match (&a.kind, &b.kind) {
+            // type variable `Var` can be anything
             (Var, _) => b,
             (_, Var) => a,
 
-            // IntLit
+            // int literal `IntLit` can be any number type
             (IntLit, Int(_)) | (IntLit, IntLit) | (IntLit, Float(_)) | (IntLit, FloatLit) => b,
             (Int(_), IntLit) | (Float(_), IntLit) | (FloatLit, IntLit) => a,
 
-            // FloatLit
+            // float literal `FloatLit` can be any float type
             (FloatLit, FloatLit) | (FloatLit, Float(_)) => b,
             (Float(_), FloatLit) => a,
 
-            (Int(at), Int(bt)) if at == bt => a,
-            (Float(at), Float(bt)) if at == bt => a,
-            (Bool, Bool) | (Void, Void) => a,
-
-            // Fun
+            // `Fun` can be same form `Fun`
             (Fun(l), Fun(r)) => {
                 if l.arg_tys.len() != r.arg_tys.len() {
                     return Err(TypeError::ConflictTypes(
@@ -47,40 +45,32 @@ impl<'a> Solver<'a> {
                 }
                 let mut arg_tys = Vec::with_capacity(l.arg_tys.len());
                 for i in 0..l.arg_tys.len() {
-                    let arg_ty = self.arena.alloc_var();
                     let l_ty = l.arg_tys[i];
                     let r_ty = l.arg_tys[i];
-                    self.bind(arg_ty, l_ty)?;
-                    self.bind(arg_ty, r_ty)?;
-                    arg_tys.push(arg_ty);
+                    self.bind(l_ty, r_ty)?;
+                    arg_tys.push(l_ty);
                 }
-                let ret_ty = self.arena.alloc_var();
-                self.bind(ret_ty, l.ret_ty)?;
-                self.bind(ret_ty, r.ret_ty)?;
-                self.arena.alloc_fun(arg_tys, ret_ty)
+                self.bind(l.ret_ty, r.ret_ty)?;
+                self.arena.alloc_fun(arg_tys, l.ret_ty)
             }
 
             // Ref
-            (Ref(a), Ref(b)) => self.arena.alloc_ref(self.bind_unify(a, b)?),
+            (Ref(a), Ref(b)) => {
+                self.bind(a, b)?;
+                self.arena.alloc_ref(a)
+            }
 
-            _ => {
-                return Err(TypeError::ConflictTypes(
-                    a.kind.to_string(),
-                    b.kind.to_string(),
-                ))
+            (a_kind, b_kind) => {
+                if a_kind == b_kind {
+                    a
+                } else {
+                    return Err(TypeError::ConflictTypes(
+                        a_kind.to_string(),
+                        b_kind.to_string(),
+                    ));
+                }
             }
         };
-        Ok(ty)
-    }
-
-    pub fn bind(&self, a: &'a InferTy<'a>, b: &'a InferTy<'a>) -> Result<(), TypeError> {
-        let a = a.prune();
-        let b = b.prune();
-        if a.id == b.id {
-            return Ok(());
-        }
-
-        let unified_ty = self.bind_unify(a, b)?;
 
         if unified_ty.id != a.id {
             a.next.set(Some(unified_ty));
@@ -95,8 +85,7 @@ impl<'a> Solver<'a> {
 
     pub fn solve_type(&self, ty: &'a InferTy<'a>) -> Result<Type, TypeError> {
         let pruned_ty = ty.prune();
-        let final_kind = &self.solve_tree(pruned_ty)?.kind;
-        let final_ty = match final_kind {
+        let final_ty = match &pruned_ty.kind {
             InferTyKind::Var => {
                 return Err(TypeError::UnresolvedType);
             }
@@ -126,67 +115,5 @@ impl<'a> Solver<'a> {
             InferTyKind::Ref(ty) => Type::Ref(Box::new(self.solve_type(&ty)?)),
         };
         Ok(final_ty)
-    }
-
-    // recursively unify all children types from any point of tree
-    fn solve_tree(&self, ty: &'a InferTy<'a>) -> Result<&'a InferTy<'a>, TypeError> {
-        let mut ty = ty;
-        for r_ty in ty.borrow_prevs().iter() {
-            ty = self.solve_unify(ty, self.solve_tree(r_ty)?)?;
-        }
-        Ok(ty)
-    }
-
-    fn solve_unify(
-        &self,
-        a: &'a InferTy<'a>,
-        b: &'a InferTy<'a>,
-    ) -> Result<&'a InferTy<'a>, TypeError> {
-        use InferTyKind::*;
-        let ty = match (&a.kind, &b.kind) {
-            // Var
-            (Var, _) => b,
-            (_, Var) => self.solve_unify(b, a)?,
-
-            // IntLit
-            (IntLit, Int(_)) | (IntLit, IntLit) | (IntLit, Float(_)) | (IntLit, FloatLit) => b,
-            (_, IntLit) => self.solve_unify(b, a)?,
-
-            // FloatLit
-            (FloatLit, FloatLit) | (FloatLit, Float(_)) => b,
-            (_, FloatLit) => self.solve_unify(b, a)?,
-
-            (Int(at), Int(bt)) if at == bt => a,
-            (Float(at), Float(bt)) if at == bt => a,
-            (Bool, Bool) | (Void, Void) => a,
-
-            // Fun
-            (Fun(l), Fun(r)) => {
-                if l.arg_tys.len() != r.arg_tys.len() {
-                    return Err(TypeError::ConflictTypes(
-                        a.kind.to_string(),
-                        b.kind.to_string(),
-                    ));
-                }
-                let mut arg_tys = Vec::with_capacity(l.arg_tys.len());
-                for i in 0..l.arg_tys.len() {
-                    let l_ty = l.arg_tys[i];
-                    let r_ty = l.arg_tys[i];
-                    arg_tys.push(self.solve_unify(l_ty, r_ty)?);
-                }
-                let ret_ty = self.solve_unify(l.ret_ty, r.ret_ty)?;
-                self.arena.alloc_fun(arg_tys, ret_ty)
-            }
-
-            (Ref(a), Ref(b)) => self.arena.alloc_ref(self.solve_unify(a, b)?),
-
-            _ => {
-                return Err(TypeError::ConflictTypes(
-                    a.kind.to_string(),
-                    b.kind.to_string(),
-                ))
-            }
-        };
-        Ok(ty)
     }
 }

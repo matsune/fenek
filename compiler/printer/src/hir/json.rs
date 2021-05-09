@@ -127,12 +127,12 @@ impl From<&hir::Assign> for Assign {
         Self {
             id: base.id,
             left: base.left.deref().into(),
-            right: base.left.deref().into(),
+            right: base.right.deref().into(),
         }
     }
 }
 
-Enum!(Expr [Lit, Path,Call, Binary, Unary]);
+Enum!(Expr [Lit, Path, Call, Binary, Unary]);
 
 #[derive(Serialize)]
 struct Lit {
@@ -180,6 +180,7 @@ impl From<&hir::LitKind> for LitKind {
 struct Path {
     raw: String,
     def_id: hir::def::DefId,
+    def_ty: ty::Type,
     ty: ty::Type,
 }
 
@@ -188,7 +189,8 @@ impl From<&hir::Path> for Path {
         Self {
             raw: base.raw.clone(),
             def_id: base.def.id,
-            ty: ty::Type::from(&base.def.ty),
+            def_ty: ty::Type::from(&base.def.ty),
+            ty: ty::Type::from(&base.ty),
         }
     }
 }

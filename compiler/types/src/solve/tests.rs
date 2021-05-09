@@ -40,18 +40,17 @@ fn test_solve() {
     }
 
     // a -> b -> c
-    //      d -> c
+    //  d: i8 -> c
     //           c -> e
-    // e = i8
     //
     // => a = b = c = d = e = i8
     {
-        alloc!(var: a, b, c, d);
-        alloc!(i8: e);
+        alloc!(var: a, b, c, e);
+        alloc!(i8: d);
         bind!(a -> b);
         bind!(b -> c);
-        bind!(c -> e);
         bind!(d -> c);
+        bind!(c -> e);
         test_type!(a, b, c, d, e; Type::Int(IntType::I8));
     }
 
@@ -86,15 +85,10 @@ fn test_solve() {
         test_unresolved!(a, b, c);
     }
 
-    // test function type
-    //
-    // a = (b, c) -> d
-    // e = (f, g) -> h
+    // a: (b: int, c: i8) -> d: i32
+    // e: (f: i64, g) -> h: int
     //
     // a -> e
-    //
-    // a = (int_lit, i8) -> i32
-    // b = (i64, g) -> int_lit
     //
     // => a = e = (i64, i8) -> i32
     {
@@ -106,32 +100,46 @@ fn test_solve() {
         let a = arena.alloc_fun([b, c].into(), d);
         let e = arena.alloc_fun([f, g].into(), h);
         bind!(a -> e);
-        let expect = Type::Fun(FunType::new(
+        test_type!(a, e; Type::Fun(FunType::new(
             [Type::Int(IntType::I64), Type::Int(IntType::I8)].into(),
             Box::new(Type::Int(IntType::I32)),
-        ));
-        test_type!(a, e; expect);
+        )));
     }
 
-    // test ref type
-    //
     // a
     // b = &a
-    // c = i8
+    // c: i8
     //
     // a -> c
     //
-    // => a = i8
+    // => a = c = i8
     //    b = &i8
-    //    c = i8
     {
         alloc!(var: a);
-        // b = &a
         let b = arena.alloc_ref(a);
         alloc!(i8: c);
         bind!(a -> c);
 
         test_type!(a, c; Type::Int(IntType::I8));
         test_type!(b; Type::Ref(Box::new(Type::Int(IntType::I8))));
+    }
+
+    // var a
+    // var b = &a
+    // var c = &b
+    // c = x: i8
+    //
+    // a: int
+    // b: &int
+    // c: &int
+    //
+    {
+        alloc!(var: a, b, c);
+        bind!(b -> arena.alloc_ref(a.prune().deref()));
+        bind!(c -> arena.alloc_ref(b.prune().deref()));
+        let x = arena.alloc_i8();
+        bind!(x -> c.prune().deref());
+        test_type!(a; Type::Int(IntType::I8));
+        test_type!(b, c; Type::Ref(Box::new(Type::Int(IntType::I8))));
     }
 }

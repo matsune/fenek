@@ -200,15 +200,16 @@ impl LitKind {
 pub struct Path {
     pub raw: String,
     pub def: Def<ty::Type>,
+    pub ty: ty::Type,
 }
 
 impl Path {
-    pub fn new(raw: String, def: Def<ty::Type>) -> Self {
-        Self { raw, def }
+    pub fn new(raw: String, def: Def<ty::Type>, ty: ty::Type) -> Self {
+        Self { raw, def, ty }
     }
 
     pub fn get_type(&self) -> ty::Type {
-        self.def.ty.clone()
+        self.ty.clone()
     }
 }
 

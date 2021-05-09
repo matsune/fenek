@@ -224,6 +224,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
     }
 
     fn analyze_expr(&mut self, expr: &ast::Expr) -> Result<&'infer InferTy<'infer>> {
+        let mut is_ref = false;
         let ty = match &expr.kind {
             ast::ExprKind::Lit(lit) => match lit.kind {
                 ast::LitKind::Int(_) => self.solver.arena.alloc_int_lit(),
@@ -289,7 +290,10 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
             ast::ExprKind::Unary(op, expr) => {
                 let expr_ty = self.analyze_expr(&expr)?;
                 match op.op_kind() {
-                    ast::UnOpKind::Ref => self.solver.arena.alloc_ref(expr_ty),
+                    ast::UnOpKind::Ref => {
+                        is_ref = true;
+                        self.solver.arena.alloc_ref(expr_ty)
+                    }
                     _ => {
                         let ty = self.solver.arena.alloc_var();
                         self.solver.bind(ty, expr_ty).map_err(|err| {
@@ -300,6 +304,8 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 }
             }
         };
+        let ty = if !is_ref { ty.prune().deref() } else { ty };
+
         self.node_ty_map.insert(expr.id, ty);
         Ok(ty)
     }

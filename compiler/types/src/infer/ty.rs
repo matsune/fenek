@@ -10,12 +10,31 @@ pub type InferTyID = usize;
 /// Connection means that those nodes will be same type after
 /// resolving type inference, so all nodes of a tree must have
 /// same type.
-#[derive(Debug)]
 pub struct InferTy<'a> {
     pub id: InferTyID,
     pub kind: InferTyKind<'a>,
     pub next: Cell<Option<&'a InferTy<'a>>>,
     pub prevs: RefCell<Vec<&'a InferTy<'a>>>,
+}
+
+impl<'a> std::fmt::Debug for InferTy<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InferTy")
+            .field("id", &self.id)
+            .field("kind", &self.kind)
+            .field("next", &self.next)
+            .field(
+                "prevs",
+                &self
+                    .prevs
+                    .borrow()
+                    .iter()
+                    .map(|ty| ty.id.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            )
+            .finish()
+    }
 }
 
 impl<'a> InferTy<'a> {
@@ -39,6 +58,13 @@ impl<'a> InferTy<'a> {
     pub fn borrow_prevs(&self) -> Ref<'_, Vec<&'a InferTy<'a>>> {
         self.prevs.borrow()
     }
+
+    pub fn deref(&'a self) -> &'a InferTy<'a> {
+        match self.kind {
+            InferTyKind::Ref(ty) => ty,
+            _ => self,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -52,6 +78,28 @@ pub enum InferTyKind<'a> {
     Void,
     Fun(FunTy<'a>),
     Ref(&'a InferTy<'a>),
+}
+
+impl<'a> PartialEq for InferTyKind<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        use InferTyKind::*;
+        match (self, other) {
+            (Var, Var) | (IntLit, IntLit) | (FloatLit, FloatLit) | (Bool, Bool) | (Void, Void) => {
+                true
+            }
+            (Int(il), Int(ir)) => il == ir,
+            (Float(il), Float(ir)) => il == ir,
+            (Fun(fl), Fun(fr)) => {
+                let fl_arg_tys: Vec<&InferTyKind<'a>> =
+                    fl.arg_tys.iter().map(|ty| &ty.kind).collect();
+                let fr_arg_tys: Vec<&InferTyKind<'a>> =
+                    fr.arg_tys.iter().map(|ty| &ty.kind).collect();
+                fl_arg_tys == fr_arg_tys && fl.ret_ty.kind == fr.ret_ty.kind
+            }
+            (Ref(l), Ref(r)) => l.kind == r.kind,
+            _ => false,
+        }
+    }
 }
 
 impl<'a> InferTyKind<'a> {
