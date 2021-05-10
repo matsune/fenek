@@ -1,4 +1,4 @@
-use std::cell::{Cell, Ref, RefCell};
+use std::cell::Cell;
 
 pub type InferTyID = usize;
 
@@ -14,7 +14,6 @@ pub struct InferTy<'a> {
     pub id: InferTyID,
     pub kind: InferTyKind<'a>,
     pub next: Cell<Option<&'a InferTy<'a>>>,
-    pub prevs: RefCell<Vec<&'a InferTy<'a>>>,
 }
 
 impl<'a> std::fmt::Debug for InferTy<'a> {
@@ -23,16 +22,6 @@ impl<'a> std::fmt::Debug for InferTy<'a> {
             .field("id", &self.id)
             .field("kind", &self.kind)
             .field("next", &self.next)
-            .field(
-                "prevs",
-                &self
-                    .prevs
-                    .borrow()
-                    .iter()
-                    .map(|ty| ty.id.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            )
             .finish()
     }
 }
@@ -43,7 +32,6 @@ impl<'a> InferTy<'a> {
             id,
             kind,
             next: Cell::new(None),
-            prevs: RefCell::new(Vec::new()),
         }
     }
 
@@ -55,11 +43,8 @@ impl<'a> InferTy<'a> {
             .unwrap_or(self)
     }
 
-    pub fn borrow_prevs(&self) -> Ref<'_, Vec<&'a InferTy<'a>>> {
-        self.prevs.borrow()
-    }
-
-    pub fn deref(&'a self) -> &'a InferTy<'a> {
+    // returns dereferenced type if self is Ref
+    pub fn elem_ty(&'a self) -> &'a InferTy<'a> {
         match self.kind {
             InferTyKind::Ref(ty) => ty,
             _ => self,

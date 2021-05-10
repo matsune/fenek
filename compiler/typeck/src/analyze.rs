@@ -304,8 +304,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 }
             }
         };
-        let ty = if !is_ref { ty.prune().deref() } else { ty };
-
+        let ty = if !is_ref { ty.prune().elem_ty() } else { ty };
         self.node_ty_map.insert(expr.id, ty);
         Ok(ty)
     }

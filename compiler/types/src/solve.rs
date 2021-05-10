@@ -14,6 +14,8 @@ impl<'a> Solver<'a> {
         Self { arena }
     }
 
+    /// Compare 2 types and bind them as same type if they are
+    /// compatible infer types.
     pub fn bind(&self, a: &'a InferTy<'a>, b: &'a InferTy<'a>) -> Result<(), TypeError> {
         let a = a.prune();
         let b = b.prune();
@@ -27,15 +29,15 @@ impl<'a> Solver<'a> {
             (Var, _) => b,
             (_, Var) => a,
 
-            // int literal `IntLit` can be any number type
+            // int literal can be any number type
             (IntLit, Int(_)) | (IntLit, IntLit) | (IntLit, Float(_)) | (IntLit, FloatLit) => b,
             (Int(_), IntLit) | (Float(_), IntLit) | (FloatLit, IntLit) => a,
 
-            // float literal `FloatLit` can be any float type
+            // float literal can be any float type
             (FloatLit, FloatLit) | (FloatLit, Float(_)) => b,
             (Float(_), FloatLit) => a,
 
-            // `Fun` can be same form `Fun`
+            // Fun can be same form Fun
             (Fun(l), Fun(r)) => {
                 if l.arg_tys.len() != r.arg_tys.len() {
                     return Err(TypeError::ConflictTypes(
@@ -54,31 +56,29 @@ impl<'a> Solver<'a> {
                 self.arena.alloc_fun(arg_tys, l.ret_ty)
             }
 
-            // Ref
+            // Ref can be Ref which has same element type
             (Ref(a), Ref(b)) => {
                 self.bind(a, b)?;
                 self.arena.alloc_ref(a)
             }
 
+            (a_kind, b_kind) if a_kind == b_kind => a,
+
             (a_kind, b_kind) => {
-                if a_kind == b_kind {
-                    a
-                } else {
-                    return Err(TypeError::ConflictTypes(
-                        a_kind.to_string(),
-                        b_kind.to_string(),
-                    ));
-                }
+                return Err(TypeError::ConflictTypes(
+                    a_kind.to_string(),
+                    b_kind.to_string(),
+                ));
             }
         };
 
+        // associate types to make type tree
+
         if unified_ty.id != a.id {
             a.next.set(Some(unified_ty));
-            unified_ty.prevs.borrow_mut().push(a);
         }
         if unified_ty.id != b.id {
             b.next.set(Some(unified_ty));
-            unified_ty.prevs.borrow_mut().push(b);
         }
         Ok(())
     }

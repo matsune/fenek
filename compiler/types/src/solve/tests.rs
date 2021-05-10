@@ -15,7 +15,7 @@ fn test_solve() {
         }
     }
     macro_rules! bind {
-        ($a:ident -> $b:expr) => {
+        ($a:expr, $b:expr) => {
             solver.bind($a, $b).unwrap();
         };
     }
@@ -47,10 +47,10 @@ fn test_solve() {
     {
         alloc!(var: a, b, c, e);
         alloc!(i8: d);
-        bind!(a -> b);
-        bind!(b -> c);
-        bind!(d -> c);
-        bind!(c -> e);
+        bind!(a, b);
+        bind!(b, c);
+        bind!(d, c);
+        bind!(c, e);
         test_type!(a, b, c, d, e; Type::Int(IntType::I8));
     }
 
@@ -68,9 +68,9 @@ fn test_solve() {
         alloc!(int_lit: b);
         alloc!(float_lit: c);
         alloc!(f32: d);
-        bind!(a -> b);
-        bind!(b -> c);
-        bind!(c -> d);
+        bind!(a, b);
+        bind!(b, c);
+        bind!(c, d);
         test_type!(a, b, c, d; Type::Float(FloatType::F32));
     }
 
@@ -80,8 +80,8 @@ fn test_solve() {
     // => unresolved
     {
         alloc!(var: a, b, c);
-        bind!(a -> b);
-        bind!(b -> c);
+        bind!(a, b);
+        bind!(b, c);
         test_unresolved!(a, b, c);
     }
 
@@ -99,7 +99,7 @@ fn test_solve() {
         alloc!(var: g);
         let a = arena.alloc_fun([b, c].into(), d);
         let e = arena.alloc_fun([f, g].into(), h);
-        bind!(a -> e);
+        bind!(a, e);
         test_type!(a, e; Type::Fun(FunType::new(
             [Type::Int(IntType::I64), Type::Int(IntType::I8)].into(),
             Box::new(Type::Int(IntType::I32)),
@@ -116,11 +116,25 @@ fn test_solve() {
     //    b = &i8
     {
         alloc!(var: a);
-        let b = arena.alloc_ref(a);
+        let b = arena.alloc_ref(a.prune().elem_ty());
         alloc!(i8: c);
-        bind!(a -> c);
+        bind!(a, c);
 
         test_type!(a, c; Type::Int(IntType::I8));
+        test_type!(b; Type::Ref(Box::new(Type::Int(IntType::I8))));
+    }
+
+    // var a
+    // var b: &i8 = &a
+    //
+    // a: i8
+    // b: &i8
+    //
+    {
+        alloc!(var: a);
+        let b = arena.alloc_ref(arena.alloc_i8());
+        bind!(b, arena.alloc_ref(a.prune().elem_ty()));
+        test_type!(a; Type::Int(IntType::I8));
         test_type!(b; Type::Ref(Box::new(Type::Int(IntType::I8))));
     }
 
@@ -129,16 +143,15 @@ fn test_solve() {
     // var c = &b
     // c = x: i8
     //
-    // a: int
-    // b: &int
-    // c: &int
-    //
+    // a: i8
+    // b: &i8
+    // c: &i8
     {
         alloc!(var: a, b, c);
-        bind!(b -> arena.alloc_ref(a.prune().deref()));
-        bind!(c -> arena.alloc_ref(b.prune().deref()));
+        bind!(b, arena.alloc_ref(a.prune().elem_ty()));
+        bind!(c, arena.alloc_ref(b.prune().elem_ty()));
         let x = arena.alloc_i8();
-        bind!(x -> c.prune().deref());
+        bind!(x, c.prune().elem_ty());
         test_type!(a; Type::Int(IntType::I8));
         test_type!(b, c; Type::Ref(Box::new(Type::Int(IntType::I8))));
     }
