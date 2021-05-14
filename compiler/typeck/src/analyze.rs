@@ -224,7 +224,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
     }
 
     fn analyze_expr(&mut self, expr: &ast::Expr) -> Result<&'infer InferTy<'infer>> {
-        let mut is_ref = false;
+        let mut is_unary_ref = false;
         let ty = match &expr.kind {
             ast::ExprKind::Lit(lit) => match lit.kind {
                 ast::LitKind::Int(_) => self.solver.arena.alloc_int_lit(),
@@ -234,9 +234,8 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
             },
             ast::ExprKind::Path(tok) => match self.scopes.lookup_var(&tok.raw, false) {
                 Some(var_def) => {
-                    let ty = var_def.ty;
                     self.node_def_map.insert(expr.id, var_def);
-                    ty
+                    var_def.ty
                 }
                 None => {
                     return Err(compile_error(
@@ -291,7 +290,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 let expr_ty = self.analyze_expr(&expr)?;
                 match op.op_kind() {
                     ast::UnOpKind::Ref => {
-                        is_ref = true;
+                        is_unary_ref = true;
                         self.solver.arena.alloc_ref(expr_ty)
                     }
                     _ => {
@@ -304,7 +303,12 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                 }
             }
         };
-        let ty = if !is_ref { ty.prune().elem_ty() } else { ty };
+        let ty = if !is_unary_ref {
+            // not unary ref expr will be evaluated as dereferenced type
+            ty.prune().elem_ty().unwrap_or(ty)
+        } else {
+            ty
+        };
         self.node_ty_map.insert(expr.id, ty);
         Ok(ty)
     }

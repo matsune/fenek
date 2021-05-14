@@ -319,13 +319,13 @@ impl<'ctx> Codegen<'ctx> {
             hir::Stmt::Ret(ret) => match &ret.expr {
                 Some(expr) => {
                     let val = self.build_expr(&function.borrow(), &expr);
-                    function.borrow().builder.build_return(Some(match val {
-                        BasicValueEnum::ArrayValue(ref value) => value,
-                        BasicValueEnum::IntValue(ref value) => value,
-                        BasicValueEnum::FloatValue(ref value) => value,
-                        BasicValueEnum::PointerValue(ref value) => value,
-                        BasicValueEnum::StructValue(ref value) => value,
-                        BasicValueEnum::VectorValue(ref value) => value,
+                    function.borrow().builder.build_return(Some(match &val {
+                        BasicValueEnum::ArrayValue(value) => value,
+                        BasicValueEnum::IntValue(value) => value,
+                        BasicValueEnum::FloatValue(value) => value,
+                        BasicValueEnum::PointerValue(value) => value,
+                        BasicValueEnum::StructValue(value) => value,
+                        BasicValueEnum::VectorValue(value) => value,
                     }));
                 }
                 None => {
@@ -334,7 +334,22 @@ impl<'ctx> Codegen<'ctx> {
             },
             hir::Stmt::Assign(assign) => {
                 let right = self.build_expr(&function.borrow(), &assign.right);
-                let left = self.get_ptr(&function.borrow(), &assign.left);
+                // let left = self.build_expr(&function.borrow(), &assign.left);
+                let left = match &*assign.left {
+                    hir::Expr::Path(path) => {
+                        let ptr = function.borrow().var_map.get(&path.def.id).unwrap().ptr;
+                        if path.def.ty.is_ref() {
+                            function
+                                .borrow()
+                                .builder
+                                .build_load(ptr, "")
+                                .into_pointer_value()
+                        } else {
+                            ptr
+                        }
+                    }
+                    _ => unreachable!(),
+                };
                 function.borrow().builder.build_store(left, right);
             }
             hir::Stmt::Expr(expr) => {
@@ -355,7 +370,8 @@ impl<'ctx> Codegen<'ctx> {
     }
 
     fn build_expr(&mut self, function: &Function<'ctx>, expr: &hir::Expr) -> BasicValueEnum<'ctx> {
-        match expr {
+        let is_ref = matches!(expr, hir::Expr::Unary(unary) if unary.op == ast::UnOpKind::Ref);
+        let value = match expr {
             hir::Expr::Lit(lit) => {
                 let basic_ty = self.llvm_basic_ty(&lit.ty);
                 match &lit.kind {
@@ -384,9 +400,14 @@ impl<'ctx> Codegen<'ctx> {
                     // }
                 }
             }
-            hir::Expr::Path(ident) => function
-                .builder
-                .build_load(function.var_map.get(&ident.def.id).unwrap().ptr, &ident.raw),
+            hir::Expr::Path(ident) => {
+                let ptr = self.get_ptr(function, expr);
+                if is_ref {
+                    ptr.into()
+                } else {
+                    function.builder.build_load(ptr, &ident.raw)
+                }
+            }
             hir::Expr::Call(call) => {
                 let mut args = Vec::new();
                 for arg in &call.args {
@@ -471,6 +492,11 @@ impl<'ctx> Codegen<'ctx> {
                 }
                 ast::UnOpKind::Ref => self.get_ptr(function, &unary.expr).into(),
             },
+        };
+        if !is_ref && value.is_pointer_value() {
+            function.builder.build_load(value.into_pointer_value(), "")
+        } else {
+            value
         }
     }
 

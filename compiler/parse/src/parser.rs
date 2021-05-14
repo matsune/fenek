@@ -174,15 +174,11 @@ impl<'src> Parser<'src> {
             let offset = self.bump().unwrap().offset;
             self.skip_spaces();
             let ty = self.parse_ty()?;
-            if ty.kind.is_ref() {
-                // not allowed multiple ref type, like &&i8
-                return Err(self.compile_error(ParseError::InvalidTyName));
-            }
             Ty::new_ref(self.gen_id(), ty, offset)
         } else {
             let ty = self
                 .bump_if(|tok| tok.is_ident() && !tok.is_keyword())
-                .ok_or_else(|| self.compile_error(ParseError::InvalidTyName))?;
+                .ok_or_else(|| self.compile_error(ParseError::InvalidTypeName))?;
             Ty::new_basic(self.gen_id(), ty)
         };
         Ok(ty)

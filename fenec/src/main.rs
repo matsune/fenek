@@ -34,8 +34,8 @@ fn run_main() -> Result<(), Box<dyn Error>> {
         printer::hir::print(&module)?;
     }
 
-    // let ctx = Context::create();
-    // let mut codegen = Codegen::new(&ctx);
+    let ctx = Context::create();
+    let mut codegen = Codegen::new(&ctx);
     // codegen.build_module(module);
     // codegen.verify()?;
     // if opts.emit.contains(&opts::Emit::LlvmIr) {

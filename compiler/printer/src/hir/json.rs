@@ -33,7 +33,6 @@ impl From<&hir::Fun> for Fun {
             ty: (&base.def.ty).into(),
             name: base.name.clone(),
             args: base.args.iter().map(|ident| ident.raw.clone()).collect(),
-            // ret_ty: base.ret_ty.deref().into(),
             block: (&base.block).into(),
         }
     }
@@ -83,7 +82,7 @@ Enum!(Stmt [VarDecl, Ret, Expr, Assign]);
 struct VarDecl {
     id: ast::NodeId,
     def_id: hir::def::DefId,
-    ty: ty::Type,
+    def_ty: ty::Type,
     name: String,
     init: Box<Expr>,
 }
@@ -93,7 +92,7 @@ impl From<&hir::VarDecl> for VarDecl {
         Self {
             id: base.id,
             def_id: base.def.id,
-            ty: (&base.def.ty).into(),
+            def_ty: (&base.def.ty).into(),
             name: base.name.raw.clone(),
             init: Box::new(base.init.deref().into()),
         }
@@ -181,7 +180,7 @@ struct Path {
     raw: String,
     def_id: hir::def::DefId,
     def_ty: ty::Type,
-    ty: ty::Type,
+    expr_ty: ty::Type,
 }
 
 impl From<&hir::Path> for Path {
@@ -190,7 +189,7 @@ impl From<&hir::Path> for Path {
             raw: base.raw.clone(),
             def_id: base.def.id,
             def_ty: ty::Type::from(&base.def.ty),
-            ty: ty::Type::from(&base.ty),
+            expr_ty: ty::Type::from(&base.expr_ty),
         }
     }
 }

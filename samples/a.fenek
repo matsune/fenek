@@ -1,11 +1,27 @@
-fun sum(a: i32, b: i32) -> i32 {
-  ret a + b;
+fun get_ref_ref(a: &&i32) {
+  ret;
+}
+
+fun get_ref(a: &i32) {
+  ret;
+}
+
+fun get_val(a: i32) {
+  ret;
 }
 
 fun main() -> i32 {
-  var a: i32 = -(-12 + 3) * 4;
-  var b: i32 = sum(a, 12);
-  var c = &b;
-  c = 12;
-  ret b;
+  var a = 10; // int a = 10;
+  var b = &a; // int* b = &a;
+  var c = &b; // int* c = b;
+  var d = c;  // int d = *c; 
+  get_ref(&b);// get_ref(b);
+  get_val(b); // get_val(*b);
+  get_ref(&d);// get_ref(&d);
+  get_val(d); // get_val(d);
+
+var e = &&a;      // int** e = &&a;
+get_ref(e);       // get_ref(*e);
+get_ref_ref(&e);  // get_ref_ref(e);
+  ret a;
 }

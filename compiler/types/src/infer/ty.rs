@@ -44,10 +44,10 @@ impl<'a> InferTy<'a> {
     }
 
     // returns dereferenced type if self is Ref
-    pub fn elem_ty(&'a self) -> &'a InferTy<'a> {
+    pub fn elem_ty(&'a self) -> Option<&'a InferTy<'a>> {
         match self.kind {
-            InferTyKind::Ref(ty) => ty,
-            _ => self,
+            InferTyKind::Ref(ty) => Some(ty),
+            _ => None,
         }
     }
 }

@@ -71,7 +71,7 @@ pub enum ParseError {
     #[error("invalid arg name")]
     InvalidArgName,
     #[error("invalid type name")]
-    InvalidTyName,
+    InvalidTypeName,
     #[error("invalid function name")]
     InvalidFunName,
 }
