@@ -1,10 +1,13 @@
 // void get_ref_ref(int** a)
 fun get_ref_ref(a: &&i32) {
+  var b = a;
+  b = 21;
   ret;
 }
 
 // void get_ref(int* a)
 fun get_ref(a: &i32) {
+  a = 3;
   ret;
 }
 
