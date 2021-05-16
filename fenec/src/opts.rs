@@ -6,8 +6,8 @@ use std::str::FromStr;
 pub struct Opts {
     #[clap(
         short, long, use_delimiter = true, multiple = true,
-        possible_values = &["ast", "hir", "llvm-ir", "llvm-bc", "asm", "obj", "link"],
-        default_value = "link",
+        possible_values = &["ast", "hir", "llvm-ir", "llvm-bc", "asm", "obj"],
+        default_value = "obj",
         about = "types of output for the compiler to emit"
     )]
     pub emit: Vec<Emit>,
@@ -23,7 +23,6 @@ pub enum Emit {
     LlvmBc,
     Asm,
     Obj,
-    Link,
 }
 
 impl FromStr for Emit {
@@ -37,7 +36,6 @@ impl FromStr for Emit {
             "llvm-bc" => Ok(Emit::LlvmBc),
             "asm" => Ok(Emit::Asm),
             "obj" => Ok(Emit::Obj),
-            "link" => Ok(Emit::Link),
             _ => Err("no match"),
         }
     }

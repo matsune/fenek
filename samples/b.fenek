@@ -1,5 +1,0 @@
-fun a(n: **i32) {
-  var d = &n;
-  var b = *n;
-  ret;
-}

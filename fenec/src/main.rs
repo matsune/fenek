@@ -58,6 +58,5 @@ fn run_main() -> Result<(), Box<dyn Error>> {
         out.set_extension("o");
         codegen.emit_obj(out)?;
     }
-
     Ok(())
 }
