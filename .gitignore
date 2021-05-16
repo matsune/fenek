@@ -1,5 +1,5 @@
 /target/
 *.history
-samples/*.ll
-samples/*.s
-samples/*.o
+
+samples/*
+!samples/*.fenek
