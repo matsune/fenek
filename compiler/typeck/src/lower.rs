@@ -127,11 +127,7 @@ impl<'src> Lower<'src> {
         let mut args = Vec::new();
         for arg in &fun.args {
             let def = self.node_def_map.get(&arg.id).unwrap();
-            args.push(hir::Path::new(
-                arg.name.raw.clone(),
-                def.clone(),
-                def.ty.clone(),
-            ));
+            args.push(hir::Path::new(arg.name.raw.clone(), def.clone()));
         }
         let mut stmts = Vec::new();
         let stmts_len = fun.block.stmts.len();
@@ -207,7 +203,21 @@ impl<'src> Lower<'src> {
                 hir::Ret::new(id, expr).into()
             }
             ast::StmtKind::Assign(left, right) => {
-                let left = self.lower_expr(&left)?;
+                let l_ty = self.ty_map.get(&left.id).unwrap();
+                let r_ty = self.ty_map.get(&right.id).unwrap();
+                let is_normal = *r_ty == ty::Type::Ptr(Box::new(l_ty.clone()));
+                let left = if is_normal {
+                    match &left.kind {
+                        ast::ExprKind::Path(tok) => {
+                            let def = self.node_def_map.get(&left.id).unwrap();
+                            hir::Path::new(tok.raw.clone(), Def::new(def.id, def.ty.clone(), true))
+                                .into()
+                        }
+                        _ => unreachable!(),
+                    }
+                } else {
+                    self.lower_expr(&left)?
+                };
                 if !left.is_lvalue() {
                     return Err((id, TypeCkError::LvalueRequired));
                 }
@@ -348,10 +358,15 @@ impl<'src> Lower<'src> {
             ast::ExprKind::Lit(lit) => self.lower_lit(id, lit).map(|v| v.into()),
             ast::ExprKind::Path(tok) => {
                 let def = self.node_def_map.get(&expr.id).unwrap();
-                Ok(
-                    hir::Path::new(tok.raw.clone(), Def::new(def.id, def.ty.clone(), true), ty)
-                        .into(),
-                )
+                let expr =
+                    hir::Path::new(tok.raw.clone(), Def::new(def.id, def.ty.clone(), true)).into();
+                let expr = if def.ty.is_ptr() {
+                    // implicit deref
+                    hir::DerefExpr::new(id, expr).into()
+                } else {
+                    expr
+                };
+                Ok(expr)
             }
             ast::ExprKind::Call(path, args) => {
                 let path = path.raw.clone();
@@ -402,12 +417,14 @@ impl<'src> Lower<'src> {
                                 if !expr_ty.is_int() && !expr_ty.is_float() {
                                     return Err((id, TypeCkError::InvalidUnaryTypes));
                                 }
+                                Ok(hir::NegExpr::new(id, expr).into())
                             }
                             ast::UnOpKind::Not => {
                                 // ! should have bool
                                 if !expr_ty.is_bool() {
                                     return Err((id, TypeCkError::InvalidUnaryTypes));
                                 }
+                                Ok(hir::NotExpr::new(id, expr).into())
                             }
                             ast::UnOpKind::Ref => {
                                 if expr_ty.is_void() {
@@ -416,9 +433,12 @@ impl<'src> Lower<'src> {
                                 if !expr.is_lvalue() {
                                     return Err((id, TypeCkError::LvalueRequired));
                                 }
+                                match expr {
+                                    hir::Expr::DerefExpr(deref_expr) => Ok(*deref_expr.expr),
+                                    _ => Ok(hir::RefExpr::new(id, expr).into()),
+                                }
                             }
                         }
-                        Ok(hir::Unary::new(id, op.op_kind(), expr).into())
                     }
                 }
             }

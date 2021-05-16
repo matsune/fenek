@@ -1,11 +1,14 @@
+// void get_ref_ref(int** a)
 fun get_ref_ref(a: &&i32) {
   ret;
 }
 
+// void get_ref(int* a)
 fun get_ref(a: &i32) {
   ret;
 }
 
+// void get_val(int a)
 fun get_val(a: i32) {
   ret;
 }
@@ -13,7 +16,9 @@ fun get_val(a: i32) {
 fun main() -> i32 {
   var a = 10; // int a = 10;
   var b = &a; // int* b = &a;
+  b = 11;     // *b = 11;
   var c = &b; // int* c = b;
+  c = 12;     // *c = 12;
   var d = c;  // int d = *c; 
   get_ref(&b);// get_ref(b);
   get_val(b); // get_val(*b);
@@ -21,6 +26,7 @@ fun main() -> i32 {
   get_val(d); // get_val(d);
 
 var e = &&a;      // int** e = &&a;
+e = &&b;          // e = &b;
 get_ref(e);       // get_ref(*e);
 get_ref_ref(&e);  // get_ref_ref(e);
   ret a;

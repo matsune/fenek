@@ -130,12 +130,12 @@ fn test_solve() {
     //    b = &i8
     {
         alloc!(var: a);
-        let b = arena.alloc_ref(a.prune().elem_ty());
+        let b = arena.alloc_ref(a.prune().elem_ty().unwrap_or(a));
         alloc!(i8: c);
         bind!(a, c);
 
         test_type!(i8 => a, c);
-        test_type!(&i8 => b);
+        test_type!("i8*" => b);
     }
 
     // var a
@@ -147,9 +147,9 @@ fn test_solve() {
     {
         alloc!(var: a);
         let b = arena.alloc_ref(arena.alloc_i8());
-        bind!(b, arena.alloc_ref(a.prune().elem_ty()));
+        bind!(b, arena.alloc_ref(a.prune().elem_ty().unwrap_or(a)));
         test_type!(i8 => a);
-        test_type!(&i8 => b);
+        test_type!("i8*" => b);
     }
 
     // var a
@@ -162,11 +162,11 @@ fn test_solve() {
     // c: &i8
     {
         alloc!(var: a, b, c);
-        bind!(b, arena.alloc_ref(a.prune().elem_ty()));
-        bind!(c, arena.alloc_ref(b.prune().elem_ty()));
+        bind!(b, arena.alloc_ref(a.prune().elem_ty().unwrap_or(a)));
+        bind!(c, arena.alloc_ref(b.prune().elem_ty().unwrap_or(b)));
         let x = arena.alloc_i8();
-        bind!(x, c.prune().elem_ty());
+        bind!(x, c.prune().elem_ty().unwrap_or(c));
         test_type!(i8 => a);
-        test_type!(&i8 => b, c);
+        test_type!("i8*" => b, c);
     }
 }

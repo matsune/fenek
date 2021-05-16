@@ -214,6 +214,13 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
             ast::StmtKind::Assign(left, right) => {
                 let left_ty = self.analyze_expr(&left)?;
                 let right_ty = self.analyze_expr(&right)?;
+                if let Some(deref_ty) = right_ty.prune().elem_ty() {
+                    if self.solver.bind(left_ty, deref_ty).is_ok() {
+                        // deref assign
+                        return Ok(());
+                    }
+                }
+                // normal assign
                 self.solver.bind(left_ty, right_ty).map_err(|err| {
                     CompileError::new(self.src.pos_from_offset(left.offset()), err.into())
                 })?;
@@ -224,7 +231,6 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
     }
 
     fn analyze_expr(&mut self, expr: &ast::Expr) -> Result<&'infer InferTy<'infer>> {
-        let mut is_unary_ref = false;
         let ty = match &expr.kind {
             ast::ExprKind::Lit(lit) => match lit.kind {
                 ast::LitKind::Int(_) => self.solver.arena.alloc_int_lit(),
@@ -235,7 +241,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
             ast::ExprKind::Path(tok) => match self.scopes.lookup_var(&tok.raw, false) {
                 Some(var_def) => {
                     self.node_def_map.insert(expr.id, var_def);
-                    var_def.ty
+                    var_def.ty.prune().elem_ty().unwrap_or(var_def.ty)
                 }
                 None => {
                     return Err(compile_error(
@@ -289,10 +295,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
             ast::ExprKind::Unary(op, expr) => {
                 let expr_ty = self.analyze_expr(&expr)?;
                 match op.op_kind() {
-                    ast::UnOpKind::Ref => {
-                        is_unary_ref = true;
-                        self.solver.arena.alloc_ref(expr_ty)
-                    }
+                    ast::UnOpKind::Ref => self.solver.arena.alloc_ref(expr_ty),
                     _ => {
                         let ty = self.solver.arena.alloc_var();
                         self.solver.bind(ty, expr_ty).map_err(|err| {
@@ -302,12 +305,6 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
                     }
                 }
             }
-        };
-        let ty = if !is_unary_ref {
-            // not unary ref expr will be evaluated as dereferenced type
-            ty.prune().elem_ty().unwrap_or(ty)
-        } else {
-            ty
         };
         self.node_ty_map.insert(expr.id, ty);
         Ok(ty)

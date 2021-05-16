@@ -207,7 +207,7 @@ impl<'ctx> Codegen<'ctx> {
             }
             .into(),
             ty::Type::Bool => self.context.bool_type().into(),
-            ty::Type::Ref(ty) => {
+            ty::Type::Ptr(ty) => {
                 let ty = self.llvm_basic_ty(ty);
                 ty.ptr_type(AddressSpace::Generic).into()
             }
@@ -338,7 +338,7 @@ impl<'ctx> Codegen<'ctx> {
                 let left = match &*assign.left {
                     hir::Expr::Path(path) => {
                         let ptr = function.borrow().var_map.get(&path.def.id).unwrap().ptr;
-                        if path.def.ty.is_ref() {
+                        if path.def.ty.is_ptr() {
                             function
                                 .borrow()
                                 .builder
@@ -361,143 +361,147 @@ impl<'ctx> Codegen<'ctx> {
     fn get_ptr(&mut self, function: &Function<'ctx>, expr: &hir::Expr) -> PointerValue<'ctx> {
         match expr {
             hir::Expr::Path(ident) => function.var_map.get(&ident.def.id).unwrap().ptr,
-            hir::Expr::Unary(unary) => match unary.op {
-                ast::UnOpKind::Ref => self.get_ptr(function, &unary.expr),
-                _ => unreachable!(),
-            },
+            // FIXME:
+            _ => unimplemented!(),
+            // hir::Expr::Unary(unary) => match unary.op {
+            //     ast::UnOpKind::Ref => self.get_ptr(function, &unary.expr),
+            //     _ => unreachable!(),
+            // },
             _ => unreachable!(),
         }
     }
 
     fn build_expr(&mut self, function: &Function<'ctx>, expr: &hir::Expr) -> BasicValueEnum<'ctx> {
-        let is_ref = matches!(expr, hir::Expr::Unary(unary) if unary.op == ast::UnOpKind::Ref);
-        let value = match expr {
-            hir::Expr::Lit(lit) => {
-                let basic_ty = self.llvm_basic_ty(&lit.ty);
-                match &lit.kind {
-                    hir::LitKind::I8(v) => {
-                        basic_ty.into_int_type().const_int(*v as u64, true).into()
-                    }
-                    hir::LitKind::I16(v) => {
-                        basic_ty.into_int_type().const_int(*v as u64, true).into()
-                    }
-                    hir::LitKind::I32(v) => {
-                        basic_ty.into_int_type().const_int(*v as u64, true).into()
-                    }
-                    hir::LitKind::I64(v) => {
-                        basic_ty.into_int_type().const_int(*v as u64, true).into()
-                    }
-                    hir::LitKind::F32(v) => {
-                        basic_ty.into_float_type().const_float(*v as f64).into()
-                    }
-                    hir::LitKind::F64(v) => basic_ty.into_float_type().const_float(*v).into(),
-                    hir::LitKind::Bool(v) => basic_ty
-                        .into_int_type()
-                        .const_int(if *v { 1 } else { 0 }, true)
-                        .into(),
-                    // ast::LitKind::String(v) => {
-                    //     unimplemented!()
-                    // }
-                }
-            }
-            hir::Expr::Path(ident) => {
-                let ptr = self.get_ptr(function, expr);
-                if is_ref {
-                    ptr.into()
-                } else {
-                    function.builder.build_load(ptr, &ident.raw)
-                }
-            }
-            hir::Expr::Call(call) => {
-                let mut args = Vec::new();
-                for arg in &call.args {
-                    args.push(self.build_expr(&function, &arg));
-                }
-                let f = self.def_function_map.get(&call.def.id).unwrap();
-                function
-                    .builder
-                    .build_call(f.borrow().fn_value, &args, "")
-                    .try_as_basic_value()
-                    .left()
-                    .unwrap()
-            }
-            hir::Expr::Binary(binary) => {
-                let lhs = self.build_expr(function, &binary.lhs);
-                let rhs = self.build_expr(function, &binary.rhs);
-                match binary.ty {
-                    ty::Type::Int(_) => {
-                        let lhs = lhs.into_int_value();
-                        let rhs = rhs.into_int_value();
-                        match binary.op {
-                            ast::BinOpKind::Add => {
-                                self.build_checked_int_arithmetic(function, lhs, rhs, "sadd")
-                            }
-                            ast::BinOpKind::Sub => {
-                                self.build_checked_int_arithmetic(function, lhs, rhs, "ssub")
-                            }
-                            ast::BinOpKind::Mul => {
-                                self.build_checked_int_arithmetic(function, lhs, rhs, "smul")
-                            }
-                            ast::BinOpKind::Div => function
-                                .builder
-                                .build_int_signed_div(lhs, rhs, "sdiv")
-                                .into(),
-                        }
-                    }
-                    ty::Type::Float(_) => {
-                        let lhs = lhs.into_float_value();
-                        let rhs = rhs.into_float_value();
-                        match binary.op {
-                            ast::BinOpKind::Add => {
-                                function.builder.build_float_add(lhs, rhs, "fadd").into()
-                            }
-                            ast::BinOpKind::Sub => {
-                                function.builder.build_float_sub(lhs, rhs, "fsub").into()
-                            }
-                            ast::BinOpKind::Mul => {
-                                function.builder.build_float_mul(lhs, rhs, "fmul").into()
-                            }
-                            ast::BinOpKind::Div => {
-                                function.builder.build_float_div(lhs, rhs, "fdiv").into()
-                            }
-                        }
-                    }
-                    _ => unimplemented!(),
-                }
-            }
-            hir::Expr::Unary(unary) => match unary.op {
-                ast::UnOpKind::Neg => {
-                    let expr = self.build_expr(function, &unary.expr);
-                    match unary.get_type() {
-                        ty::Type::Int(_) => function
-                            .builder
-                            .build_int_neg(expr.into_int_value(), "neg")
-                            .into(),
-                        ty::Type::Float(_) => function
-                            .builder
-                            .build_float_neg(expr.into_float_value(), "neg")
-                            .into(),
-                        _ => unimplemented!(),
-                    }
-                }
-                ast::UnOpKind::Not => {
-                    let expr = self.build_expr(function, &unary.expr);
-                    match unary.get_type() {
-                        ty::Type::Bool => function
-                            .builder
-                            .build_int_neg(expr.into_int_value(), "neg")
-                            .into(),
-                        _ => unreachable!(),
-                    }
-                }
-                ast::UnOpKind::Ref => self.get_ptr(function, &unary.expr).into(),
-            },
-        };
-        if !is_ref && value.is_pointer_value() {
-            function.builder.build_load(value.into_pointer_value(), "")
-        } else {
-            value
-        }
+        // FIXME:
+        unimplemented!()
+        // let is_ref = matches!(expr, hir::Expr::Unary(unary) if unary.op == ast::UnOpKind::Ref);
+        // let value = match expr {
+        //     hir::Expr::Lit(lit) => {
+        //         let basic_ty = self.llvm_basic_ty(&lit.ty);
+        //         match &lit.kind {
+        //             hir::LitKind::I8(v) => {
+        //                 basic_ty.into_int_type().const_int(*v as u64, true).into()
+        //             }
+        //             hir::LitKind::I16(v) => {
+        //                 basic_ty.into_int_type().const_int(*v as u64, true).into()
+        //             }
+        //             hir::LitKind::I32(v) => {
+        //                 basic_ty.into_int_type().const_int(*v as u64, true).into()
+        //             }
+        //             hir::LitKind::I64(v) => {
+        //                 basic_ty.into_int_type().const_int(*v as u64, true).into()
+        //             }
+        //             hir::LitKind::F32(v) => {
+        //                 basic_ty.into_float_type().const_float(*v as f64).into()
+        //             }
+        //             hir::LitKind::F64(v) => basic_ty.into_float_type().const_float(*v).into(),
+        //             hir::LitKind::Bool(v) => basic_ty
+        //                 .into_int_type()
+        //                 .const_int(if *v { 1 } else { 0 }, true)
+        //                 .into(),
+        //             // ast::LitKind::String(v) => {
+        //             //     unimplemented!()
+        //             // }
+        //         }
+        //     }
+        //     hir::Expr::Path(ident) => {
+        //         let ptr = self.get_ptr(function, expr);
+        //         if is_ref {
+        //             ptr.into()
+        //         } else {
+        //             function.builder.build_load(ptr, &ident.raw)
+        //         }
+        //     }
+        //     hir::Expr::Call(call) => {
+        //         let mut args = Vec::new();
+        //         for arg in &call.args {
+        //             args.push(self.build_expr(&function, &arg));
+        //         }
+        //         let f = self.def_function_map.get(&call.def.id).unwrap();
+        //         function
+        //             .builder
+        //             .build_call(f.borrow().fn_value, &args, "")
+        //             .try_as_basic_value()
+        //             .left()
+        //             .unwrap()
+        //     }
+        //     hir::Expr::Binary(binary) => {
+        //         let lhs = self.build_expr(function, &binary.lhs);
+        //         let rhs = self.build_expr(function, &binary.rhs);
+        //         match binary.ty {
+        //             ty::Type::Int(_) => {
+        //                 let lhs = lhs.into_int_value();
+        //                 let rhs = rhs.into_int_value();
+        //                 match binary.op {
+        //                     ast::BinOpKind::Add => {
+        //                         self.build_checked_int_arithmetic(function, lhs, rhs, "sadd")
+        //                     }
+        //                     ast::BinOpKind::Sub => {
+        //                         self.build_checked_int_arithmetic(function, lhs, rhs, "ssub")
+        //                     }
+        //                     ast::BinOpKind::Mul => {
+        //                         self.build_checked_int_arithmetic(function, lhs, rhs, "smul")
+        //                     }
+        //                     ast::BinOpKind::Div => function
+        //                         .builder
+        //                         .build_int_signed_div(lhs, rhs, "sdiv")
+        //                         .into(),
+        //                 }
+        //             }
+        //             ty::Type::Float(_) => {
+        //                 let lhs = lhs.into_float_value();
+        //                 let rhs = rhs.into_float_value();
+        //                 match binary.op {
+        //                     ast::BinOpKind::Add => {
+        //                         function.builder.build_float_add(lhs, rhs, "fadd").into()
+        //                     }
+        //                     ast::BinOpKind::Sub => {
+        //                         function.builder.build_float_sub(lhs, rhs, "fsub").into()
+        //                     }
+        //                     ast::BinOpKind::Mul => {
+        //                         function.builder.build_float_mul(lhs, rhs, "fmul").into()
+        //                     }
+        //                     ast::BinOpKind::Div => {
+        //                         function.builder.build_float_div(lhs, rhs, "fdiv").into()
+        //                     }
+        //                 }
+        //             }
+        //             _ => unimplemented!(),
+        //         }
+        //     }
+        // hir::Expr::Unary(unary) => match unary.op {
+        //     ast::UnOpKind::Neg => {
+        //         let expr = self.build_expr(function, &unary.expr);
+        //         match unary.get_type() {
+        //             ty::Type::Int(_) => function
+        //                 .builder
+        //                 .build_int_neg(expr.into_int_value(), "neg")
+        //                 .into(),
+        //             ty::Type::Float(_) => function
+        //                 .builder
+        //                 .build_float_neg(expr.into_float_value(), "neg")
+        //                 .into(),
+        //             _ => unimplemented!(),
+        //         }
+        //     }
+        //     ast::UnOpKind::Not => {
+        //         let expr = self.build_expr(function, &unary.expr);
+        //         match unary.get_type() {
+        //             ty::Type::Bool => function
+        //                 .builder
+        //                 .build_int_neg(expr.into_int_value(), "neg")
+        //                 .into(),
+        //             _ => unreachable!(),
+        //         }
+        //     }
+        //     ast::UnOpKind::Ref => self.get_ptr(function, &unary.expr).into(),
+        // },
+        // };
+        // if !is_ref && value.is_pointer_value() {
+        //     function.builder.build_load(value.into_pointer_value(), "")
+        // } else {
+        //     value
+        // }
     }
 
     fn build_checked_int_arithmetic<T: IntMathValue<'ctx>>(

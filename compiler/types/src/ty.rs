@@ -8,7 +8,7 @@ pub enum Type {
     Bool,
     String,
     Fun(FunType),
-    Ref(Box<Type>),
+    Ptr(Box<Type>),
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -52,8 +52,8 @@ impl Type {
         matches!(self, Type::Fun(_))
     }
 
-    pub fn is_ref(&self) -> bool {
-        matches!(self, Type::Ref(_))
+    pub fn is_ptr(&self) -> bool {
+        matches!(self, Type::Ptr(_))
     }
 
     pub fn is_var(&self) -> bool {
@@ -73,6 +73,13 @@ impl Type {
             _ => panic!(),
         }
     }
+
+    pub fn elem_ty(&self) -> Option<&Type> {
+        match self {
+            Self::Ptr(ty) => Some(ty),
+            _ => None,
+        }
+    }
 }
 
 impl FunType {
@@ -90,7 +97,7 @@ impl ToString for Type {
             Self::Bool => "bool".to_string(),
             Self::String => "string".to_string(),
             Self::Fun(fun) => fun.to_string(),
-            Self::Ref(ty) => format!("&{}", ty.to_string()),
+            Self::Ptr(ty) => format!("{}*", ty.to_string()),
         }
     }
 }

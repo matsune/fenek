@@ -112,7 +112,7 @@ impl<'a> Solver<'a> {
                 let ret_ty = self.solve_type(&fun_ty.ret_ty)?;
                 Type::Fun(FunType::new(arg_tys, Box::new(ret_ty)))
             }
-            InferTyKind::Ref(ty) => Type::Ref(Box::new(self.solve_type(&ty)?)),
+            InferTyKind::Ref(ty) => Type::Ptr(Box::new(self.solve_type(&ty)?)),
         };
         Ok(final_ty)
     }

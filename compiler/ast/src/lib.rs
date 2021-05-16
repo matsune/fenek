@@ -226,6 +226,7 @@ impl StmtKind {
     }
 }
 
+#[derive(Debug)]
 pub struct Expr {
     pub id: NodeId,
     pub kind: ExprKind,
@@ -276,6 +277,7 @@ impl Expr {
     }
 }
 
+#[derive(Debug)]
 pub enum ExprKind {
     // `Path` will have an array of tokens to represent
     // either variable, method or field of struct.
@@ -298,6 +300,7 @@ impl ExprKind {
     }
 }
 
+#[derive(Debug)]
 pub struct Lit {
     pub kind: LitKind,
     pub token: token::Token,
@@ -332,6 +335,7 @@ impl From<token::LitKind> for LitKind {
     }
 }
 
+#[derive(Debug)]
 pub struct BinOp {
     pub raw: token::Token,
 }
@@ -381,6 +385,7 @@ impl BinOpKind {
     }
 }
 
+#[derive(Debug)]
 pub enum Assoc {
     Left,
     Right,
@@ -392,6 +397,7 @@ impl Assoc {
     }
 }
 
+#[derive(Debug)]
 pub struct UnOp {
     pub raw: token::Token,
 }

@@ -131,7 +131,7 @@ impl From<&hir::Assign> for Assign {
     }
 }
 
-Enum!(Expr [Lit, Path, Call, Binary, Unary]);
+Enum!(Expr [Lit, Path, Call, Binary, RefExpr, DerefExpr, NegExpr, NotExpr]);
 
 #[derive(Serialize)]
 struct Lit {
@@ -180,7 +180,6 @@ struct Path {
     raw: String,
     def_id: hir::def::DefId,
     def_ty: ty::Type,
-    expr_ty: ty::Type,
 }
 
 impl From<&hir::Path> for Path {
@@ -189,7 +188,6 @@ impl From<&hir::Path> for Path {
             raw: base.raw.clone(),
             def_id: base.def.id,
             def_ty: ty::Type::from(&base.def.ty),
-            expr_ty: ty::Type::from(&base.expr_ty),
         }
     }
 }
@@ -234,19 +232,25 @@ impl From<&hir::Binary> for Binary {
     }
 }
 
-#[derive(Serialize)]
-struct Unary {
-    id: ast::NodeId,
-    op: crate::ast::UnOpKind,
-    expr: Box<Expr>,
-}
+macro_rules! UnaryEnum {
+    ($($name:ident),*) => {
+        $(
+            #[derive(Serialize)]
+            struct $name {
+                id: ast::NodeId,
+                expr: Box<Expr>,
+            }
 
-impl From<&hir::Unary> for Unary {
-    fn from(base: &hir::Unary) -> Self {
-        Self {
-            id: base.id,
-            op: base.op.into(),
-            expr: Box::new(base.expr.deref().into()),
-        }
+            impl From<&hir::$name> for $name {
+                fn from(base: &hir::$name) -> Self {
+                    Self {
+                        id: base.id,
+                        expr: Box::new(base.expr.deref().into()),
+                    }
+                }
+            }
+        )*
     }
 }
+
+UnaryEnum!(RefExpr, DerefExpr, NegExpr, NotExpr);

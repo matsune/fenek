@@ -2,7 +2,6 @@ pub mod def;
 
 use def::*;
 use lex::token;
-use std::ops::Deref;
 use types::ty;
 
 pub struct Module {
@@ -121,6 +120,7 @@ impl Ret {
 
 macro_rules! Enum_with_type {
     ($name:ident [$($Var:ident),*]) => {
+        #[derive(Debug)]
         pub enum $name {
             $(
                 $Var($Var),
@@ -131,7 +131,7 @@ macro_rules! Enum_with_type {
             pub fn get_type(&self) -> ty::Type {
                 match self {
                     $(
-                    $name::$Var(v) => v.get_type(),
+                        $name::$Var(v) => v.get_type(),
                     )*
                 }
             }
@@ -147,21 +147,20 @@ macro_rules! Enum_with_type {
     }
 }
 
-Enum_with_type!(Expr [Lit, Path, Call, Binary, Unary]);
+Enum_with_type!(Expr [Lit, Path, Call, Binary, RefExpr, DerefExpr, NegExpr, NotExpr]);
 
 impl Expr {
     pub fn is_lvalue(&self) -> bool {
         match self {
             Self::Path(path) => path.def.is_var,
-            Self::Unary(unary) => match unary.op {
-                ast::UnOpKind::Ref => unary.expr.is_lvalue(),
-                _ => false,
-            },
+            Self::RefExpr(ref_expr) => ref_expr.expr.is_lvalue(),
+            Self::DerefExpr(deref_expr) => deref_expr.expr.is_lvalue(),
             _ => false,
         }
     }
 }
 
+#[derive(Debug)]
 pub struct Lit {
     pub id: ast::NodeId,
     pub kind: LitKind,
@@ -178,6 +177,7 @@ impl Lit {
     }
 }
 
+#[derive(Debug)]
 pub enum LitKind {
     I8(i8),
     I16(i16),
@@ -197,22 +197,23 @@ impl LitKind {
     }
 }
 
+#[derive(Debug)]
 pub struct Path {
     pub raw: String,
     pub def: Def<ty::Type>,
-    pub expr_ty: ty::Type,
 }
 
 impl Path {
-    pub fn new(raw: String, def: Def<ty::Type>, expr_ty: ty::Type) -> Self {
-        Self { raw, def, expr_ty }
+    pub fn new(raw: String, def: Def<ty::Type>) -> Self {
+        Self { raw, def }
     }
 
     pub fn get_type(&self) -> ty::Type {
-        self.expr_ty.clone()
+        self.def.ty.clone()
     }
 }
 
+#[derive(Debug)]
 pub struct Call {
     pub path: String,
     pub args: Vec<Expr>,
@@ -229,6 +230,7 @@ impl Call {
     }
 }
 
+#[derive(Debug)]
 pub struct Binary {
     pub id: ast::NodeId,
     pub op: ast::BinOpKind,
@@ -253,26 +255,50 @@ impl Binary {
     }
 }
 
-pub struct Unary {
-    pub id: ast::NodeId,
-    pub op: ast::UnOpKind,
-    pub expr: Box<Expr>,
+macro_rules! UnaryEnum {
+    ($($name:ident),*) => {
+        $(
+            #[derive(Debug)]
+            pub struct $name {
+                pub id: ast::NodeId,
+                pub expr: Box<Expr>,
+            }
+
+            impl $name {
+                pub fn new(id: ast::NodeId, expr: Expr) -> Self {
+                    Self {
+                        id,
+                        expr: Box::new(expr),
+                    }
+                }
+            }
+        )*
+    }
 }
 
-impl Unary {
-    pub fn new(id: ast::NodeId, op: ast::UnOpKind, expr: Expr) -> Self {
-        Unary {
-            id,
-            op,
-            expr: Box::new(expr),
-        }
-    }
+UnaryEnum!(RefExpr, DerefExpr, NegExpr, NotExpr);
 
+impl RefExpr {
     pub fn get_type(&self) -> ty::Type {
-        let expr_ty = self.expr.get_type();
-        match self.op {
-            ast::UnOpKind::Ref => ty::Type::Ref(Box::new(expr_ty)),
-            _ => expr_ty,
-        }
+        ty::Type::Ptr(Box::new(self.expr.get_type()))
+    }
+}
+
+impl DerefExpr {
+    pub fn get_type(&self) -> ty::Type {
+        let ty = self.expr.get_type();
+        ty.elem_ty().unwrap_or(&ty).clone()
+    }
+}
+
+impl NegExpr {
+    pub fn get_type(&self) -> ty::Type {
+        self.expr.get_type()
+    }
+}
+
+impl NotExpr {
+    pub fn get_type(&self) -> ty::Type {
+        self.expr.get_type()
     }
 }
