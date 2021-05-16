@@ -63,6 +63,7 @@ pub enum TokenKind {
     Spaces,
     Newlines,
     LineComment,
+    BlockComment,
     Ident,
     Lit(LitKind),
     // /
@@ -113,7 +114,8 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Eof => "EOF",
             TokenKind::Spaces => "space",
             TokenKind::Newlines => "\\n",
-            TokenKind::LineComment => "comment",
+            TokenKind::BlockComment => "block comment",
+            TokenKind::LineComment => "line comment",
             TokenKind::Ident => "ident",
             TokenKind::Lit(kind) => match kind {
                 LitKind::Int { base } => match base {

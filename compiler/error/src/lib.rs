@@ -23,6 +23,8 @@ impl CompileError {
 
 #[derive(Error, Debug)]
 pub enum LitError {
+    #[error("unterminated comment")]
+    UnterminatedComment,
     // #[error("unterminated char literal: `{0}`")]
     // UnterminatedChar(String),
     #[error("unterminated string literal: `{0}`")]

@@ -71,6 +71,7 @@ impl<'src> Parser<'src> {
                         peek.kind,
                         token::TokenKind::Spaces
                             | token::TokenKind::Newlines
+                            | token::TokenKind::BlockComment
                             | token::TokenKind::LineComment
                     ) =>
                 {

@@ -125,12 +125,41 @@ impl<'src> Lexer<'src> {
                 self.bump();
                 match self.peek() {
                     '/' => {
+                        // line comment
                         let mut raw = self.scan_while(is_not_newline);
                         let c = self.bump();
                         if is_newline(c) {
                             raw.push(c);
                         }
                         self.mk_tok(TokenKind::LineComment, raw, offset)
+                    }
+                    '*' => {
+                        // block comment
+                        self.bump();
+                        let mut raw = String::from("/*");
+                        loop {
+                            let c = self.bump();
+                            raw.push(c);
+                            match c {
+                                '*' => {
+                                    if self.peek() == '/' {
+                                        raw.push(self.bump());
+                                        return Ok(self.mk_tok(
+                                            TokenKind::BlockComment,
+                                            raw,
+                                            offset,
+                                        ));
+                                    }
+                                }
+                                EOF => {
+                                    return Err(self.compile_error(
+                                        offset,
+                                        LitError::UnterminatedComment.into(),
+                                    ))
+                                }
+                                _ => {}
+                            }
+                        }
                     }
                     _ => self.mk_tok(TokenKind::Slash, "/", offset),
                 }

@@ -32,5 +32,6 @@ var e = &&a;      // int** e = &&a;
 e = &&b;          // e = &b;
 get_ref(e);       // get_ref(*e);
 get_ref_ref(&e);  // get_ref_ref(e);
+
   ret a;
 }
