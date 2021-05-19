@@ -56,6 +56,7 @@ impl FunArg {
     }
 }
 
+#[derive(Debug)]
 pub struct Ty {
     pub id: NodeId,
     pub kind: TyKind,
@@ -87,6 +88,7 @@ impl Ty {
     }
 }
 
+#[derive(Debug)]
 pub enum TyKind {
     Basic(token::Token),
     Ref(Box<Ty>, Offset),
@@ -115,6 +117,7 @@ impl TyKind {
     }
 }
 
+#[derive(Debug)]
 pub struct Block {
     pub id: NodeId,
     pub lbrace: token::Token,
@@ -131,6 +134,7 @@ impl Block {
     }
 }
 
+#[derive(Debug)]
 pub struct Stmt {
     pub id: NodeId,
     pub kind: StmtKind,
@@ -187,11 +191,19 @@ impl Stmt {
         }
     }
 
+    pub fn new_if(id: NodeId, if_stmt: IfStmt) -> Self {
+        Self {
+            id,
+            kind: StmtKind::If(if_stmt),
+        }
+    }
+
     pub fn offset(&self) -> Offset {
         self.kind.offset()
     }
 }
 
+#[derive(Debug)]
 pub enum StmtKind {
     Expr(Expr),
     Ret {
@@ -206,6 +218,7 @@ pub enum StmtKind {
     },
     Assign(Expr, Expr),
     Empty(Offset),
+    If(IfStmt),
 }
 
 impl StmtKind {
@@ -222,6 +235,61 @@ impl StmtKind {
             } => keyword.offset,
             Assign(l, _) => l.offset(),
             Empty(offset) => *offset,
+            If(if_stmt) => if_stmt.offset,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct IfStmt {
+    pub id: NodeId,
+    pub offset: Offset,
+    pub expr: Expr,
+    pub block: Block,
+    pub else_if: Option<Else>,
+}
+
+impl IfStmt {
+    pub fn new(
+        id: NodeId,
+        offset: Offset,
+        expr: Expr,
+        block: Block,
+        else_if: Option<Else>,
+    ) -> Self {
+        Self {
+            id,
+            offset,
+            expr,
+            block,
+            else_if,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Else {
+    pub id: NodeId,
+    pub offset: Offset,
+    pub expr: Option<Expr>,
+    pub block: Block,
+    pub else_if: Option<Box<Else>>,
+}
+
+impl Else {
+    pub fn new(
+        id: NodeId,
+        offset: Offset,
+        expr: Option<Expr>,
+        block: Block,
+        else_if: Option<Box<Else>>,
+    ) -> Self {
+        Self {
+            id,
+            offset,
+            expr,
+            block,
+            else_if,
         }
     }
 }

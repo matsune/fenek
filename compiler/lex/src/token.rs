@@ -165,6 +165,8 @@ pub enum Keyword {
     Var,
     Ret,
     Fun,
+    If,
+    Else,
 }
 
 impl Keyword {
@@ -173,6 +175,8 @@ impl Keyword {
             "var" => Some(Self::Var),
             "ret" => Some(Self::Ret),
             "fun" => Some(Self::Fun),
+            "if" => Some(Self::If),
+            "else" => Some(Self::Else),
             _ => None,
         }
     }

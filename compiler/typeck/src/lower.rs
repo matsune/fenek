@@ -224,6 +224,7 @@ impl<'src> Lower<'src> {
                 hir::Assign::new(id, left, right).into()
             }
             ast::StmtKind::Empty(_) => unreachable!(),
+            ast::StmtKind::If(if_stmt) => unimplemented!(),
         };
         Ok(stmt)
     }

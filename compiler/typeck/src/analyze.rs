@@ -226,6 +226,7 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
                 })?;
             }
             ast::StmtKind::Empty(_) => {}
+            ast::StmtKind::If(if_stmt) => unimplemented!(),
         };
         Ok(())
     }
