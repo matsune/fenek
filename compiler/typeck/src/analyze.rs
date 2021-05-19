@@ -13,20 +13,20 @@ fn compile_error(pos: Pos, typeck_err: TypeCkError) -> CompileError {
     CompileError::new(pos, Box::new(typeck_err))
 }
 
-pub struct TyAnalyzer<'src, 'infer> {
+pub struct TyAnalyzer<'src, 'lower> {
     src: &'src SrcFile,
-    solver: &'infer Solver<'infer>,
-    def_arena: &'infer DefArena<&'infer InferTy<'infer>>,
-    node_ty_map: NodeMap<&'infer InferTy<'infer>>,
-    node_def_map: NodeMap<&'infer Def<&'infer InferTy<'infer>>>,
-    scopes: Scopes<'infer>,
+    solver: &'lower Solver<'lower>,
+    def_arena: &'lower DefArena<&'lower InferTy<'lower>>,
+    node_ty_map: NodeMap<&'lower InferTy<'lower>>,
+    node_def_map: NodeMap<&'lower Def<&'lower InferTy<'lower>>>,
+    scopes: Scopes<'lower>,
 }
 
-impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
+impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
     pub fn new(
         src: &'src SrcFile,
-        solver: &'infer Solver<'infer>,
-        def_arena: &'infer DefArena<&'infer InferTy<'infer>>,
+        solver: &'lower Solver<'lower>,
+        def_arena: &'lower DefArena<&'lower InferTy<'lower>>,
     ) -> Self {
         TyAnalyzer {
             src,
@@ -38,7 +38,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         }
     }
 
-    fn get_type_from_ty(&self, ty: &ast::Ty) -> Option<&'infer InferTy<'infer>> {
+    fn get_type_from_ty(&self, ty: &ast::Ty) -> Option<&'lower InferTy<'lower>> {
         let infer_ty = match &ty.kind {
             ast::TyKind::Basic(tok) => match tok.raw.as_str() {
                 "i8" => self.solver.arena.alloc_i8(),
@@ -61,8 +61,8 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         mut self,
         module: &ast::Module,
     ) -> Result<(
-        NodeMap<&'infer InferTy<'infer>>,
-        NodeMap<&'infer Def<&'infer InferTy<'infer>>>,
+        NodeMap<&'lower InferTy<'lower>>,
+        NodeMap<&'lower Def<&'lower InferTy<'lower>>>,
     )> {
         for fun in &module.funs {
             if self.scopes.lookup_fun(&fun.name.raw).is_some() {
@@ -83,7 +83,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         Ok((self.node_ty_map, self.node_def_map))
     }
 
-    fn make_fun_def(&mut self, fun: &ast::Fun) -> Result<&'infer Def<&'infer InferTy<'infer>>> {
+    fn make_fun_def(&mut self, fun: &ast::Fun) -> Result<&'lower Def<&'lower InferTy<'lower>>> {
         let mut arg_tys = Vec::new();
         let mut arg_names = HashSet::new();
         for arg in &fun.args {
@@ -153,7 +153,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
     fn analyze_stmt(
         &mut self,
         stmt: &ast::Stmt,
-        current_fn_ret_ty: &'infer InferTy<'infer>,
+        current_fn_ret_ty: &'lower InferTy<'lower>,
     ) -> Result<()> {
         match &stmt.kind {
             ast::StmtKind::Expr(expr) => {
@@ -230,7 +230,7 @@ impl<'src, 'infer> TyAnalyzer<'src, 'infer> {
         Ok(())
     }
 
-    fn analyze_expr(&mut self, expr: &ast::Expr) -> Result<&'infer InferTy<'infer>> {
+    fn analyze_expr(&mut self, expr: &ast::Expr) -> Result<&'lower InferTy<'lower>> {
         let ty = match &expr.kind {
             ast::ExprKind::Lit(lit) => match lit.kind {
                 ast::LitKind::Int(_) => self.solver.arena.alloc_int_lit(),

@@ -52,8 +52,7 @@ fn parse_int_literal<T: Num>(base: token::IntBase, literal: &str) -> Result<T, T
 type LowerResult<T> = Result<T, (ast::NodeId, TypeCkError)>;
 
 pub fn lower(src: &SrcFile, module: ast::Module) -> Result<hir::Module> {
-    // lifetime 'infer is this block scope
-    // TODO: rename 'infer to 'lower for clarity
+    // lifetime 'lower is this block scope
     let ty_arena = InferTyArena::default();
     let solver = Solver::new(&ty_arena);
     let def_arena = DefArena::new();
