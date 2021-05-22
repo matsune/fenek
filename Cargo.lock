@@ -340,10 +340,8 @@ dependencies = [
  "ast",
  "hir",
  "lex",
- "parse",
  "serde",
  "serde_json",
- "typeck",
  "types",
 ]
 

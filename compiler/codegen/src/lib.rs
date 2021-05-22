@@ -343,6 +343,7 @@ impl<'ctx> Codegen<'ctx> {
             hir::Stmt::Expr(expr) => {
                 self.build_expr(&function.borrow(), &expr);
             }
+            hir::Stmt::IfStmt(if_stmt) => unimplemented!(),
         }
     }
 

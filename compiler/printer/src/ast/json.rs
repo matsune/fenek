@@ -1,5 +1,6 @@
 use lex::token;
 use serde::{Serialize, Serializer};
+use std::ops::Deref;
 
 #[derive(Serialize)]
 pub struct Module {
@@ -155,37 +156,21 @@ impl From<&ast::StmtKind> for StmtKind {
 #[derive(Serialize)]
 struct IfStmt {
     id: ast::NodeId,
-    expr: Expr,
+    expr: Option<Expr>,
     block: Block,
-    else_if: Option<Else>,
+    else_if: Option<Box<IfStmt>>,
 }
 
 impl From<&ast::IfStmt> for IfStmt {
     fn from(k: &ast::IfStmt) -> Self {
         Self {
             id: k.id,
-            expr: (&k.expr).into(),
-            block: (&k.block).into(),
-            else_if: k.else_if.as_ref().map(Else::from),
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct Else {
-    id: ast::NodeId,
-    expr: Option<Expr>,
-    block: Block,
-    else_if: Option<Box<Else>>,
-}
-
-impl From<&ast::Else> for Else {
-    fn from(k: &ast::Else) -> Self {
-        Self {
-            id: k.id,
             expr: k.expr.as_ref().map(Expr::from),
             block: (&k.block).into(),
-            else_if: k.else_if.as_ref().map(|b| Box::new(Else::from(&(**b)))),
+            else_if: k
+                .else_if
+                .as_ref()
+                .map(|b| Box::new(IfStmt::from(b.deref()))),
         }
     }
 }

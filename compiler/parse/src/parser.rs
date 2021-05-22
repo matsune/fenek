@@ -302,17 +302,17 @@ impl<'src> Parser<'src> {
         self.skip_spaces();
         let else_if = match self.peek() {
             Some(tok) if matches!(tok.try_as_keyword(), Some(token::Keyword::Else)) => {
-                Some(self.parse_else()?)
+                Some(Box::new(self.parse_else()?))
             }
             _ => None,
         };
         Ok(Stmt::new_if(
             self.gen_id(),
-            IfStmt::new(self.gen_id(), offset, expr, block, else_if),
+            IfStmt::new(self.gen_id(), offset, Some(expr), block, else_if),
         ))
     }
 
-    fn parse_else(&mut self) -> Result<Else> {
+    fn parse_else(&mut self) -> Result<IfStmt> {
         let offset = self
             .bump_if(|tok| tok.try_as_keyword().unwrap() == token::Keyword::Else)
             .unwrap()
@@ -326,11 +326,15 @@ impl<'src> Parser<'src> {
         let block = self.parse_block()?;
         let else_if = match self.peek() {
             Some(tok) if matches!(tok.try_as_keyword(), Some(token::Keyword::Else)) => {
-                Some(Box::new(self.parse_else()?))
+                if expr.is_some() {
+                    Some(Box::new(self.parse_else()?))
+                } else {
+                    None
+                }
             }
             _ => None,
         };
-        Ok(Else::new(self.gen_id(), offset, expr, block, else_if))
+        Ok(IfStmt::new(self.gen_id(), offset, expr, block, else_if))
     }
 
     fn parse_expr(&mut self) -> Result<Expr> {

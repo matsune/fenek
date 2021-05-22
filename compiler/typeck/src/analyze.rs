@@ -226,8 +226,48 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
                 })?;
             }
             ast::StmtKind::Empty(_) => {}
-            ast::StmtKind::If(if_stmt) => unimplemented!(),
+            ast::StmtKind::If(if_stmt) => {
+                let expr_ty = self.analyze_expr(&if_stmt.expr.as_ref().unwrap())?;
+                self.solver
+                    .bind(expr_ty, self.solver.arena.alloc_bool())
+                    .map_err(|err| {
+                        CompileError::new(
+                            self.src
+                                .pos_from_offset(if_stmt.expr.as_ref().unwrap().offset()),
+                            err.into(),
+                        )
+                    })?;
+                for stmt in &if_stmt.block.stmts {
+                    self.analyze_stmt(&stmt, &current_fn_ret_ty)?;
+                }
+                if let Some(else_if) = &if_stmt.else_if {
+                    self.analyze_else(&else_if, &current_fn_ret_ty)?;
+                }
+            }
         };
+        Ok(())
+    }
+
+    fn analyze_else(
+        &mut self,
+        else_stmt: &ast::IfStmt,
+        current_fn_ret_ty: &'lower InferTy<'lower>,
+    ) -> Result<()> {
+        if let Some(expr) = &else_stmt.expr {
+            let expr_ty = self.analyze_expr(&expr)?;
+            self.solver
+                .bind(expr_ty, self.solver.arena.alloc_bool())
+                .map_err(|err| {
+                    CompileError::new(self.src.pos_from_offset(expr.offset()), err.into())
+                })?;
+        }
+        for stmt in &else_stmt.block.stmts {
+            self.analyze_stmt(&stmt, &current_fn_ret_ty)?;
+        }
+        match &else_stmt.else_if {
+            Some(else_if) => self.analyze_else(&else_if, current_fn_ret_ty)?,
+            None => {}
+        }
         Ok(())
     }
 

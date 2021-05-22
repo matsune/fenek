@@ -71,7 +71,30 @@ macro_rules! Enum {
     }
 }
 
-Enum!(Stmt [VarDecl, Ret, Expr, Assign]);
+Enum!(Stmt [VarDecl, Ret, Expr, Assign, IfStmt]);
+
+pub struct IfStmt {
+    pub id: ast::NodeId,
+    pub expr: Option<Expr>,
+    pub block: Block,
+    pub else_if: Option<Box<IfStmt>>,
+}
+
+impl IfStmt {
+    pub fn new(
+        id: ast::NodeId,
+        expr: Option<Expr>,
+        block: Block,
+        else_if: Option<Box<IfStmt>>,
+    ) -> Self {
+        Self {
+            id,
+            expr,
+            block,
+            else_if,
+        }
+    }
+}
 
 pub struct Assign {
     pub id: ast::NodeId,

@@ -244,45 +244,18 @@ impl StmtKind {
 pub struct IfStmt {
     pub id: NodeId,
     pub offset: Offset,
-    pub expr: Expr,
+    pub expr: Option<Expr>,
     pub block: Block,
-    pub else_if: Option<Else>,
+    pub else_if: Option<Box<IfStmt>>,
 }
 
 impl IfStmt {
     pub fn new(
         id: NodeId,
         offset: Offset,
-        expr: Expr,
-        block: Block,
-        else_if: Option<Else>,
-    ) -> Self {
-        Self {
-            id,
-            offset,
-            expr,
-            block,
-            else_if,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Else {
-    pub id: NodeId,
-    pub offset: Offset,
-    pub expr: Option<Expr>,
-    pub block: Block,
-    pub else_if: Option<Box<Else>>,
-}
-
-impl Else {
-    pub fn new(
-        id: NodeId,
-        offset: Offset,
         expr: Option<Expr>,
         block: Block,
-        else_if: Option<Box<Else>>,
+        else_if: Option<Box<IfStmt>>,
     ) -> Self {
         Self {
             id,

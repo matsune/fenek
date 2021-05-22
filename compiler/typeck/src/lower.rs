@@ -57,7 +57,7 @@ pub fn lower(src: &SrcFile, module: ast::Module) -> Result<hir::Module> {
     let solver = Solver::new(&ty_arena);
     let def_arena = DefArena::new();
 
-    let lower = {
+    let mut lower = {
         // 1. analyze AST and make hash maps to infer types of each nodes
         let (node_infer_ty_map, node_infer_def_map) =
             TyAnalyzer::new(src, &solver, &def_arena).analyze_module(&module)?;
@@ -67,8 +67,9 @@ pub fn lower(src: &SrcFile, module: ast::Module) -> Result<hir::Module> {
             let mut node_ty_map = NodeMap::with_capacity(node_infer_ty_map.len());
             for (node_id, infer_ty) in node_infer_ty_map.iter() {
                 let final_ty = solver.solve_type(infer_ty).map_err(|err| {
-                    let offset =
-                        ast::visit::visit_module(&module, *node_id, |node| node.offset()).unwrap();
+                    let offset = ast::visit::visit_module(&module, *node_id)
+                        .unwrap()
+                        .offset();
                     CompileError::new(src.pos_from_offset(offset), err.into())
                 })?;
                 node_ty_map.insert(*node_id, final_ty);
@@ -93,6 +94,7 @@ struct Lower<'src> {
     src: &'src SrcFile,
     ty_map: NodeMap<ty::Type>,
     node_def_map: NodeMap<Def<ty::Type>>,
+    current_fun_ret_ty: Option<ty::Type>,
 }
 
 impl<'src> Lower<'src> {
@@ -105,10 +107,11 @@ impl<'src> Lower<'src> {
             src,
             ty_map,
             node_def_map,
+            current_fun_ret_ty: None,
         }
     }
 
-    fn lower_module(&self, module: &ast::Module) -> Result<hir::Module> {
+    fn lower_module(&mut self, module: &ast::Module) -> Result<hir::Module> {
         let mut funs = Vec::new();
         for fun in &module.funs {
             funs.push(self.lower_fun(&fun)?);
@@ -116,29 +119,42 @@ impl<'src> Lower<'src> {
         Ok(hir::Module::new(funs))
     }
 
-    fn lower_fun(&self, fun: &ast::Fun) -> Result<hir::Fun> {
+    fn lower_fun(&mut self, fun: &ast::Fun) -> Result<hir::Fun> {
         let id = fun.id;
         let def = self.node_def_map.get(&id).unwrap();
         let ret_ty = match &fun.ret_ty {
             Some(ty) => self.ty_map.get(&ty.id).unwrap().clone(),
             None => ty::Type::Void,
         };
+        self.current_fun_ret_ty = Some(ret_ty);
         let mut args = Vec::new();
         for arg in &fun.args {
             let def = self.node_def_map.get(&arg.id).unwrap();
             args.push(hir::Path::new(arg.name.raw.clone(), def.clone()));
         }
+        let block = self.lower_block(&fun.block).map_err(|(id, err)| {
+            let offset = ast::visit::visit_fun(&fun, id).unwrap().offset();
+            compile_error(self.src.pos_from_offset(offset), err)
+        })?;
+        Ok(hir::Fun::new(
+            id,
+            fun.name.raw.clone(),
+            args,
+            block,
+            def.clone(),
+        ))
+    }
+
+    fn lower_block(&self, block: &ast::Block) -> LowerResult<hir::Block> {
         let mut stmts = Vec::new();
-        let stmts_len = fun.block.stmts.len();
-        for (idx, stmt) in fun.block.stmts.iter().enumerate() {
+        let stmts_len = block.stmts.len();
+        for (idx, stmt) in block.stmts.iter().enumerate() {
             let stmt_offset = stmt.offset();
             if matches!(stmt.kind, ast::StmtKind::Empty(_)) {
                 continue;
             }
-            let stmt = self.lower_stmt(&stmt).map_err(|(id, err)| {
-                let offset = ast::visit::visit_fun(&fun, id, |node| node.offset()).unwrap();
-                compile_error(self.src.pos_from_offset(offset), err)
-            })?;
+            let stmt_id = stmt.id;
+            let stmt = self.lower_stmt(&stmt)?;
             let is_last = idx == stmts_len - 1;
             match &stmt {
                 hir::Stmt::Ret(ret) if is_last => {
@@ -149,35 +165,22 @@ impl<'src> Lower<'src> {
                     if expr_ty.is_fun() {
                         expr_ty = *expr_ty.into_fun().ret;
                     }
-                    if expr_ty != ret_ty {
-                        return Err(compile_error(
-                            self.src.pos_from_offset(stmt_offset),
-                            TypeCkError::InvalidReturnType,
-                        ));
+                    if expr_ty != *self.current_fun_ret_ty.as_ref().unwrap() {
+                        return Err((ret.id, TypeCkError::InvalidReturnType));
                     }
                 }
                 hir::Stmt::Ret(_) if !is_last => {
                     // warning? ret statement should not be in the middle of block
                 }
-                _ if is_last && !ret_ty.is_void() => {
-                    // error if fun_ret_ty is not void
-                    return Err(compile_error(
-                        self.src.pos_from_offset(stmt_offset),
-                        TypeCkError::MustBeRetStmt,
-                    ));
-                }
+                // _ if is_last && !self.current_fun_ret_ty.as_ref().unwrap().is_void() => {
+                //     // error if fun_ret_ty is not void
+                //     return Err((stmt_id, TypeCkError::MustBeRetStmt));
+                // }
                 _ => {}
             }
             stmts.push(stmt);
         }
-
-        Ok(hir::Fun::new(
-            id,
-            fun.name.raw.clone(),
-            args,
-            hir::Block::new(fun.block.id, stmts),
-            def.clone(),
-        ))
+        Ok(hir::Block::new(block.id, stmts))
     }
 
     fn lower_stmt(&self, stmt: &ast::Stmt) -> LowerResult<hir::Stmt> {
@@ -224,9 +227,30 @@ impl<'src> Lower<'src> {
                 hir::Assign::new(id, left, right).into()
             }
             ast::StmtKind::Empty(_) => unreachable!(),
-            ast::StmtKind::If(if_stmt) => unimplemented!(),
+            ast::StmtKind::If(if_stmt) => {
+                let expr = self.lower_expr(if_stmt.expr.as_ref().unwrap())?;
+                let block = self.lower_block(&if_stmt.block)?;
+                let else_if = match &if_stmt.else_if {
+                    Some(e) => Some(Box::new(self.lower_else_if(e)?)),
+                    None => None,
+                };
+                hir::IfStmt::new(id, Some(expr), block, else_if).into()
+            }
         };
         Ok(stmt)
+    }
+
+    fn lower_else_if(&self, else_stmt: &ast::IfStmt) -> LowerResult<hir::IfStmt> {
+        let expr = match &else_stmt.expr {
+            Some(e) => Some(self.lower_expr(e)?),
+            None => None,
+        };
+        let block = self.lower_block(&else_stmt.block)?;
+        let else_if = match &else_stmt.else_if {
+            Some(e) => Some(Box::new(self.lower_else_if(e)?)),
+            None => None,
+        };
+        Ok(hir::IfStmt::new(else_stmt.id, expr, block, else_if))
     }
 
     fn lower_lit(&self, id: ast::NodeId, lit: &ast::Lit) -> LowerResult<hir::Lit> {

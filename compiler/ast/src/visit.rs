@@ -39,70 +39,58 @@ macro_rules! return_if_some {
     };
 }
 
-pub fn visit_module<'a, T, F: Fn(Node<'a>) -> T>(
-    module: &'a Module,
-    id: NodeId,
-    callback: F,
-) -> Option<T> {
+pub fn visit_module<'a>(module: &'a Module, id: NodeId) -> Option<Node<'a>> {
     for fun in &module.funs {
-        return_if_some!(visit_fun(&fun, id, &callback));
+        return_if_some!(visit_fun(&fun, id));
     }
     None
 }
 
-pub fn visit_fun<'a, T, F: Fn(Node<'a>) -> T>(fun: &'a Fun, id: NodeId, callback: F) -> Option<T> {
+pub fn visit_fun<'a>(fun: &'a Fun, id: NodeId) -> Option<Node<'a>> {
     if fun.id == id {
-        return Some(callback(Node::Fun(fun)));
+        return Some(Node::Fun(fun));
     }
 
-    return_if_some!(visit_fun_args(&fun.args, id, &callback));
+    return_if_some!(visit_fun_args(&fun.args, id));
 
     if let Some(ret_ty) = &fun.ret_ty {
-        return_if_some!(visit_ty(&ret_ty, id, &callback));
+        return_if_some!(visit_ty(&ret_ty, id));
     }
 
-    visit_block(&fun.block, id, &callback)
+    visit_block(&fun.block, id)
 }
 
-fn visit_fun_args<'a, T, F: Fn(Node<'a>) -> T>(
-    args: &'a [FunArg],
-    id: NodeId,
-    callback: &F,
-) -> Option<T> {
+fn visit_fun_args<'a>(args: &'a [FunArg], id: NodeId) -> Option<Node<'a>> {
     for arg in args.iter() {
         if arg.id == id {
-            return Some(callback(Node::FunArg(arg)));
+            return Some(Node::FunArg(arg));
         }
-        return_if_some!(visit_ty(&arg.ty, id, callback));
+        return_if_some!(visit_ty(&arg.ty, id));
     }
     None
 }
 
-fn visit_ty<'a, T, F: Fn(Node<'a>) -> T>(ty: &'a Ty, id: NodeId, callback: &F) -> Option<T> {
+fn visit_ty<'a>(ty: &'a Ty, id: NodeId) -> Option<Node> {
     if ty.id == id {
-        Some(callback(Node::Ty(&ty)))
+        Some(Node::Ty(&ty))
     } else {
         None
     }
 }
 
-fn visit_block<'a, T, F: Fn(Node<'a>) -> T>(
-    block: &'a Block,
-    id: NodeId,
-    callback: &F,
-) -> Option<T> {
+fn visit_block<'a>(block: &'a Block, id: NodeId) -> Option<Node<'a>> {
     if block.id == id {
-        return Some(callback(Node::Block(&block)));
+        return Some(Node::Block(&block));
     }
     for stmt in block.stmts.iter() {
-        return_if_some!(visit_stmt(stmt, id, &callback));
+        return_if_some!(visit_stmt(stmt, id));
     }
     None
 }
 
-fn visit_stmt<'a, T, F: Fn(Node<'a>) -> T>(stmt: &'a Stmt, id: NodeId, callback: &F) -> Option<T> {
+fn visit_stmt<'a>(stmt: &'a Stmt, id: NodeId) -> Option<Node<'a>> {
     if stmt.id == id {
-        return Some(callback(Node::Stmt(stmt)));
+        return Some(Node::Stmt(stmt));
     }
     match &stmt.kind {
         StmtKind::VarDecl {
@@ -111,30 +99,49 @@ fn visit_stmt<'a, T, F: Fn(Node<'a>) -> T>(stmt: &'a Stmt, id: NodeId, callback:
             ty: _,
             init,
         } => {
-            return_if_some!(visit_expr(init, id, &callback));
+            return_if_some!(visit_expr(init, id));
         }
         StmtKind::Expr(expr) => {
-            return_if_some!(visit_expr(expr, id, &callback));
+            return_if_some!(visit_expr(expr, id));
         }
         StmtKind::Assign(left, right) => {
-            return_if_some!(visit_expr(left, id, &callback));
-            return_if_some!(visit_expr(right, id, &callback));
+            return_if_some!(visit_expr(left, id));
+            return_if_some!(visit_expr(right, id));
         }
-        _ => {}
+        StmtKind::Empty(_) => {}
+        StmtKind::Ret { keyword, expr } => {
+            if let Some(expr) = expr {
+                return_if_some!(visit_expr(expr, id));
+            }
+        }
+        StmtKind::If(if_stmt) => {
+            return_if_some!(visit_if(&if_stmt, id));
+        }
     };
     None
 }
 
-fn visit_expr<'a, T, F: Fn(Node<'a>) -> T>(expr: &'a Expr, id: NodeId, callback: &F) -> Option<T> {
+fn visit_if<'a>(stmt: &'a IfStmt, id: NodeId) -> Option<Node<'a>> {
+    if let Some(expr) = &stmt.expr {
+        return_if_some!(visit_expr(&expr, id));
+    }
+    return_if_some!(visit_block(&stmt.block, id));
+    if let Some(else_if) = &stmt.else_if {
+        return_if_some!(visit_if(&else_if, id));
+    }
+    None
+}
+
+fn visit_expr<'a>(expr: &'a Expr, id: NodeId) -> Option<Node<'a>> {
     if expr.id == id {
-        return Some(callback(Node::Expr(expr)));
+        return Some(Node::Expr(expr));
     }
     match &expr.kind {
         ExprKind::Binary(_, lhs, rhs) => {
-            return_if_some!(visit_expr(&lhs, id, callback));
-            visit_expr(&rhs, id, callback)
+            return_if_some!(visit_expr(&lhs, id));
+            visit_expr(&rhs, id)
         }
-        ExprKind::Unary(_, expr) => visit_expr(&expr, id, callback),
+        ExprKind::Unary(_, expr) => visit_expr(&expr, id),
         _ => None,
     }
 }

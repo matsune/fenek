@@ -76,7 +76,26 @@ macro_rules! Enum {
     }
 }
 
-Enum!(Stmt [VarDecl, Ret, Expr, Assign]);
+Enum!(Stmt [VarDecl, Ret, Expr, Assign, IfStmt]);
+
+#[derive(Serialize)]
+struct IfStmt {
+    id: ast::NodeId,
+    expr: Option<Expr>,
+    block: Block,
+    else_if: Option<Box<IfStmt>>,
+}
+
+impl From<&hir::IfStmt> for IfStmt {
+    fn from(base: &hir::IfStmt) -> Self {
+        Self {
+            id: base.id,
+            expr: base.expr.as_ref().map(Expr::from),
+            block: (&base.block).into(),
+            else_if: base.else_if.as_ref().map(|b| Box::new(b.deref().into())),
+        }
+    }
+}
 
 #[derive(Serialize)]
 struct VarDecl {
