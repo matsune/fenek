@@ -149,11 +149,9 @@ impl<'src> Lower<'src> {
         let mut stmts = Vec::new();
         let stmts_len = block.stmts.len();
         for (idx, stmt) in block.stmts.iter().enumerate() {
-            let stmt_offset = stmt.offset();
             if matches!(stmt.kind, ast::StmtKind::Empty(_)) {
                 continue;
             }
-            let stmt_id = stmt.id;
             let stmt = self.lower_stmt(&stmt)?;
             let is_last = idx == stmts_len - 1;
             match &stmt {
