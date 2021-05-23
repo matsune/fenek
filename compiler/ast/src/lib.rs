@@ -387,7 +387,7 @@ impl BinOp {
     }
 
     pub fn op_kind(&self) -> BinOpKind {
-        BinOpKind::from(self.raw.kind)
+        BinOpKind::try_from(self.raw.kind).unwrap()
     }
 }
 
@@ -397,27 +397,37 @@ pub enum BinOpKind {
     Sub,
     Mul,
     Div,
+    Lt,
+    Gt,
+    Le,
+    Ge,
 }
 
-impl From<token::TokenKind> for BinOpKind {
-    fn from(k: token::TokenKind) -> Self {
-        match k {
+impl TryFrom<token::TokenKind> for BinOpKind {
+    type Error = &'static str;
+
+    fn try_from(k: token::TokenKind) -> Result<Self, Self::Error> {
+        let kind = match k {
             token::TokenKind::Plus => BinOpKind::Add,
             token::TokenKind::Minus => BinOpKind::Sub,
             token::TokenKind::Star => BinOpKind::Mul,
             token::TokenKind::Slash => BinOpKind::Div,
-            _ => panic!(),
-        }
+            token::TokenKind::Lt => BinOpKind::Lt,
+            token::TokenKind::Gt => BinOpKind::Gt,
+            token::TokenKind::Le => BinOpKind::Le,
+            token::TokenKind::Ge => BinOpKind::Ge,
+            _ => return Err("not binary op token"),
+        };
+        Ok(kind)
     }
 }
 
 impl BinOpKind {
     pub fn precedence(&self) -> u8 {
         match self {
-            Self::Add => 10,
-            Self::Sub => 10,
-            Self::Mul => 20,
-            Self::Div => 20,
+            Self::Add | Self::Sub => 20,
+            Self::Mul | Self::Div => 30,
+            Self::Lt | Self::Gt | Self::Le | Self::Ge => 10,
         }
     }
 

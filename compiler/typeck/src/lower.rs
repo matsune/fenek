@@ -480,7 +480,11 @@ impl<'src> Lower<'src> {
             ast::BinOpKind::Add
             | ast::BinOpKind::Sub
             | ast::BinOpKind::Mul
-            | ast::BinOpKind::Div => match (lhs.get_type(), rhs.get_type()) {
+            | ast::BinOpKind::Div
+            | ast::BinOpKind::Lt
+            | ast::BinOpKind::Gt
+            | ast::BinOpKind::Le
+            | ast::BinOpKind::Ge => match (lhs.get_type(), rhs.get_type()) {
                 (ty::Type::Int(lty), ty::Type::Int(rty)) if lty == rty => {}
                 (ty::Type::Float(lty), ty::Type::Float(rty)) if lty == rty => {}
                 _ => return Err((id, TypeCkError::InvalidBinaryTypes)),

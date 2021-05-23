@@ -301,6 +301,10 @@ pub enum BinOpKind {
     Sub,
     Mul,
     Div,
+    Lt,
+    Gt,
+    Le,
+    Ge,
 }
 
 impl Serialize for BinOpKind {
@@ -313,6 +317,10 @@ impl Serialize for BinOpKind {
             Self::Sub => "-",
             Self::Mul => "*",
             Self::Div => "/",
+            Self::Lt => "<",
+            Self::Gt => ">",
+            Self::Le => "<=",
+            Self::Ge => ">=",
         })
     }
 }
@@ -324,6 +332,10 @@ impl From<ast::BinOpKind> for BinOpKind {
             ast::BinOpKind::Sub => Self::Sub,
             ast::BinOpKind::Mul => Self::Mul,
             ast::BinOpKind::Div => Self::Div,
+            ast::BinOpKind::Lt => Self::Lt,
+            ast::BinOpKind::Gt => Self::Gt,
+            ast::BinOpKind::Le => Self::Le,
+            ast::BinOpKind::Ge => Self::Ge,
         }
     }
 }

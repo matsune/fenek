@@ -90,6 +90,10 @@ pub enum TokenKind {
     Lt,
     // >
     Gt,
+    // <=
+    Le,
+    // >=
+    Ge,
     // -
     Minus,
     // &
@@ -140,6 +144,8 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Not => "!",
             TokenKind::Lt => "<",
             TokenKind::Gt => ">",
+            TokenKind::Le => "<=",
+            TokenKind::Ge => ">=",
             TokenKind::Minus => "-",
             TokenKind::And => "&",
             TokenKind::Or => "|",
@@ -150,13 +156,6 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Arrow => "->",
         };
         write!(f, "{}", s)
-    }
-}
-
-impl TokenKind {
-    pub fn is_bin_op(&self) -> bool {
-        use TokenKind::*;
-        matches!(self, Plus | Minus | Star | Slash)
     }
 }
 

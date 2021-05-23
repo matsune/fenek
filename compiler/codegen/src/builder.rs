@@ -5,6 +5,7 @@ use inkwell::builder::Builder;
 use inkwell::types::BasicType;
 use inkwell::values::{BasicValueEnum, FunctionValue, IntMathValue, IntValue};
 use inkwell::AddressSpace;
+use inkwell::{FloatPredicate, IntPredicate};
 use types::ty;
 
 pub struct FnBuilder<'ctx, 'codegen> {
@@ -30,9 +31,7 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
     }
 
     pub fn build_fun(mut self, fun: &hir::Fun) {
-        // args
         self.build_fun_args(&fun);
-        // block
         self.build_block(&fun.block);
     }
 
@@ -205,9 +204,10 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
                     .left()?
             }
             hir::Expr::Binary(binary) => {
+                let lhs_ty = binary.lhs.get_type();
                 let lhs = self.build_expr(&binary.lhs).unwrap();
                 let rhs = self.build_expr(&binary.rhs).unwrap();
-                match binary.ty {
+                match lhs_ty {
                     ty::Type::Int(_) => {
                         let lhs = lhs.into_int_value();
                         let rhs = rhs.into_int_value();
@@ -224,6 +224,22 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
                             ast::BinOpKind::Div => {
                                 self.builder().build_int_signed_div(lhs, rhs, "sdiv").into()
                             }
+                            ast::BinOpKind::Lt => self
+                                .builder()
+                                .build_int_compare(IntPredicate::SLT, lhs, rhs, "")
+                                .into(),
+                            ast::BinOpKind::Gt => self
+                                .builder()
+                                .build_int_compare(IntPredicate::SGT, lhs, rhs, "")
+                                .into(),
+                            ast::BinOpKind::Le => self
+                                .builder()
+                                .build_int_compare(IntPredicate::SLE, lhs, rhs, "")
+                                .into(),
+                            ast::BinOpKind::Ge => self
+                                .builder()
+                                .build_int_compare(IntPredicate::SGE, lhs, rhs, "")
+                                .into(),
                         }
                     }
                     ty::Type::Float(_) => {
@@ -242,6 +258,22 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
                             ast::BinOpKind::Div => {
                                 self.builder().build_float_div(lhs, rhs, "fdiv").into()
                             }
+                            ast::BinOpKind::Lt => self
+                                .builder()
+                                .build_float_compare(FloatPredicate::OLT, lhs, rhs, "")
+                                .into(),
+                            ast::BinOpKind::Gt => self
+                                .builder()
+                                .build_float_compare(FloatPredicate::OGT, lhs, rhs, "")
+                                .into(),
+                            ast::BinOpKind::Le => self
+                                .builder()
+                                .build_float_compare(FloatPredicate::OLE, lhs, rhs, "")
+                                .into(),
+                            ast::BinOpKind::Ge => self
+                                .builder()
+                                .build_float_compare(FloatPredicate::OLE, lhs, rhs, "")
+                                .into(),
                         }
                     }
                     _ => unimplemented!(),
@@ -384,7 +416,7 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
         );
     }
 
-    pub fn build_reduce(&self, op: &str, value: BasicValueEnum<'ctx>) -> IntValue<'ctx> {
+    fn build_reduce(&self, op: &str, value: BasicValueEnum<'ctx>) -> IntValue<'ctx> {
         match value {
             BasicValueEnum::ArrayValue(_) => unimplemented!(),
             BasicValueEnum::FloatValue(_) => unimplemented!(),
@@ -431,11 +463,6 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
 
         self.builder()
             .build_conditional_branch(cond_value, then_bb, else_bb);
-        // self.builder().build_switch(
-        //     cond_value,
-        //     then_bb,
-        //     &[(cond_value.get_type().const_zero(), else_bb)],
-        // );
 
         self.builder().position_at_end(then_bb);
         let value_then = build_then(self);

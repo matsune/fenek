@@ -321,17 +321,30 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
                     })?;
                 ty
             }
-            ast::ExprKind::Binary(_, lhs, rhs) => {
-                let binary_ty = self.solver.arena.alloc_var();
+            ast::ExprKind::Binary(op, lhs, rhs) => {
                 let lhs_ty = self.analyze_expr(&lhs)?;
                 let rhs_ty = self.analyze_expr(&rhs)?;
-                self.solver.bind(binary_ty, lhs_ty).map_err(|err| {
-                    CompileError::new(self.src.pos_from_offset(lhs.offset()), err.into())
-                })?;
-                self.solver.bind(binary_ty, rhs_ty).map_err(|err| {
-                    CompileError::new(self.src.pos_from_offset(rhs.offset()), err.into())
-                })?;
-                binary_ty
+                match op.op_kind() {
+                    ast::BinOpKind::Lt
+                    | ast::BinOpKind::Gt
+                    | ast::BinOpKind::Le
+                    | ast::BinOpKind::Ge => {
+                        self.solver.bind(lhs_ty, rhs_ty).map_err(|err| {
+                            CompileError::new(self.src.pos_from_offset(lhs.offset()), err.into())
+                        })?;
+                        self.solver.arena.alloc_bool()
+                    }
+                    _ => {
+                        let binary_ty = self.solver.arena.alloc_var();
+                        self.solver.bind(binary_ty, lhs_ty).map_err(|err| {
+                            CompileError::new(self.src.pos_from_offset(lhs.offset()), err.into())
+                        })?;
+                        self.solver.bind(binary_ty, rhs_ty).map_err(|err| {
+                            CompileError::new(self.src.pos_from_offset(rhs.offset()), err.into())
+                        })?;
+                        binary_ty
+                    }
+                }
             }
             ast::ExprKind::Unary(op, expr) => {
                 let expr_ty = self.analyze_expr(&expr)?;

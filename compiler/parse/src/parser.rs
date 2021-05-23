@@ -345,8 +345,8 @@ impl<'src> Parser<'src> {
         let mut lhs = self.parse_prefix_expr()?;
         self.skip_spaces();
         let mut bin_op = match self.peek() {
-            Some(tok) if tok.kind.is_bin_op() => {
-                let bin_op = BinOpKind::from(tok.kind);
+            Some(tok) if BinOpKind::try_from(tok.kind).is_ok() => {
+                let bin_op = BinOpKind::try_from(tok.kind).unwrap();
                 if bin_op.precedence() < prec
                     || bin_op.precedence() == prec && bin_op.assoc().is_left()
                 {
@@ -361,8 +361,8 @@ impl<'src> Parser<'src> {
         loop {
             lhs = Expr::new_binary(self.gen_id(), bin_op, Box::new(lhs), Box::new(rhs));
             bin_op = match self.peek() {
-                Some(tok) if tok.kind.is_bin_op() => {
-                    let bin_op = BinOpKind::from(tok.kind);
+                Some(tok) if BinOpKind::try_from(tok.kind).is_ok() => {
+                    let bin_op = BinOpKind::try_from(tok.kind).unwrap();
                     if bin_op.precedence() < prec
                         || bin_op.precedence() == prec && bin_op.assoc().is_left()
                     {

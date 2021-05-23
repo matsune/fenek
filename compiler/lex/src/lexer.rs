@@ -201,12 +201,22 @@ impl<'src> Lexer<'src> {
                 self.mk_tok(TokenKind::Not, c, offset)
             }
             '<' => {
-                let c = self.bump();
-                self.mk_tok(TokenKind::Lt, c, offset)
+                self.bump();
+                if self.peek() == '=' {
+                    self.bump();
+                    self.mk_tok(TokenKind::Le, "<=", offset)
+                } else {
+                    self.mk_tok(TokenKind::Lt, "<", offset)
+                }
             }
             '>' => {
-                let c = self.bump();
-                self.mk_tok(TokenKind::Gt, c, offset)
+                self.bump();
+                if self.peek() == '=' {
+                    self.bump();
+                    self.mk_tok(TokenKind::Ge, ">=", offset)
+                } else {
+                    self.mk_tok(TokenKind::Gt, ">", offset)
+                }
             }
             '-' => {
                 self.bump();
