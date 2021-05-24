@@ -159,33 +159,6 @@ impl<'src> Lower<'src> {
         Ok(hir::Block::new(block.id, stmts))
     }
 
-    fn verify_terminator(&self, stmt: &hir::Stmt, is_last: bool) -> LowerResult<()> {
-        unimplemented!()
-        // // let must_ret = is_last && !self.current_fun_ret_ty.as_ref().unwrap().is_void();
-        // match &stmt {
-        //     hir::Stmt::Ret(ret) if is_last => {
-        //         let mut expr_ty = match &ret.expr {
-        //             Some(expr) => expr.get_type(),
-        //             None => ty::Type::Void,
-        //         };
-        //         if expr_ty.is_fun() {
-        //             expr_ty = *expr_ty.into_fun().ret;
-        //         }
-        //         if expr_ty != *self.current_fun_ret_ty.as_ref().unwrap() {
-        //             return Err((ret.id, TypeCkError::InvalidReturnType));
-        //         }
-        //     }
-        //     hir::Stmt::Ret(_) if !is_last => {
-        //         // warning? ret statement should not be in the middle of block
-        //     }
-        //     // _ if is_last && !self.current_fun_ret_ty.as_ref().unwrap().is_void() => {
-        //     //     // error if fun_ret_ty is not void
-        //     //     return Err((stmt_id, TypeCkError::MustBeRetStmt));
-        //     // }
-        //     _ => {}
-        // }
-    }
-
     fn lower_stmt(&self, stmt: &ast::Stmt, is_last: bool) -> LowerResult<hir::Stmt> {
         let id = stmt.id;
         let stmt: hir::Stmt = match &stmt.kind {
