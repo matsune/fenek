@@ -152,38 +152,43 @@ impl<'src> Lower<'src> {
             if matches!(stmt.kind, ast::StmtKind::Empty(_)) {
                 continue;
             }
-            let stmt = self.lower_stmt(&stmt)?;
             let is_last = idx == stmts_len - 1;
-            match &stmt {
-                hir::Stmt::Ret(ret) if is_last => {
-                    let mut expr_ty = match &ret.expr {
-                        Some(expr) => expr.get_type(),
-                        None => ty::Type::Void,
-                    };
-                    if expr_ty.is_fun() {
-                        expr_ty = *expr_ty.into_fun().ret;
-                    }
-                    if expr_ty != *self.current_fun_ret_ty.as_ref().unwrap() {
-                        return Err((ret.id, TypeCkError::InvalidReturnType));
-                    }
-                }
-                hir::Stmt::Ret(_) if !is_last => {
-                    // warning? ret statement should not be in the middle of block
-                }
-                // _ if is_last && !self.current_fun_ret_ty.as_ref().unwrap().is_void() => {
-                //     // error if fun_ret_ty is not void
-                //     return Err((stmt_id, TypeCkError::MustBeRetStmt));
-                // }
-                _ => {}
-            }
+            let stmt = self.lower_stmt(&stmt, is_last)?;
             stmts.push(stmt);
         }
         Ok(hir::Block::new(block.id, stmts))
     }
 
-    fn lower_stmt(&self, stmt: &ast::Stmt) -> LowerResult<hir::Stmt> {
+    fn verify_terminator(&self, stmt: &hir::Stmt, is_last: bool) -> LowerResult<()> {
+        unimplemented!()
+        // // let must_ret = is_last && !self.current_fun_ret_ty.as_ref().unwrap().is_void();
+        // match &stmt {
+        //     hir::Stmt::Ret(ret) if is_last => {
+        //         let mut expr_ty = match &ret.expr {
+        //             Some(expr) => expr.get_type(),
+        //             None => ty::Type::Void,
+        //         };
+        //         if expr_ty.is_fun() {
+        //             expr_ty = *expr_ty.into_fun().ret;
+        //         }
+        //         if expr_ty != *self.current_fun_ret_ty.as_ref().unwrap() {
+        //             return Err((ret.id, TypeCkError::InvalidReturnType));
+        //         }
+        //     }
+        //     hir::Stmt::Ret(_) if !is_last => {
+        //         // warning? ret statement should not be in the middle of block
+        //     }
+        //     // _ if is_last && !self.current_fun_ret_ty.as_ref().unwrap().is_void() => {
+        //     //     // error if fun_ret_ty is not void
+        //     //     return Err((stmt_id, TypeCkError::MustBeRetStmt));
+        //     // }
+        //     _ => {}
+        // }
+    }
+
+    fn lower_stmt(&self, stmt: &ast::Stmt, is_last: bool) -> LowerResult<hir::Stmt> {
         let id = stmt.id;
-        let stmt = match &stmt.kind {
+        let stmt: hir::Stmt = match &stmt.kind {
             ast::StmtKind::Expr(expr) => self.lower_expr(&expr)?.into(),
             ast::StmtKind::VarDecl {
                 keyword: _,
@@ -235,6 +240,17 @@ impl<'src> Lower<'src> {
                 hir::IfStmt::new(id, Some(expr), block, else_if).into()
             }
         };
+        match (is_last, stmt.is_terminator()) {
+            (true, true) => {}
+            (true, false) => {
+                // ret_ty should be void
+                if !self.current_fun_ret_ty.as_ref().unwrap().is_void() {
+                    return Err((id, TypeCkError::MustBeRetStmt));
+                }
+            }
+            (false, true) => return Err((id, TypeCkError::RetInMiddle)),
+            (false, false) => {}
+        }
         Ok(stmt)
     }
 

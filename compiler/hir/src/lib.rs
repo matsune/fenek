@@ -51,6 +51,13 @@ impl Block {
     pub fn new(id: ast::NodeId, stmts: Vec<Stmt>) -> Self {
         Block { id, stmts }
     }
+
+    pub fn is_terminated(&self) -> bool {
+        self.stmts
+            .last()
+            .map(|stmt| stmt.is_terminator())
+            .unwrap_or(false)
+    }
 }
 
 macro_rules! Enum {
@@ -73,6 +80,16 @@ macro_rules! Enum {
 
 Enum!(Stmt [VarDecl, Ret, Expr, Assign, IfStmt]);
 
+impl Stmt {
+    pub fn is_terminator(&self) -> bool {
+        match self {
+            Self::Ret(_) => true,
+            Self::IfStmt(if_stmt) => if_stmt.is_terminator(),
+            _ => false,
+        }
+    }
+}
+
 pub struct IfStmt {
     pub id: ast::NodeId,
     pub expr: Option<Expr>,
@@ -92,6 +109,14 @@ impl IfStmt {
             expr,
             block,
             else_if,
+        }
+    }
+
+    pub fn is_terminator(&self) -> bool {
+        let is_terminated = self.block.is_terminated();
+        match &self.else_if {
+            Some(else_if) => is_terminated && else_if.is_terminator(),
+            None => is_terminated,
         }
     }
 }

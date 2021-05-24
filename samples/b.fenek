@@ -1,8 +1,11 @@
+fun a() {}
+
 fun main() -> i64 {
   var a = -10 + 7;
   var b = (3 - (-2)) * 4;
-  if a < 0 {
-    a = 3;
+  if a+b > 0 {
+    ret -a*b;
+  } else {
+    ret a + b;
   }
-  ret a + b;
 }

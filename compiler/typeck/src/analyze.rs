@@ -142,11 +142,16 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
             self.node_def_map.insert(arg.id, def);
         }
 
-        for stmt in &fun.block.stmts {
-            self.analyze_stmt(&stmt, &fun_def.ty.kind.as_fun().ret_ty)?;
-        }
+        self.analyze_block(&fun.block, &fun_def.ty.kind.as_fun().ret_ty)?;
 
         self.scopes.pop_scope();
+        Ok(())
+    }
+
+    fn analyze_block(&mut self, block: &ast::Block, ret_ty: &'lower InferTy<'lower>) -> Result<()> {
+        for stmt in &block.stmts {
+            self.analyze_stmt(&stmt, &ret_ty)?;
+        }
         Ok(())
     }
 
@@ -237,9 +242,7 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
                             err.into(),
                         )
                     })?;
-                for stmt in &if_stmt.block.stmts {
-                    self.analyze_stmt(&stmt, &current_fn_ret_ty)?;
-                }
+                self.analyze_block(&if_stmt.block, &current_fn_ret_ty)?;
                 if let Some(else_if) = &if_stmt.else_if {
                     self.analyze_else(&else_if, &current_fn_ret_ty)?;
                 }
@@ -261,9 +264,7 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
                     CompileError::new(self.src.pos_from_offset(expr.offset()), err.into())
                 })?;
         }
-        for stmt in &else_stmt.block.stmts {
-            self.analyze_stmt(&stmt, &current_fn_ret_ty)?;
-        }
+        self.analyze_block(&else_stmt.block, &current_fn_ret_ty)?;
         match &else_stmt.else_if {
             Some(else_if) => self.analyze_else(&else_if, current_fn_ret_ty)?,
             None => {}

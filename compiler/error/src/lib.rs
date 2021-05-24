@@ -106,6 +106,8 @@ pub enum TypeCkError {
     InvalidReturnType,
     // #[error("invalid assign statement")]
     // InvalidAssign,
+    #[error("found ret statement in the middle of block")]
+    RetInMiddle,
     #[error("must be ret statement")]
     MustBeRetStmt,
     #[error("invalid binary types")]

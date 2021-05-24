@@ -33,6 +33,9 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
     pub fn build_fun(mut self, fun: &hir::Fun) {
         self.build_fun_args(&fun);
         self.build_block(&fun.block);
+        if fun.def.ty.as_fun().ret.is_void() && !fun.block.is_terminated() {
+            self.builder().build_return(None);
+        }
     }
 
     fn build_fun_args(&mut self, fun: &hir::Fun) {
@@ -459,7 +462,7 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
     ) -> V {
         let then_bb = self.append_basic_block("then");
         let else_bb = self.append_basic_block("else");
-        let merge_bb = self.append_basic_block("endif");
+        let mut merge_bb: Option<BasicBlock<'ctx>> = None;
 
         self.builder()
             .build_conditional_branch(cond_value, then_bb, else_bb);
@@ -469,7 +472,10 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
         let then_end_bb = self.current_block();
         let then_needs_terminator = then_end_bb.get_terminator().is_none();
         if then_needs_terminator {
-            self.builder().build_unconditional_branch(merge_bb);
+            if merge_bb.is_none() {
+                merge_bb = Some(self.append_basic_block("endif"));
+            }
+            self.builder().build_unconditional_branch(merge_bb.unwrap());
         }
 
         self.builder().position_at_end(else_bb);
@@ -477,10 +483,15 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
         let else_end_bb = self.current_block();
         let else_needs_terminator = else_end_bb.get_terminator().is_none();
         if else_needs_terminator {
-            self.builder().build_unconditional_branch(merge_bb);
+            if merge_bb.is_none() {
+                merge_bb = Some(self.append_basic_block("endif"));
+            }
+            self.builder().build_unconditional_branch(merge_bb.unwrap());
         }
 
-        self.builder().position_at_end(merge_bb);
+        if let Some(merge_bb) = merge_bb {
+            self.builder().position_at_end(merge_bb);
+        }
         let ret = match (then_needs_terminator, else_needs_terminator) {
             (true, false) => value_then,
             (false, true) => value_else,
