@@ -171,6 +171,9 @@ impl<'src> Lower<'src> {
             } => {
                 let expr = self.lower_expr(&init)?;
                 let def = self.node_def_map.get(&id).unwrap();
+                if def.ty.is_void() {
+                    return Err((id, TypeCkError::VoidTypeVar));
+                }
                 hir::VarDecl::new(id, name.clone(), expr, def.clone()).into()
             }
             ast::StmtKind::Ret { keyword: _, expr } => {

@@ -110,11 +110,9 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
                         self.build_conditional(
                             cond_value,
                             |this| {
-                                // then
                                 this.build_block(&if_stmt.block);
                             },
                             |this| {
-                                // else
                                 this.build_if(&else_if);
                             },
                         );
