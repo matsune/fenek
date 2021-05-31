@@ -76,10 +76,10 @@ impl Ty {
         }
     }
 
-    pub fn new_ref(id: NodeId, ty: Ty, offset: Offset) -> Self {
+    pub fn new_ptr(id: NodeId, ty: Ty) -> Self {
         Self {
             id,
-            kind: TyKind::Ref(Box::new(ty), offset),
+            kind: TyKind::Ptr(Box::new(ty)),
         }
     }
 
@@ -91,7 +91,7 @@ impl Ty {
 #[derive(Debug)]
 pub enum TyKind {
     Basic(token::Token),
-    Ref(Box<Ty>, Offset),
+    Ptr(Box<Ty>),
     // Lambda, Tuple...
 }
 
@@ -99,7 +99,7 @@ impl ToString for TyKind {
     fn to_string(&self) -> String {
         match self {
             Self::Basic(tok) => tok.raw.clone(),
-            Self::Ref(ty, _) => format!("&{}", ty.to_string()),
+            Self::Ptr(ty) => format!("{}*", ty.to_string()),
         }
     }
 }
@@ -108,12 +108,12 @@ impl TyKind {
     pub fn offset(&self) -> Offset {
         match self {
             Self::Basic(tok) => tok.offset,
-            Self::Ref(_, offset) => *offset,
+            Self::Ptr(ty) => ty.offset(),
         }
     }
 
-    pub fn is_ref(&self) -> bool {
-        matches!(self, Self::Ref(_, _))
+    pub fn is_ptr(&self) -> bool {
+        matches!(self, Self::Ptr(_))
     }
 }
 

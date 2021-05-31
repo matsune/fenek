@@ -52,7 +52,7 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
                 "void" => self.solver.arena.alloc_void(),
                 _ => return None,
             },
-            ast::TyKind::Ref(ty, _) => self.solver.arena.alloc_ref(self.get_type_from_ty(ty)?),
+            ast::TyKind::Ptr(ty) => self.solver.arena.alloc_ref(self.get_type_from_ty(ty)?),
         };
         Some(infer_ty)
     }
@@ -219,13 +219,6 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
             ast::StmtKind::Assign(left, right) => {
                 let left_ty = self.analyze_expr(&left)?;
                 let right_ty = self.analyze_expr(&right)?;
-                if let Some(deref_ty) = right_ty.prune().elem_ty() {
-                    if self.solver.bind(left_ty, deref_ty).is_ok() {
-                        // deref assign
-                        return Ok(());
-                    }
-                }
-                // normal assign
                 self.solver.bind(left_ty, right_ty).map_err(|err| {
                     CompileError::new(self.src.pos_from_offset(left.offset()), err.into())
                 })?;
@@ -283,7 +276,7 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
             ast::ExprKind::Path(tok) => match self.scopes.lookup_var(&tok.raw, false) {
                 Some(var_def) => {
                     self.node_def_map.insert(expr.id, var_def);
-                    var_def.ty.prune().elem_ty().unwrap_or(var_def.ty)
+                    var_def.ty
                 }
                 None => {
                     return Err(compile_error(
@@ -351,6 +344,7 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
                 let expr_ty = self.analyze_expr(&expr)?;
                 match op.op_kind() {
                     ast::UnOpKind::Ref => self.solver.arena.alloc_ref(expr_ty),
+                    ast::UnOpKind::Deref => self.solver.arena.alloc_deref(expr_ty),
                     _ => {
                         let ty = self.solver.arena.alloc_var();
                         self.solver.bind(ty, expr_ty).map_err(|err| {

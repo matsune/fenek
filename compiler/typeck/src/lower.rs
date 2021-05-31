@@ -374,12 +374,6 @@ impl<'src> Lower<'src> {
                 let def = self.node_def_map.get(&expr.id).unwrap();
                 let expr =
                     hir::Path::new(tok.raw.clone(), Def::new(def.id, def.ty.clone(), true)).into();
-                let expr = if def.ty.is_ptr() {
-                    // implicit deref
-                    hir::DerefExpr::new(id, expr).into()
-                } else {
-                    expr
-                };
                 Ok(expr)
             }
             ast::ExprKind::Call(path, args) => {
@@ -419,7 +413,9 @@ impl<'src> Lower<'src> {
                                     v.into()
                                 })
                             }
-                            ast::UnOpKind::Ref => Err((id, TypeCkError::LvalueRequired)),
+                            ast::UnOpKind::Ref | ast::UnOpKind::Deref => {
+                                Err((id, TypeCkError::LvalueRequired))
+                            }
                         }
                     }
                     _ => {
@@ -447,10 +443,16 @@ impl<'src> Lower<'src> {
                                 if !expr.is_lvalue() {
                                     return Err((id, TypeCkError::LvalueRequired));
                                 }
-                                match expr {
-                                    hir::Expr::DerefExpr(deref_expr) => Ok(*deref_expr.expr),
-                                    _ => Ok(hir::RefExpr::new(id, expr).into()),
+                                Ok(hir::RefExpr::new(id, expr).into())
+                            }
+                            ast::UnOpKind::Deref => {
+                                if expr_ty.is_void() {
+                                    return Err((id, TypeCkError::InvalidUnaryTypes));
                                 }
+                                if !expr.is_lvalue() {
+                                    return Err((id, TypeCkError::LvalueRequired));
+                                }
+                                Ok(hir::DerefExpr::new(id, expr).into())
                             }
                         }
                     }

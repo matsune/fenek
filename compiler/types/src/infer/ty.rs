@@ -37,18 +37,10 @@ impl<'a> InferTy<'a> {
 
     /// Get the most tip node from this node.
     pub fn prune(&'a self) -> &'a InferTy<'a> {
-        let pruned = self
-            .next
+        self.next
             .get()
             .map(|to_node| to_node.prune())
-            .unwrap_or(self);
-        match pruned.kind {
-            InferTyKind::Deref(ty) if ty.kind.is_ref() => match ty.kind {
-                InferTyKind::Ref(ty) => ty,
-                _ => unreachable!(),
-            },
-            _ => pruned,
-        }
+            .unwrap_or(self)
     }
 
     // returns dereferenced type if self is Ref

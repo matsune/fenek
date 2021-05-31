@@ -74,14 +74,14 @@ impl From<&ast::Ty> for Ty {
 #[derive(Serialize)]
 enum TyKind {
     Basic(String),
-    Ref(Box<TyKind>),
+    Ptr(Box<TyKind>),
 }
 
 impl From<&ast::TyKind> for TyKind {
     fn from(k: &ast::TyKind) -> Self {
         match k {
             ast::TyKind::Basic(tok) => Self::Basic(tok.raw.clone()),
-            ast::TyKind::Ref(ty, _) => Self::Ref(Box::new((&ty.kind).into())),
+            ast::TyKind::Ptr(ty) => Self::Ptr(Box::new((&ty.kind).into())),
         }
     }
 }
