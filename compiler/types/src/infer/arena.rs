@@ -63,7 +63,11 @@ impl<'a> InferTyArena<'a> {
         self.alloc(InferTyKind::Fun(FunTy { arg_tys, ret_ty }))
     }
 
-    pub fn alloc_ref(&'a self, elem: &'a InferTy<'a>) -> &'a InferTy<'a> {
-        self.alloc(InferTyKind::Ref(elem))
+    pub fn alloc_ref(&'a self, ty: &'a InferTy<'a>) -> &'a InferTy<'a> {
+        self.alloc(InferTyKind::Ref(ty.prune()))
+    }
+
+    pub fn alloc_deref(&'a self, ty: &'a InferTy<'a>) -> &'a InferTy<'a> {
+        self.alloc(InferTyKind::Deref(ty.prune()))
     }
 }

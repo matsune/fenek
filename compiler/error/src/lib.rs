@@ -84,6 +84,8 @@ pub enum TypeError {
     ConflictTypes(String, String),
     #[error("unresolved type")]
     UnresolvedType,
+    #[error("dereferencing non-pointer type")]
+    DerefNonPtrType,
 }
 
 #[derive(Error, Debug)]

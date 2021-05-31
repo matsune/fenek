@@ -56,10 +56,21 @@ impl<'a> Solver<'a> {
                 self.arena.alloc_fun(arg_tys, l.ret_ty)
             }
 
-            // Ref can be Ref which has same element type
             (Ref(a), Ref(b)) => {
                 self.bind(a, b)?;
                 self.arena.alloc_ref(a)
+            }
+            (Deref(a), Deref(b)) => {
+                self.bind(a, b)?;
+                self.arena.alloc_deref(a)
+            }
+            (Deref(a), _) => {
+                self.bind(a, self.arena.alloc_ref(b))?;
+                b
+            }
+            (_, Deref(b)) => {
+                self.bind(b, self.arena.alloc_ref(a))?;
+                a
             }
 
             (a_kind, b_kind) if a_kind == b_kind => a,
@@ -113,6 +124,13 @@ impl<'a> Solver<'a> {
                 Type::Fun(FunType::new(arg_tys, Box::new(ret_ty)))
             }
             InferTyKind::Ref(ty) => Type::Ptr(Box::new(self.solve_type(&ty)?)),
+            InferTyKind::Deref(ty) => {
+                let ty = self.solve_type(ty)?;
+                if !ty.is_ptr() {
+                    return Err(TypeError::DerefNonPtrType);
+                }
+                ty.elem_ty().unwrap().clone()
+            }
         };
         Ok(final_ty)
     }

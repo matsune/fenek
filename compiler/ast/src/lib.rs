@@ -471,6 +471,8 @@ pub enum UnOpKind {
     Not,
     // &
     Ref,
+    // *
+    Deref,
 }
 
 impl TryFrom<token::TokenKind> for UnOpKind {
@@ -481,6 +483,7 @@ impl TryFrom<token::TokenKind> for UnOpKind {
             token::TokenKind::Minus => Self::Neg,
             token::TokenKind::Not => Self::Not,
             token::TokenKind::And => Self::Ref,
+            token::TokenKind::Star => Self::Deref,
             _ => return Err("unknown unary op"),
         };
         Ok(kind)

@@ -37,10 +37,18 @@ impl<'a> InferTy<'a> {
 
     /// Get the most tip node from this node.
     pub fn prune(&'a self) -> &'a InferTy<'a> {
-        self.next
+        let pruned = self
+            .next
             .get()
             .map(|to_node| to_node.prune())
-            .unwrap_or(self)
+            .unwrap_or(self);
+        match pruned.kind {
+            InferTyKind::Deref(ty) if ty.kind.is_ref() => match ty.kind {
+                InferTyKind::Ref(ty) => ty,
+                _ => unreachable!(),
+            },
+            _ => pruned,
+        }
     }
 
     // returns dereferenced type if self is Ref
@@ -63,6 +71,7 @@ pub enum InferTyKind<'a> {
     Void,
     Fun(FunTy<'a>),
     Ref(&'a InferTy<'a>),
+    Deref(&'a InferTy<'a>),
 }
 
 impl<'a> PartialEq for InferTyKind<'a> {
@@ -82,6 +91,7 @@ impl<'a> PartialEq for InferTyKind<'a> {
                 fl_arg_tys == fr_arg_tys && fl.ret_ty.kind == fr.ret_ty.kind
             }
             (Ref(l), Ref(r)) => l.kind == r.kind,
+            (Deref(l), Deref(r)) => l.kind == r.kind,
             _ => false,
         }
     }
@@ -101,6 +111,10 @@ impl<'a> InferTyKind<'a> {
 
     pub fn is_var(&self) -> bool {
         !self.is_fun()
+    }
+
+    pub fn is_ref(&self) -> bool {
+        matches!(self, Self::Ref(_))
     }
 
     // types that can store in variable
@@ -129,6 +143,7 @@ impl<'a> ToString for InferTyKind<'a> {
                 fun.ret_ty.kind.to_string()
             ),
             Self::Ref(k) => format!("&{}", k.kind.to_string()),
+            Self::Deref(k) => format!("*{}", k.kind.to_string()),
         }
     }
 }

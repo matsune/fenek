@@ -345,6 +345,7 @@ pub enum UnOpKind {
     Minus,
     Not,
     Ref,
+    Deref,
 }
 
 impl Serialize for UnOpKind {
@@ -356,6 +357,7 @@ impl Serialize for UnOpKind {
             Self::Minus => "-",
             Self::Not => "!",
             Self::Ref => "&",
+            Self::Deref => "*",
         })
     }
 }
@@ -366,6 +368,7 @@ impl From<ast::UnOpKind> for UnOpKind {
             ast::UnOpKind::Neg => Self::Minus,
             ast::UnOpKind::Not => Self::Not,
             ast::UnOpKind::Ref => Self::Ref,
+            ast::UnOpKind::Deref => Self::Deref,
         }
     }
 }
