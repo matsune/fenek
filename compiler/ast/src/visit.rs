@@ -4,6 +4,7 @@ use pos::Offset;
 pub enum Node<'a> {
     Fun(&'a Fun),
     FunArg(&'a FunArg),
+    RetTy(&'a RetTy),
     Ty(&'a Ty),
     Block(&'a Block),
     Stmt(&'a Stmt),
@@ -22,6 +23,7 @@ impl<'a> Node<'a> {
         match self {
             Self::Fun(fun) => fun.name.offset,
             Self::FunArg(arg) => arg.name.offset,
+            Self::RetTy(ty) => ty.offset(),
             Self::Ty(ty) => ty.offset(),
             Self::Block(block) => block.offset(),
             Self::Stmt(stmt) => stmt.offset(),
@@ -54,7 +56,10 @@ pub fn visit_fun<'a>(fun: &'a Fun, id: NodeId) -> Option<Node<'a>> {
     return_if_some!(visit_fun_args(&fun.args, id));
 
     if let Some(ret_ty) = &fun.ret_ty {
-        return_if_some!(visit_ty(&ret_ty, id));
+        if ret_ty.id == id {
+            return Some(Node::RetTy(ret_ty));
+        }
+        return_if_some!(visit_ty(&ret_ty.ty, id));
     }
 
     visit_block(&fun.block, id)

@@ -16,11 +16,30 @@ impl Module {
     }
 }
 
+pub struct RetTy {
+    pub id: NodeId,
+    pub keyword: Option<token::Token>,
+    pub ty: Ty,
+}
+
+impl RetTy {
+    pub fn new(id: NodeId, keyword: Option<token::Token>, ty: Ty) -> Self {
+        Self { id, keyword, ty }
+    }
+
+    pub fn offset(&self) -> Offset {
+        self.keyword
+            .as_ref()
+            .map(|k| k.offset)
+            .unwrap_or_else(|| self.ty.offset())
+    }
+}
+
 pub struct Fun {
     pub id: NodeId,
     pub name: token::Token,
     pub args: FunArgs,
-    pub ret_ty: Option<Ty>,
+    pub ret_ty: Option<RetTy>,
     pub block: Block,
 }
 
@@ -29,7 +48,7 @@ impl Fun {
         id: NodeId,
         name: token::Token,
         args: FunArgs,
-        ret_ty: Option<Ty>,
+        ret_ty: Option<RetTy>,
         block: Block,
     ) -> Self {
         Self {

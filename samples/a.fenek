@@ -1,10 +1,10 @@
 fun get_ref_ref(a: i32**) {
-  var b = a;
+  mut b = a;
   **b = 21;
   ret;
 }
 
-fun get_ref(a: i32*) -> i32* {
+fun get_ref(mut a: i32*) -> mut i32* {
   *a = 3;
   ret a;
 }
@@ -13,20 +13,20 @@ fun get_val(a: i32) {
 }
 
 fun main() -> i32 {
-  var a = 10;   
+  mut a = 10;   
   *(&a) = 3;
-  var b = &a; 
+  mut b = &a; 
   *b = 11;    
-  var c = b;  
+  mut c = b;  
   *c = 12;    
-  var d = *c; 
+  mut d = *c; 
   get_ref(b); 
   get_val(*b);
   get_ref(&d);
   get_val(d); 
 
-  var e = &a;   
-  var f = &e;   
+  mut e = &a;   
+  mut f = &e;   
   f = &b;       
   get_ref(*f);  
   get_ref_ref(f);

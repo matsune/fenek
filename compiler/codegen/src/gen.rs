@@ -144,10 +144,16 @@ impl<'ctx> Codegen<'ctx> {
             .iter()
             .map(|arg_ty| llvm_basic_ty(&self.context, arg_ty))
             .collect();
-        let fn_type = self
-            .get_basic_type(ret_ty)
-            .unwrap()
-            .fn_type(&param_types, false);
+        let fn_type = match self.get_any_type(ret_ty).unwrap() {
+            AnyTypeEnum::VoidType(ty) => ty.fn_type(&param_types, false),
+            AnyTypeEnum::FloatType(ty) => ty.fn_type(&param_types, false),
+            AnyTypeEnum::IntType(ty) => ty.fn_type(&param_types, false),
+            AnyTypeEnum::PointerType(ty) => ty.fn_type(&param_types, false),
+            AnyTypeEnum::StructType(ty) => ty.fn_type(&param_types, false),
+            AnyTypeEnum::VectorType(ty) => ty.fn_type(&param_types, false),
+            AnyTypeEnum::ArrayType(ty) => ty.fn_type(&param_types, false),
+            AnyTypeEnum::FunctionType(ty) => ty,
+        };
         self.module.add_function(name, fn_type, None)
     }
 

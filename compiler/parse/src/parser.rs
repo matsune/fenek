@@ -127,7 +127,7 @@ impl<'src> Parser<'src> {
             self.bump_if_kind(token::TokenKind::Arrow)
                 .ok_or_else(|| self.expected_err("->"))?;
             self.skip_spaces();
-            Some(self.parse_ty()?)
+            Some(self.parse_ret_ty()?)
         };
         self.skip_spaces();
 
@@ -150,7 +150,7 @@ impl<'src> Parser<'src> {
             let keyword = self.bump_if(|tok| {
                 matches!(
                     tok.try_as_keyword(),
-                    Some(token::Keyword::Var) | Some(token::Keyword::Let)
+                    Some(token::Keyword::Mut) | Some(token::Keyword::Let)
                 )
             });
             self.skip_spaces();
@@ -174,6 +174,18 @@ impl<'src> Parser<'src> {
         self.bump_if_kind(token::TokenKind::RParen)
             .ok_or_else(|| self.expected_err(")"))?;
         Ok(args)
+    }
+
+    fn parse_ret_ty(&mut self) -> Result<RetTy> {
+        let keyword = self.bump_if(|tok| {
+            matches!(
+                tok.try_as_keyword(),
+                Some(token::Keyword::Mut) | Some(token::Keyword::Let)
+            )
+        });
+        self.skip_spaces();
+        let ty = self.parse_ty()?;
+        Ok(RetTy::new(self.gen_id(), keyword, ty))
     }
 
     fn parse_ty(&mut self) -> Result<Ty> {
@@ -265,7 +277,7 @@ impl<'src> Parser<'src> {
             }
             token::TokenKind::Ident if tok.is_keyword() => match tok.try_as_keyword().unwrap() {
                 token::Keyword::Ret => self.parse_ret()?,
-                token::Keyword::Var | token::Keyword::Let => self.parse_var_decl()?,
+                token::Keyword::Mut | token::Keyword::Let => self.parse_var_decl()?,
                 token::Keyword::Fun => {
                     return Err(CompileError::new(
                         self.src.pos_from_offset(tok.offset),

@@ -1,15 +1,16 @@
-fun a(var n1: i8*, let n2: i8*, n3: i8*) -> i8* {
+fun a(mut n1: i8*, let n2: i8*, n3: i8*) -> mut i8* {
   *n1 = 100;
-  /* *n2 = 100; */
-  /* *n3 = 100; */
+  /// *n2 = 100;
+  /// *n3 = 100;
+  /// ret n2;
   ret n1;
 }
 
 fun main() -> i8 {
-  var n1 = 20;
-  /* let n1 = 20; */
+  mut n1 = 20;
+  /// let n1 = 20;
   let n2 = 20;
-  var n3 = 20;
+  mut n3 = 20;
   let nn = a(&n1, &n2, &n3);
   ret *nn;
 }

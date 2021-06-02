@@ -16,11 +16,26 @@ impl From<&ast::Module> for Module {
 }
 
 #[derive(Serialize)]
+pub struct RetTy {
+    keyword: Option<String>,
+    ty: Ty,
+}
+
+impl From<&ast::RetTy> for RetTy {
+    fn from(k: &ast::RetTy) -> Self {
+        Self {
+            keyword: k.keyword.as_ref().map(|k| k.raw.clone()),
+            ty: Ty::from(&k.ty),
+        }
+    }
+}
+
+#[derive(Serialize)]
 pub struct Fun {
     id: ast::NodeId,
     name: String,
     args: FunArgs,
-    ret_ty: Option<Ty>,
+    ret_ty: Option<RetTy>,
     block: Block,
 }
 

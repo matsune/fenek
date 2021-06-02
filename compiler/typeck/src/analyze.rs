@@ -92,7 +92,7 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
             arg_muts.push(
                 arg.keyword
                     .as_ref()
-                    .map(|tok| matches!(tok.try_as_keyword().unwrap(), token::Keyword::Var))
+                    .map(|tok| matches!(tok.try_as_keyword().unwrap(), token::Keyword::Mut))
                     .unwrap_or(false),
             );
 
@@ -122,11 +122,11 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
 
         let ret_ty = match &fun.ret_ty {
             Some(ret_ty) => {
-                let ret_ty_id = ret_ty.id;
-                let ty = self.get_type_from_ty(&ret_ty).ok_or_else(|| {
+                let ret_ty_id = ret_ty.ty.id;
+                let ty = self.get_type_from_ty(&ret_ty.ty).ok_or_else(|| {
                     compile_error(
                         self.src.pos_from_offset(ret_ty.offset()),
-                        TypeCkError::UndefinedType(ret_ty.to_string()),
+                        TypeCkError::UndefinedType(ret_ty.ty.to_string()),
                     )
                 })?;
                 self.node_ty_map.insert(ret_ty_id, ty);
@@ -150,7 +150,7 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
             let is_mut = arg
                 .keyword
                 .as_ref()
-                .map(|tok| matches!(tok.try_as_keyword().unwrap(), token::Keyword::Var))
+                .map(|tok| matches!(tok.try_as_keyword().unwrap(), token::Keyword::Mut))
                 .unwrap_or(false);
             let def = self.def_arena.alloc(ty, DefKind::Var { is_mut });
             self.scopes.insert(arg.name.raw.clone(), def);
@@ -217,7 +217,7 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
                 let def = self.def_arena.alloc(
                     init_ty,
                     DefKind::Var {
-                        is_mut: matches!(keyword.try_as_keyword().unwrap(), token::Keyword::Var),
+                        is_mut: matches!(keyword.try_as_keyword().unwrap(), token::Keyword::Mut),
                     },
                 );
                 self.scopes.insert(name.raw.clone(), def);

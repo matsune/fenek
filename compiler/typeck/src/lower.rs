@@ -94,7 +94,8 @@ struct Lower<'src> {
     src: &'src SrcFile,
     ty_map: NodeMap<ty::Type>,
     node_def_map: NodeMap<Def<ty::Type>>,
-    current_fun_ret_ty: Option<ty::Type>,
+    // (is_mut, type)
+    current_fun_ret_ty: Option<(bool, ty::Type)>,
 }
 
 impl<'src> Lower<'src> {
@@ -128,14 +129,19 @@ impl<'src> Lower<'src> {
         let id = fun.id;
         let def = self.node_def_map.get(&id).unwrap();
         let ret_ty = match &fun.ret_ty {
-            Some(ty) => {
-                let ret_ty = self.ty_map.get(&ty.id).unwrap();
-                if ret_ty.is_fun() {
-                    return Err((ty.id, TypeCkError::InvalidReturnType));
+            Some(ret_ty) => {
+                let is_mut = ret_ty
+                    .keyword
+                    .as_ref()
+                    .map(|tok| matches!(tok.try_as_keyword().unwrap(), token::Keyword::Mut))
+                    .unwrap_or(false);
+                let ty = self.ty_map.get(&ret_ty.ty.id).unwrap();
+                if ty.is_fun() {
+                    return Err((ret_ty.id, TypeCkError::InvalidReturnType));
                 }
-                ret_ty.clone()
+                (is_mut, ty.clone())
             }
-            None => ty::Type::Void,
+            None => (false, ty::Type::Void),
         };
         self.current_fun_ret_ty = Some(ret_ty);
         let mut args = Vec::new();
@@ -189,6 +195,12 @@ impl<'src> Lower<'src> {
                     Some(expr) => Some(self.lower_expr(&expr)?),
                     None => None,
                 };
+                if self.current_fun_ret_ty.as_ref().unwrap().0
+                    && !expr.as_ref().map(|e| e.is_mutable()).unwrap_or(false)
+                {
+                    // check mutability
+                    return Err((id, TypeCkError::RequiresMutableVar));
+                }
                 hir::Ret::new(id, expr).into()
             }
             ast::StmtKind::Assign(left, right) => {
@@ -217,7 +229,7 @@ impl<'src> Lower<'src> {
             (true, true) => {}
             (true, false) => {
                 // ret_ty should be void
-                if !self.current_fun_ret_ty.as_ref().unwrap().is_void() {
+                if !self.current_fun_ret_ty.as_ref().unwrap().1.is_void() {
                     return Err((id, TypeCkError::MustBeRetStmt));
                 }
             }
