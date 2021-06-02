@@ -2,14 +2,14 @@ use std::cell::Cell;
 
 pub type InferTyID = usize;
 
-/// `InferTy` represents a temporary type during inferencing
-/// actual type by analyzer. Each instances will be allocated
-/// and live under lifetime of arena.
+/// `InferTy` represents a temporary type before resolving
+/// actual type by solver. Every instances will be free when
+/// `InferTyArena` drops.
 ///
-/// Each connected node has a reference from and to next node.
-/// Connection means that those nodes will be same type after
-/// resolving type inference, so all nodes of a tree must have
-/// same type.
+/// Each instance is a connected node  which has a reference
+/// to a next node. Connection means that those nodes will be
+/// the same type after resolving type inference, so all nodes
+/// of the tree must have the same type.
 pub struct InferTy<'a> {
     pub id: InferTyID,
     pub kind: InferTyKind<'a>,
@@ -35,7 +35,7 @@ impl<'a> InferTy<'a> {
         }
     }
 
-    /// Get the most tip node from this node.
+    /// get the most tip node from this node.
     pub fn prune(&'a self) -> &'a InferTy<'a> {
         self.next
             .get()
@@ -43,7 +43,7 @@ impl<'a> InferTy<'a> {
             .unwrap_or(self)
     }
 
-    // returns dereferenced type if self is Ref
+    /// returns dereferenced type if self is Ref
     pub fn elem_ty(&'a self) -> Option<&'a InferTy<'a>> {
         match self.kind {
             InferTyKind::Ref(ty) => Some(ty),
@@ -52,10 +52,18 @@ impl<'a> InferTy<'a> {
     }
 
     pub fn set_next(&'a self, next: &'a InferTy<'a>) {
-        // prevent to retain self
-        if next.id != self.id {
-            self.next.set(Some(next))
+        let mut pruned = self;
+        loop {
+            // prevent to add duplicated node
+            if pruned.id == next.id {
+                return;
+            }
+            match pruned.next.get() {
+                Some(n) => pruned = n,
+                None => break,
+            }
         }
+        self.next.set(Some(next));
     }
 }
 

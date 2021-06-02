@@ -343,7 +343,10 @@ impl RefExpr {
 impl DerefExpr {
     pub fn get_type(&self) -> ty::Type {
         let ty = self.expr.get_type();
-        ty.elem_ty().unwrap_or(&ty).clone()
+        match ty {
+            ty::Type::Ptr(ty) => *ty,
+            _ => panic!("non-pointer type"),
+        }
     }
 }
 

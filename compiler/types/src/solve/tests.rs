@@ -51,7 +51,9 @@ fn test_solve() {
     macro_rules! test_error {
         ($($v:expr),*) => {
             $(
-                assert!(solver.solve_type($v).is_err());
+                let res = solver.solve_type($v);
+                assert!(res.is_err());
+                println!("{}", res.err().unwrap());
             )*
         }
     }

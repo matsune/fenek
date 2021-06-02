@@ -1,6 +1,7 @@
 use super::infer::*;
 use super::ty::*;
 use error::TypeError;
+use std::string::ToString;
 
 #[cfg(test)]
 mod tests;
@@ -52,7 +53,7 @@ impl<'a> Solver<'a> {
                 let mut arg_tys = Vec::with_capacity(l.arg_tys.len());
                 for i in 0..l.arg_tys.len() {
                     let l_ty = l.arg_tys[i];
-                    let r_ty = l.arg_tys[i];
+                    let r_ty = r.arg_tys[i];
                     arg_tys.push(self.bind(l_ty, r_ty)?);
                 }
                 self.arena
@@ -61,6 +62,8 @@ impl<'a> Solver<'a> {
 
             (Ref(a), Ref(b)) => self.arena.alloc_ref(self.bind(a, b)?),
             (Deref(a), Deref(b)) => self.arena.alloc_deref(self.bind(a, b)?),
+
+            // derefed a is b, so a is ref of b
             (Deref(a), _) => {
                 self.bind(a, self.arena.alloc_ref(b))?;
                 b
@@ -79,8 +82,7 @@ impl<'a> Solver<'a> {
                 ));
             }
         };
-
-        // associate types to make type tree
+        // associate types to make a same type tree
         a.set_next(unified_ty);
         b.set_next(unified_ty);
         Ok(unified_ty)
@@ -118,10 +120,10 @@ impl<'a> Solver<'a> {
             InferTyKind::Ref(ty) => Type::Ptr(Box::new(self.solve_type(&ty)?)),
             InferTyKind::Deref(ty) => {
                 let ty = self.solve_type(ty)?;
-                if !ty.is_ptr() {
-                    return Err(TypeError::DerefNonPtrType);
+                match ty {
+                    Type::Ptr(ty) => *ty,
+                    _ => return Err(TypeError::DerefNonPtrType(ty.to_string())),
                 }
-                ty.elem_ty().unwrap().clone()
             }
         };
         Ok(final_ty)

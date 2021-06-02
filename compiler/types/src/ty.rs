@@ -70,12 +70,12 @@ impl Type {
         }
     }
 
-    pub fn elem_ty(&self) -> Option<&Type> {
-        match self {
-            Self::Ptr(ty) => Some(ty),
-            _ => None,
-        }
-    }
+    // pub fn elem_ty(&self) -> Option<&Type> {
+    //     match self {
+    //         Self::Ptr(ty) => Some(ty),
+    //         _ => None,
+    //     }
+    // }
 }
 
 impl FunType {
