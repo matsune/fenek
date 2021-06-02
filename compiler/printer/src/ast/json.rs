@@ -41,6 +41,7 @@ type FunArgs = Vec<FunArg>;
 #[derive(Serialize)]
 struct FunArg {
     id: ast::NodeId,
+    keyword: Option<String>,
     name: String,
     ty: Ty,
 }
@@ -49,6 +50,7 @@ impl From<&ast::FunArg> for FunArg {
     fn from(k: &ast::FunArg) -> Self {
         Self {
             id: k.id,
+            keyword: k.keyword.as_ref().map(|k| k.raw.clone()),
             name: k.name.raw.clone(),
             ty: Ty::from(&k.ty),
         }

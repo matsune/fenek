@@ -46,13 +46,19 @@ pub type FunArgs = Vec<FunArg>;
 
 pub struct FunArg {
     pub id: NodeId,
+    pub keyword: Option<token::Token>,
     pub name: token::Token,
     pub ty: Ty,
 }
 
 impl FunArg {
-    pub fn new(id: NodeId, name: token::Token, ty: Ty) -> Self {
-        Self { id, name, ty }
+    pub fn new(id: NodeId, keyword: Option<token::Token>, name: token::Token, ty: Ty) -> Self {
+        Self {
+            id,
+            keyword,
+            name,
+            ty,
+        }
     }
 }
 

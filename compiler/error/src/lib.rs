@@ -130,4 +130,6 @@ pub enum TypeCkError {
     AssigningReadonly,
     #[error("non basic type variable")]
     NonBasicVar,
+    #[error("requires mutable variable")]
+    RequiresMutableVar,
 }

@@ -147,6 +147,13 @@ impl<'src> Parser<'src> {
         }
 
         loop {
+            let keyword = self.bump_if(|tok| {
+                matches!(
+                    tok.try_as_keyword(),
+                    Some(token::Keyword::Var) | Some(token::Keyword::Let)
+                )
+            });
+            self.skip_spaces();
             let arg_name = self
                 .bump_if(|tok| tok.is_ident() && !tok.is_keyword())
                 .ok_or_else(|| self.compile_error(ParseError::InvalidArgName))?;
@@ -155,7 +162,7 @@ impl<'src> Parser<'src> {
                 .ok_or_else(|| self.expected_err(":"))?;
             self.skip_spaces();
             let arg_ty = self.parse_ty()?;
-            args.push(FunArg::new(self.gen_id(), arg_name, arg_ty));
+            args.push(FunArg::new(self.gen_id(), keyword, arg_name, arg_ty));
             self.skip_spaces();
             if self.bump_if_kind(token::TokenKind::Comma).is_some() {
                 // has next arg

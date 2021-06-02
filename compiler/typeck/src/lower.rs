@@ -114,23 +114,24 @@ impl<'src> Lower<'src> {
     fn lower_module(&mut self, module: &ast::Module) -> Result<hir::Module> {
         let mut funs = Vec::new();
         for fun in &module.funs {
-            funs.push(self.lower_fun(&fun)?);
+            funs.push(self.lower_fun(&fun).map_err(|(id, err)| {
+                let offset = ast::visit::visit_module(&module, id)
+                    .unwrap_or_else(|| panic!("fun {:?} error on id {:?}", fun.id, id))
+                    .offset();
+                compile_error(self.src.pos_from_offset(offset), err)
+            })?);
         }
         Ok(hir::Module::new(funs))
     }
 
-    fn lower_fun(&mut self, fun: &ast::Fun) -> Result<hir::Fun> {
+    fn lower_fun(&mut self, fun: &ast::Fun) -> LowerResult<hir::Fun> {
         let id = fun.id;
         let def = self.node_def_map.get(&id).unwrap();
         let ret_ty = match &fun.ret_ty {
             Some(ty) => {
                 let ret_ty = self.ty_map.get(&ty.id).unwrap();
                 if ret_ty.is_fun() {
-                    let offset = ast::visit::visit_fun(&fun, ty.id).unwrap().offset();
-                    return Err(compile_error(
-                        self.src.pos_from_offset(offset),
-                        TypeCkError::InvalidReturnType,
-                    ));
+                    return Err((ty.id, TypeCkError::InvalidReturnType));
                 }
                 ret_ty.clone()
             }
@@ -142,10 +143,7 @@ impl<'src> Lower<'src> {
             let def = self.node_def_map.get(&arg.id).unwrap();
             args.push(hir::Path::new(arg.name.raw.clone(), def.clone()));
         }
-        let block = self.lower_block(&fun.block).map_err(|(id, err)| {
-            let offset = ast::visit::visit_fun(&fun, id).unwrap().offset();
-            compile_error(self.src.pos_from_offset(offset), err)
-        })?;
+        let block = self.lower_block(&fun.block)?;
         Ok(hir::Fun::new(
             id,
             fun.name.raw.clone(),
@@ -381,9 +379,14 @@ impl<'src> Lower<'src> {
             ast::ExprKind::Call(path, args) => {
                 let path = path.raw.clone();
                 let def = self.node_def_map.get(&expr.id).unwrap();
+                let arg_muts = def.as_fn();
                 let mut _args = Vec::new();
-                for arg in args {
-                    _args.push(self.lower_expr(&arg)?);
+                for (idx, arg) in args.iter().enumerate() {
+                    let expr = self.lower_expr(&arg)?;
+                    if arg_muts[idx] && !expr.is_mutable() {
+                        return Err((arg.id, TypeCkError::RequiresMutableVar));
+                    }
+                    _args.push(expr);
                 }
                 Ok(hir::Call::new(path, _args, def.clone()).into())
             }

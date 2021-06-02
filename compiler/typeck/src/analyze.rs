@@ -85,9 +85,17 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
     }
 
     fn make_fun_def(&mut self, fun: &ast::Fun) -> Result<&'lower Def<&'lower InferTy<'lower>>> {
+        let mut arg_muts = Vec::new();
         let mut arg_tys = Vec::new();
         let mut arg_names = HashSet::new();
         for arg in &fun.args {
+            arg_muts.push(
+                arg.keyword
+                    .as_ref()
+                    .map(|tok| matches!(tok.try_as_keyword().unwrap(), token::Keyword::Var))
+                    .unwrap_or(false),
+            );
+
             let arg_name = &arg.name.raw;
             if arg_names.contains(arg_name) {
                 return Err(compile_error(
@@ -127,9 +135,10 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
             None => self.solver.arena.alloc_void(),
         };
 
-        Ok(self
-            .def_arena
-            .alloc(self.solver.arena.alloc_fun(arg_tys, ret_ty), DefKind::Fn))
+        Ok(self.def_arena.alloc(
+            self.solver.arena.alloc_fun(arg_tys, ret_ty),
+            DefKind::Fn(arg_muts),
+        ))
     }
 
     fn analyze_fun(&mut self, fun: &ast::Fun) -> Result<()> {
@@ -138,7 +147,12 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
 
         for (idx, arg) in fun.args.iter().enumerate() {
             let ty = fun_def.ty.kind.as_fun().arg_tys[idx];
-            let def = self.def_arena.alloc(ty, DefKind::Var { is_mut: true });
+            let is_mut = arg
+                .keyword
+                .as_ref()
+                .map(|tok| matches!(tok.try_as_keyword().unwrap(), token::Keyword::Var))
+                .unwrap_or(false);
+            let def = self.def_arena.alloc(ty, DefKind::Var { is_mut });
             self.scopes.insert(arg.name.raw.clone(), def);
             self.node_def_map.insert(arg.id, def);
         }

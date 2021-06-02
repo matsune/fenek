@@ -142,6 +142,13 @@ fn visit_expr<'a>(expr: &'a Expr, id: NodeId) -> Option<Node<'a>> {
             visit_expr(&rhs, id)
         }
         ExprKind::Unary(_, expr) => visit_expr(&expr, id),
-        _ => None,
+        ExprKind::Path(_) => None,
+        ExprKind::Call(_, exprs) => {
+            for expr in exprs {
+                return_if_some!(visit_expr(expr, id));
+            }
+            None
+        }
+        ExprKind::Lit(_) => None,
     }
 }
