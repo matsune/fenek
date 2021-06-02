@@ -126,6 +126,8 @@ pub enum TypeCkError {
     InvalidFloat(String),
     #[error("lvalue required")]
     LvalueRequired,
-    #[error("cannot decl void type variable")]
-    VoidTypeVar,
+    #[error("assigning readonly")]
+    AssigningReadonly,
+    #[error("non basic type variable")]
+    NonBasicVar,
 }

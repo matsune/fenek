@@ -16,11 +16,15 @@ impl<'a> Solver<'a> {
 
     /// Compare 2 types and bind them as same type if they are
     /// compatible infer types.
-    pub fn bind(&self, a: &'a InferTy<'a>, b: &'a InferTy<'a>) -> Result<(), TypeError> {
+    pub fn bind(
+        &self,
+        a: &'a InferTy<'a>,
+        b: &'a InferTy<'a>,
+    ) -> Result<&'a InferTy<'a>, TypeError> {
         let a = a.prune();
         let b = b.prune();
         if a.id == b.id {
-            return Ok(());
+            return Ok(a);
         }
 
         use InferTyKind::*;
@@ -49,21 +53,14 @@ impl<'a> Solver<'a> {
                 for i in 0..l.arg_tys.len() {
                     let l_ty = l.arg_tys[i];
                     let r_ty = l.arg_tys[i];
-                    self.bind(l_ty, r_ty)?;
-                    arg_tys.push(l_ty);
+                    arg_tys.push(self.bind(l_ty, r_ty)?);
                 }
-                self.bind(l.ret_ty, r.ret_ty)?;
-                self.arena.alloc_fun(arg_tys, l.ret_ty)
+                self.arena
+                    .alloc_fun(arg_tys, self.bind(l.ret_ty, r.ret_ty)?)
             }
 
-            (Ref(a), Ref(b)) => {
-                self.bind(a, b)?;
-                self.arena.alloc_ref(a)
-            }
-            (Deref(a), Deref(b)) => {
-                self.bind(a, b)?;
-                self.arena.alloc_deref(a)
-            }
+            (Ref(a), Ref(b)) => self.arena.alloc_ref(self.bind(a, b)?),
+            (Deref(a), Deref(b)) => self.arena.alloc_deref(self.bind(a, b)?),
             (Deref(a), _) => {
                 self.bind(a, self.arena.alloc_ref(b))?;
                 b
@@ -84,14 +81,9 @@ impl<'a> Solver<'a> {
         };
 
         // associate types to make type tree
-
-        if unified_ty.id != a.id {
-            a.next.set(Some(unified_ty));
-        }
-        if unified_ty.id != b.id {
-            b.next.set(Some(unified_ty));
-        }
-        Ok(())
+        a.set_next(unified_ty);
+        b.set_next(unified_ty);
+        Ok(unified_ty)
     }
 
     pub fn solve_type(&self, ty: &'a InferTy<'a>) -> Result<Type, TypeError> {

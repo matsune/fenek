@@ -13,7 +13,7 @@ pub type InferTyID = usize;
 pub struct InferTy<'a> {
     pub id: InferTyID,
     pub kind: InferTyKind<'a>,
-    pub next: Cell<Option<&'a InferTy<'a>>>,
+    next: Cell<Option<&'a InferTy<'a>>>,
 }
 
 impl<'a> std::fmt::Debug for InferTy<'a> {
@@ -48,6 +48,13 @@ impl<'a> InferTy<'a> {
         match self.kind {
             InferTyKind::Ref(ty) => Some(ty),
             _ => None,
+        }
+    }
+
+    pub fn set_next(&'a self, next: &'a InferTy<'a>) {
+        // prevent to retain self
+        if next.id != self.id {
+            self.next.set(Some(next))
         }
     }
 }

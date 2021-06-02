@@ -162,6 +162,7 @@ impl std::fmt::Display for TokenKind {
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Keyword {
     Var,
+    Let,
     Ret,
     Fun,
     If,
@@ -172,6 +173,7 @@ impl Keyword {
     pub fn try_from(s: &str) -> Option<Self> {
         match s {
             "var" => Some(Self::Var),
+            "let" => Some(Self::Let),
             "ret" => Some(Self::Ret),
             "fun" => Some(Self::Fun),
             "if" => Some(Self::If),

@@ -78,7 +78,7 @@ pub fn lower(src: &SrcFile, module: ast::Module) -> Result<hir::Module> {
             let mut node_def_map = NodeMap::with_capacity(node_infer_def_map.len());
             for (node_id, def) in node_infer_def_map.iter() {
                 let ty = solver.solve_type(def.ty).unwrap();
-                node_def_map.insert(*node_id, Def::new(def.id, ty, false));
+                node_def_map.insert(*node_id, Def::new(def.id, ty, def.kind.clone()));
             }
 
             (node_ty_map, node_def_map)
@@ -123,7 +123,17 @@ impl<'src> Lower<'src> {
         let id = fun.id;
         let def = self.node_def_map.get(&id).unwrap();
         let ret_ty = match &fun.ret_ty {
-            Some(ty) => self.ty_map.get(&ty.id).unwrap().clone(),
+            Some(ty) => {
+                let ret_ty = self.ty_map.get(&ty.id).unwrap();
+                if ret_ty.is_fun() {
+                    let offset = ast::visit::visit_fun(&fun, ty.id).unwrap().offset();
+                    return Err(compile_error(
+                        self.src.pos_from_offset(offset),
+                        TypeCkError::InvalidReturnType,
+                    ));
+                }
+                ret_ty.clone()
+            }
             None => ty::Type::Void,
         };
         self.current_fun_ret_ty = Some(ret_ty);
@@ -171,8 +181,8 @@ impl<'src> Lower<'src> {
             } => {
                 let expr = self.lower_expr(&init)?;
                 let def = self.node_def_map.get(&id).unwrap();
-                if def.ty.is_void() {
-                    return Err((id, TypeCkError::VoidTypeVar));
+                if matches!(def.ty, ty::Type::Fun(_) | ty::Type::Void) {
+                    return Err((id, TypeCkError::NonBasicVar));
                 }
                 hir::VarDecl::new(id, name.clone(), expr, def.clone()).into()
             }
@@ -184,23 +194,12 @@ impl<'src> Lower<'src> {
                 hir::Ret::new(id, expr).into()
             }
             ast::StmtKind::Assign(left, right) => {
-                let l_ty = self.ty_map.get(&left.id).unwrap();
-                let r_ty = self.ty_map.get(&right.id).unwrap();
-                let is_normal = *r_ty == ty::Type::Ptr(Box::new(l_ty.clone()));
-                let left = if is_normal {
-                    match &left.kind {
-                        ast::ExprKind::Path(tok) => {
-                            let def = self.node_def_map.get(&left.id).unwrap();
-                            hir::Path::new(tok.raw.clone(), Def::new(def.id, def.ty.clone(), true))
-                                .into()
-                        }
-                        _ => unreachable!(),
-                    }
-                } else {
-                    self.lower_expr(&left)?
-                };
+                let left = self.lower_expr(&left)?;
                 if !left.is_lvalue() {
                     return Err((id, TypeCkError::LvalueRequired));
+                }
+                if !left.is_mutable() {
+                    return Err((id, TypeCkError::AssigningReadonly));
                 }
                 let right = self.lower_expr(&right)?;
                 hir::Assign::new(id, left, right).into()
@@ -372,8 +371,11 @@ impl<'src> Lower<'src> {
             ast::ExprKind::Lit(lit) => self.lower_lit(id, lit).map(|v| v.into()),
             ast::ExprKind::Path(tok) => {
                 let def = self.node_def_map.get(&expr.id).unwrap();
-                let expr =
-                    hir::Path::new(tok.raw.clone(), Def::new(def.id, def.ty.clone(), true)).into();
+                let expr = hir::Path::new(
+                    tok.raw.clone(),
+                    Def::new(def.id, def.ty.clone(), def.kind.clone()),
+                )
+                .into();
                 Ok(expr)
             }
             ast::ExprKind::Call(path, args) => {
@@ -448,9 +450,6 @@ impl<'src> Lower<'src> {
                             ast::UnOpKind::Deref => {
                                 if expr_ty.is_void() {
                                     return Err((id, TypeCkError::InvalidUnaryTypes));
-                                }
-                                if !expr.is_lvalue() {
-                                    return Err((id, TypeCkError::LvalueRequired));
                                 }
                                 Ok(hir::DerefExpr::new(id, expr).into())
                             }

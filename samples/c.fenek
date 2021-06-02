@@ -1,0 +1,10 @@
+fun a(n: i8*) -> i8* {
+  *n = 100;
+  ret n;
+}
+
+fun main() -> i8 {
+  let n = 20;
+  let nn = a(&n);
+  ret *nn;
+}

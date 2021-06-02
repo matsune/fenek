@@ -2,6 +2,7 @@ use super::arena::*;
 use crate::scope::*;
 use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
+use lex::token;
 use pos::{Pos, SrcFile};
 use std::collections::{HashMap, HashSet};
 use types::infer::*;
@@ -128,7 +129,7 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
 
         Ok(self
             .def_arena
-            .alloc(self.solver.arena.alloc_fun(arg_tys, ret_ty), false))
+            .alloc(self.solver.arena.alloc_fun(arg_tys, ret_ty), DefKind::Fn))
     }
 
     fn analyze_fun(&mut self, fun: &ast::Fun) -> Result<()> {
@@ -137,7 +138,7 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
 
         for (idx, arg) in fun.args.iter().enumerate() {
             let ty = fun_def.ty.kind.as_fun().arg_tys[idx];
-            let def = self.def_arena.alloc(ty, true);
+            let def = self.def_arena.alloc(ty, DefKind::Var { is_mut: true });
             self.scopes.insert(arg.name.raw.clone(), def);
             self.node_def_map.insert(arg.id, def);
         }
@@ -165,7 +166,7 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
                 self.analyze_expr(&expr)?;
             }
             ast::StmtKind::VarDecl {
-                keyword: _,
+                keyword,
                 name,
                 ty,
                 init,
@@ -199,7 +200,12 @@ impl<'src, 'lower> TyAnalyzer<'src, 'lower> {
                 self.solver.bind(var_ty, init_ty).map_err(|err| {
                     CompileError::new(self.src.pos_from_offset(name.offset), err.into())
                 })?;
-                let def = self.def_arena.alloc(init_ty, true);
+                let def = self.def_arena.alloc(
+                    init_ty,
+                    DefKind::Var {
+                        is_mut: matches!(keyword.try_as_keyword().unwrap(), token::Keyword::Var),
+                    },
+                );
                 self.scopes.insert(name.raw.clone(), def);
                 self.node_def_map.insert(stmt.id, def);
             }

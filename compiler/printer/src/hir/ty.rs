@@ -24,7 +24,7 @@ pub enum Type {
     Int(IntKind),
     Float(FloatKind),
     Bool,
-    String,
+    // String,
     Fun(FunType),
     Ptr(Box<Type>),
 }
@@ -36,7 +36,7 @@ impl From<&types::ty::Type> for Type {
             types::ty::Type::Int(kind) => Self::Int(kind.into()),
             types::ty::Type::Float(kind) => Self::Float(kind.into()),
             types::ty::Type::Bool => Self::Bool,
-            types::ty::Type::String => Self::String,
+            // types::ty::Type::String => Self::String,
             types::ty::Type::Fun(fun) => Self::Fun(fun.into()),
             types::ty::Type::Ptr(ty) => {
                 let ty: &types::ty::Type = &ty;
@@ -53,7 +53,7 @@ impl ToString for Type {
             Self::Int(k) => k.to_string(),
             Self::Float(k) => k.to_string(),
             Self::Bool => "bool".to_string(),
-            Self::String => "string".to_string(),
+            // Self::String => "string".to_string(),
             Self::Fun(fun) => fun.to_string(),
             Self::Ptr(ty) => format!("{}*", ty.to_string()),
         }

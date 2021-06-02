@@ -11,11 +11,25 @@ pub type DefId = usize;
 pub struct Def<Ty> {
     pub id: DefId,
     pub ty: Ty,
-    pub is_var: bool,
+    pub kind: DefKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum DefKind {
+    Var { is_mut: bool },
+    Fn,
 }
 
 impl<Ty> Def<Ty> {
-    pub fn new(id: DefId, ty: Ty, is_var: bool) -> Self {
-        Self { id, ty, is_var }
+    pub fn new(id: DefId, ty: Ty, kind: DefKind) -> Self {
+        Self { id, ty, kind }
+    }
+
+    pub fn is_var(&self) -> bool {
+        matches!(self.kind, DefKind::Var { is_mut: _ })
+    }
+
+    pub fn is_mutable(&self) -> bool {
+        matches!(self.kind, DefKind::Var { is_mut: true })
     }
 }

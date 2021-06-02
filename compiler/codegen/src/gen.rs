@@ -8,8 +8,9 @@ use inkwell::support::LLVMString;
 use inkwell::targets::{
     CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine,
 };
-use inkwell::types::BasicTypeEnum;
+use inkwell::types::{AnyTypeEnum, BasicType, BasicTypeEnum};
 use inkwell::values::FunctionValue;
+use inkwell::AddressSpace;
 use inkwell::OptimizationLevel;
 use std::collections::HashMap;
 use types::ty;
@@ -48,6 +49,65 @@ impl<'ctx> Codegen<'ctx> {
         }
     }
 
+    fn get_any_type(&self, ty: &ty::Type) -> Option<AnyTypeEnum<'ctx>> {
+        let any_type: AnyTypeEnum = match ty {
+            ty::Type::Int(int_ty) => match int_ty {
+                ty::IntType::I8 => self.context.i8_type(),
+                ty::IntType::I16 => self.context.i16_type(),
+                ty::IntType::I32 => self.context.i32_type(),
+                ty::IntType::I64 => self.context.i64_type(),
+            }
+            .into(),
+            ty::Type::Float(float_ty) => match float_ty {
+                ty::FloatType::F32 => self.context.f32_type(),
+                ty::FloatType::F64 => self.context.f64_type(),
+            }
+            .into(),
+            ty::Type::Bool => self.context.bool_type().into(),
+            ty::Type::Void => self.context.void_type().into(),
+            ty::Type::Ptr(ty) => match self.get_basic_type(ty)? {
+                BasicTypeEnum::ArrayType(ty) => ty.ptr_type(AddressSpace::Generic),
+                BasicTypeEnum::FloatType(ty) => ty.ptr_type(AddressSpace::Generic),
+                BasicTypeEnum::IntType(ty) => ty.ptr_type(AddressSpace::Generic),
+                BasicTypeEnum::PointerType(ty) => ty.ptr_type(AddressSpace::Generic),
+                BasicTypeEnum::StructType(ty) => ty.ptr_type(AddressSpace::Generic),
+                BasicTypeEnum::VectorType(ty) => ty.ptr_type(AddressSpace::Generic),
+            }
+            .into(),
+            _ => unimplemented!(),
+        };
+        Some(any_type)
+    }
+
+    fn get_basic_type(&self, ty: &ty::Type) -> Option<BasicTypeEnum<'ctx>> {
+        let basic_ty: BasicTypeEnum = match ty {
+            ty::Type::Int(int_ty) => match int_ty {
+                ty::IntType::I8 => self.context.i8_type(),
+                ty::IntType::I16 => self.context.i16_type(),
+                ty::IntType::I32 => self.context.i32_type(),
+                ty::IntType::I64 => self.context.i64_type(),
+            }
+            .into(),
+            ty::Type::Float(float_ty) => match float_ty {
+                ty::FloatType::F32 => self.context.f32_type(),
+                ty::FloatType::F64 => self.context.f64_type(),
+            }
+            .into(),
+            ty::Type::Bool => self.context.bool_type().into(),
+            ty::Type::Ptr(ty) => match self.get_basic_type(ty)? {
+                BasicTypeEnum::ArrayType(ty) => ty.ptr_type(AddressSpace::Generic),
+                BasicTypeEnum::FloatType(ty) => ty.ptr_type(AddressSpace::Generic),
+                BasicTypeEnum::IntType(ty) => ty.ptr_type(AddressSpace::Generic),
+                BasicTypeEnum::PointerType(ty) => ty.ptr_type(AddressSpace::Generic),
+                BasicTypeEnum::StructType(ty) => ty.ptr_type(AddressSpace::Generic),
+                BasicTypeEnum::VectorType(ty) => ty.ptr_type(AddressSpace::Generic),
+            }
+            .into(),
+            _ => return None,
+        };
+        Some(basic_ty)
+    }
+
     fn module_ctx(&self) -> ModuleCtx<'ctx, '_> {
         ModuleCtx {
             context: &self.context,
@@ -84,23 +144,10 @@ impl<'ctx> Codegen<'ctx> {
             .iter()
             .map(|arg_ty| llvm_basic_ty(&self.context, arg_ty))
             .collect();
-        let fn_type = match ret_ty {
-            ty::Type::Int(int_ty) => match int_ty {
-                ty::IntType::I8 => self.context.i8_type(),
-                ty::IntType::I16 => self.context.i16_type(),
-                ty::IntType::I32 => self.context.i32_type(),
-                ty::IntType::I64 => self.context.i64_type(),
-            }
-            .fn_type(&param_types, false),
-            ty::Type::Float(float_ty) => match float_ty {
-                ty::FloatType::F32 => self.context.f32_type(),
-                ty::FloatType::F64 => self.context.f64_type(),
-            }
-            .fn_type(&param_types, false),
-            ty::Type::Bool => self.context.bool_type().fn_type(&param_types, false),
-            ty::Type::Void => self.context.void_type().fn_type(&param_types, false),
-            _ => unimplemented!(),
-        };
+        let fn_type = self
+            .get_basic_type(ret_ty)
+            .unwrap()
+            .fn_type(&param_types, false);
         self.module.add_function(name, fn_type, None)
     }
 

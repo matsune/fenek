@@ -2,13 +2,13 @@ use std::string::ToString;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Type {
-    Void,
     Int(IntType),
     Float(FloatType),
     Bool,
-    String,
-    Fun(FunType),
+    // String,
     Ptr(Box<Type>),
+    Void,
+    Fun(FunType),
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -56,10 +56,6 @@ impl Type {
         matches!(self, Type::Ptr(_))
     }
 
-    pub fn is_var(&self) -> bool {
-        !self.is_fun()
-    }
-
     pub fn into_fun(self) -> FunType {
         match self {
             Self::Fun(f) => f,
@@ -95,7 +91,7 @@ impl ToString for Type {
             Self::Int(k) => k.to_string(),
             Self::Float(k) => k.to_string(),
             Self::Bool => "bool".to_string(),
-            Self::String => "string".to_string(),
+            // Self::String => "string".to_string(),
             Self::Fun(fun) => fun.to_string(),
             Self::Ptr(ty) => format!("{}*", ty.to_string()),
         }

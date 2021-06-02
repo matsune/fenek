@@ -1,4 +1,4 @@
-use hir::def::Def;
+use hir::def::{Def, DefKind};
 use typed_arena::Arena;
 
 pub struct DefArena<Ty> {
@@ -12,7 +12,7 @@ impl<Ty> DefArena<Ty> {
         }
     }
 
-    pub fn alloc(&self, ty: Ty, is_var: bool) -> &Def<Ty> {
-        self.inner.alloc(Def::new(self.inner.len(), ty, is_var))
+    pub fn alloc(&self, ty: Ty, kind: DefKind) -> &Def<Ty> {
+        self.inner.alloc(Def::new(self.inner.len(), ty, kind))
     }
 }

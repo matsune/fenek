@@ -200,9 +200,17 @@ Enum_with_type!(Expr [Lit, Path, Call, Binary, RefExpr, DerefExpr, NegExpr, NotE
 impl Expr {
     pub fn is_lvalue(&self) -> bool {
         match self {
-            Self::Path(path) => path.def.is_var,
-            Self::RefExpr(ref_expr) => ref_expr.expr.is_lvalue(),
-            Self::DerefExpr(deref_expr) => deref_expr.expr.is_lvalue(),
+            Self::Path(path) => path.def.is_var(),
+            Self::DerefExpr(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_mutable(&self) -> bool {
+        match self {
+            Self::Path(path) => path.def.is_mutable(),
+            Self::DerefExpr(deref_expr) => deref_expr.expr.is_mutable(),
+            Self::RefExpr(ref_expr) => ref_expr.expr.is_mutable(),
             _ => false,
         }
     }
