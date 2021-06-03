@@ -17,7 +17,7 @@ impl<'src> Scanner<'src> {
         Scanner { source, peek }
     }
 
-    pub fn peek(&mut self) -> char {
+    pub fn peek(&self) -> char {
         self.peek
     }
 

@@ -1,24 +1,26 @@
 use ast::*;
 use error::{CompileError, ParseError, Result};
 use lex::token;
-use pos::{Offset, Pos, SrcFile};
+use pos::Pos;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 
-pub struct Parser<'src> {
-    src: &'src SrcFile,
-    tokens: VecDeque<token::Token>,
-    node_id: NodeId,
-    last_offset: Offset,
+fn is_ident(tok: &token::Token) -> bool {
+    tok.kind == token::TokenKind::Ident
 }
 
-impl<'src> Parser<'src> {
-    pub fn new(src: &'src SrcFile, tokens: VecDeque<token::Token>) -> Self {
+pub struct Parser {
+    tokens: VecDeque<token::Token>,
+    node_id: NodeId,
+    last_pos: Pos,
+}
+
+impl Parser {
+    pub fn new(tokens: VecDeque<token::Token>) -> Self {
         Parser {
-            src,
             tokens,
             node_id: 0,
-            last_offset: 0,
+            last_pos: Pos::default(),
         }
     }
 
@@ -29,7 +31,7 @@ impl<'src> Parser<'src> {
     fn bump(&mut self) -> Option<token::Token> {
         let tok = self.tokens.pop_front();
         if let Some(tok) = &tok {
-            self.last_offset = tok.offset + tok.raw.chars().count() as Offset;
+            self.last_pos = tok.pos;
         }
         tok
     }
@@ -37,14 +39,6 @@ impl<'src> Parser<'src> {
     fn gen_id(&mut self) -> NodeId {
         self.node_id += 1;
         self.node_id
-    }
-
-    fn current_pos(&self) -> Pos {
-        let offset = self
-            .peek()
-            .map(|tok| tok.offset)
-            .unwrap_or(self.last_offset);
-        self.src.pos_from_offset(offset)
     }
 
     fn bump_if<Fn>(&mut self, pred: Fn) -> Option<token::Token>
@@ -57,10 +51,6 @@ impl<'src> Parser<'src> {
             }
         }
         None
-    }
-
-    fn bump_if_kind(&mut self, kind: token::TokenKind) -> Option<token::Token> {
-        self.bump_if(|tok| tok.kind == kind)
     }
 
     fn skip_spaces(&mut self) {
@@ -84,17 +74,42 @@ impl<'src> Parser<'src> {
 
     fn expected_err<T: std::string::ToString>(&self, expected: T) -> CompileError {
         CompileError::new(
-            self.current_pos(),
+            self.last_pos,
             Box::new(ParseError::Expected(expected.to_string())),
         )
     }
 
     fn compile_error(&self, error: ParseError) -> CompileError {
-        CompileError::new(self.current_pos(), error.into())
+        CompileError::new(self.last_pos, error.into())
     }
 
     fn is_next_kind(&self, kind: token::TokenKind) -> bool {
         matches!(self.peek(), Some(tok) if tok.kind == kind)
+    }
+
+    fn bump_if_kind(&mut self, kind: token::TokenKind) -> Option<token::Token> {
+        self.bump_if(|tok| tok.kind == kind)
+    }
+
+    fn bump_kind(&mut self, kind: token::TokenKind) -> Result<token::Token> {
+        self.bump_if(|tok| tok.kind == kind)
+            .ok_or_else(|| self.expected_err(kind))
+    }
+
+    fn bump_keyword(&mut self, keyword: token::Keyword) -> Result<ast::KwIdent> {
+        let kind = self
+            .bump_if(|tok| {
+                matches!( tok.try_as_keyword() ,
+                Some(kw) if kw == keyword)
+            })
+            .map(|tok| tok.try_as_keyword().unwrap())
+            .ok_or_else(|| self.expected_err(keyword))?;
+        // FIXME: pos
+        Ok(ast::KwIdent {
+            id: self.gen_id(),
+            kind,
+            pos: Pos::default(),
+        })
     }
 
     pub fn parse_module(&mut self) -> Result<Module> {
@@ -104,17 +119,49 @@ impl<'src> Parser<'src> {
             funs.push(self.parse_fun()?);
             self.skip_spaces();
         }
-        Ok(Module::new(funs))
+        Ok(Module { funs })
+    }
+
+    fn parse_ident(&mut self) -> Result<ast::Ident> {
+        let ident = self
+            .bump_if(is_ident)
+            .ok_or_else(|| self.expected_err("ident"))?;
+        if let Some(keyword) = ident.try_as_keyword() {
+            Err(self.compile_error(ParseError::FoundKeyword(keyword.to_string())))
+        } else {
+            // FIXME: pos
+            Ok(ast::Ident {
+                id: self.gen_id(),
+                raw: ident.raw,
+                pos: Pos::default(),
+            })
+        }
+    }
+
+    fn bump_if_mut_or_let(&mut self) -> Option<ast::KwIdent> {
+        self.bump_if(|tok| {
+            matches!(
+                tok.try_as_keyword(),
+                Some(token::Keyword::Mut) | Some(token::Keyword::Let)
+            )
+        })
+        .map(|tok| {
+            let kw = tok.try_as_keyword().unwrap();
+            // FIXME: pos
+            KwIdent {
+                id: self.gen_id(),
+                kind: kw,
+                pos: Pos::default(),
+            }
+        })
     }
 
     fn parse_fun(&mut self) -> Result<Fun> {
-        self.bump_if(|tok| matches!(tok.try_as_keyword(), Some(token::Keyword::Fun)))
-            .ok_or_else(|| self.expected_err("fun"))?;
+        let id = self.gen_id();
+        let keyword = self.bump_keyword(token::Keyword::Fun)?;
         self.skip_spaces();
 
-        let name = self
-            .bump_if(|tok| tok.is_ident() && !tok.is_keyword())
-            .ok_or_else(|| self.compile_error(ParseError::InvalidFunName))?;
+        let name = self.parse_ident()?;
         self.skip_spaces();
 
         let args = self.parse_fun_args()?;
@@ -132,13 +179,19 @@ impl<'src> Parser<'src> {
         self.skip_spaces();
 
         let block = self.parse_block()?;
-        Ok(Fun::new(self.gen_id(), name, args, ret_ty, block))
+        Ok(Fun {
+            id,
+            keyword,
+            name,
+            args,
+            ret_ty,
+            block,
+        })
     }
 
-    // must start with '('
     fn parse_fun_args(&mut self) -> Result<FunArgs> {
-        self.bump_if_kind(token::TokenKind::LParen)
-            .ok_or_else(|| self.expected_err("("))?;
+        let id = self.gen_id();
+        self.bump_kind(token::TokenKind::LParen)?;
         self.skip_spaces();
 
         let mut args = Vec::new();
@@ -147,23 +200,24 @@ impl<'src> Parser<'src> {
         }
 
         loop {
-            let keyword = self.bump_if(|tok| {
-                matches!(
-                    tok.try_as_keyword(),
-                    Some(token::Keyword::Mut) | Some(token::Keyword::Let)
-                )
+            let keyword = self.bump_if_mut_or_let();
+            self.skip_spaces();
+
+            let name = self.parse_ident()?;
+            self.skip_spaces();
+
+            self.bump_kind(token::TokenKind::Colon)?;
+            self.skip_spaces();
+
+            let ty = self.parse_ty()?;
+            args.push(FunArg {
+                id,
+                keyword,
+                name,
+                ty,
             });
             self.skip_spaces();
-            let arg_name = self
-                .bump_if(|tok| tok.is_ident() && !tok.is_keyword())
-                .ok_or_else(|| self.compile_error(ParseError::InvalidArgName))?;
-            self.skip_spaces();
-            self.bump_if_kind(token::TokenKind::Colon)
-                .ok_or_else(|| self.expected_err(":"))?;
-            self.skip_spaces();
-            let arg_ty = self.parse_ty()?;
-            args.push(FunArg::new(self.gen_id(), keyword, arg_name, arg_ty));
-            self.skip_spaces();
+
             if self.bump_if_kind(token::TokenKind::Comma).is_some() {
                 // has next arg
                 self.skip_spaces();
@@ -171,28 +225,21 @@ impl<'src> Parser<'src> {
                 break;
             }
         }
-        self.bump_if_kind(token::TokenKind::RParen)
-            .ok_or_else(|| self.expected_err(")"))?;
+        self.bump_kind(token::TokenKind::RParen)?;
         Ok(args)
     }
 
     fn parse_ret_ty(&mut self) -> Result<RetTy> {
-        let keyword = self.bump_if(|tok| {
-            matches!(
-                tok.try_as_keyword(),
-                Some(token::Keyword::Mut) | Some(token::Keyword::Let)
-            )
-        });
+        let id = self.gen_id();
+        let keyword = self.bump_if_mut_or_let();
         self.skip_spaces();
         let ty = self.parse_ty()?;
-        Ok(RetTy::new(self.gen_id(), keyword, ty))
+        Ok(RetTy { id, keyword, ty })
     }
 
     fn parse_ty(&mut self) -> Result<Ty> {
-        let ty = self
-            .bump_if(|tok| tok.is_ident() && !tok.is_keyword())
-            .ok_or_else(|| self.compile_error(ParseError::InvalidTypeName))?;
-        let mut ty = Ty::new_basic(self.gen_id(), ty);
+        let ident = self.parse_ident()?;
+        let mut ty = Ty::new_basic(self.gen_id(), ident);
         loop {
             self.skip_spaces();
             if self
@@ -207,9 +254,8 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_block(&mut self) -> Result<Block> {
-        let lbrace = self
-            .bump_if_kind(token::TokenKind::LBrace)
-            .ok_or_else(|| self.expected_err("{"))?;
+        let id = self.gen_id();
+        self.bump_kind(token::TokenKind::LBrace)?;
         let mut stmts = Vec::new();
         loop {
             self.skip_spaces();
@@ -223,19 +269,23 @@ impl<'src> Parser<'src> {
                 },
             }
         }
-        self.bump_if_kind(token::TokenKind::RBrace)
-            .ok_or_else(|| self.expected_err("}"))?;
-
-        Ok(Block::new(self.gen_id(), lbrace, stmts))
+        self.bump_kind(token::TokenKind::RBrace)?;
+        // FIXME: pos
+        Ok(Block {
+            id,
+            stmts,
+            pos: Pos::default(),
+        })
     }
 
     fn parse_var_decl(&mut self) -> Result<Stmt> {
-        let keyword = self.bump().unwrap();
+        let id = self.gen_id();
+        let keyword = self.bump_if_mut_or_let().unwrap();
         self.skip_spaces();
-        let name = self
-            .bump_if(|tok| tok.is_ident() && !tok.is_keyword())
-            .ok_or_else(|| self.compile_error(ParseError::InvalidVarDecl))?;
+
+        let name = self.parse_ident()?;
         self.skip_spaces();
+
         let ty = if self.bump_if_kind(token::TokenKind::Colon).is_some() {
             self.skip_spaces();
             Some(self.parse_ty()?)
@@ -243,18 +293,25 @@ impl<'src> Parser<'src> {
             None
         };
         self.skip_spaces();
-        self.bump_if_kind(token::TokenKind::Eq)
-            .ok_or_else(|| self.expected_err("="))?;
+
+        self.bump_kind(token::TokenKind::Eq)?;
         self.skip_spaces();
+
         let init = self.parse_expr()?;
-        Ok(Stmt::new_var_decl(self.gen_id(), keyword, name, ty, init))
+        Ok(Stmt::VarDecl(VarDecl {
+            id,
+            keyword,
+            name,
+            ty,
+            init,
+        }))
     }
 
     fn parse_ret(&mut self) -> Result<Stmt> {
-        let keyword = self
-            .bump_if(|tok| tok.is_keyword() && tok.raw == "ret")
-            .ok_or_else(|| self.expected_err("ret"))?;
+        let id = self.gen_id();
+        let keyword = self.bump_keyword(token::Keyword::Ret).unwrap();
         self.skip_spaces();
+
         let tok = self
             .peek()
             .ok_or_else(|| self.compile_error(ParseError::UnexpectedEof))?;
@@ -262,60 +319,58 @@ impl<'src> Parser<'src> {
             token::TokenKind::Semi => None,
             _ => Some(self.parse_expr()?),
         };
-        Ok(Stmt::new_ret(self.gen_id(), keyword, expr))
+        Ok(Stmt::Ret(RetStmt { id, keyword, expr }))
     }
 
     pub fn parse_stmt(&mut self) -> Result<Stmt> {
-        self.skip_spaces();
         let tok = self
             .peek()
             .ok_or_else(|| self.compile_error(ParseError::UnexpectedEof))?;
         let stmt = match tok.kind {
             token::TokenKind::Semi => {
-                let offset = self.bump().unwrap().offset;
-                return Ok(Stmt::new_empty(self.gen_id(), offset));
+                // FIXME: pos
+                Stmt::Empty(EmptyStmt {
+                    id: self.gen_id(),
+                    pos: Pos::default(),
+                })
             }
-            token::TokenKind::Ident if tok.is_keyword() => match tok.try_as_keyword().unwrap() {
-                token::Keyword::Ret => self.parse_ret()?,
-                token::Keyword::Mut | token::Keyword::Let => self.parse_var_decl()?,
-                token::Keyword::Fun => {
-                    return Err(CompileError::new(
-                        self.src.pos_from_offset(tok.offset),
-                        ParseError::InvalidStmt.into(),
-                    ))
+            token::TokenKind::Ident if tok.try_as_keyword().is_some() => {
+                match tok.try_as_keyword().unwrap() {
+                    token::Keyword::Ret => self.parse_ret()?,
+                    token::Keyword::Mut | token::Keyword::Let => self.parse_var_decl()?,
+                    token::Keyword::If => return self.parse_if(),
+                    token::Keyword::Fun | token::Keyword::Else => {
+                        return Err(self.compile_error(ParseError::InvalidStmt))
+                    }
                 }
-                token::Keyword::If => return self.parse_if(),
-                token::Keyword::Else => return Err(self.compile_error(ParseError::InvalidStmt)),
-            },
+            }
             _ => {
                 let expr = self.parse_expr()?;
                 self.skip_spaces();
-                if self
-                    .bump_if(|tok| tok.kind == token::TokenKind::Eq)
-                    .is_some()
-                {
+                if self.bump_if_kind(token::TokenKind::Eq).is_some() {
                     // assign
                     self.skip_spaces();
                     let right = self.parse_expr()?;
                     self.skip_spaces();
-                    Stmt::new_assign(self.gen_id(), expr, right)
+                    Stmt::Assign(Assign {
+                        id: self.gen_id(),
+                        left: expr,
+                        right,
+                    })
                 } else {
-                    Stmt::new_expr(self.gen_id(), expr)
+                    Stmt::Expr(expr)
                 }
             }
         };
-        self.bump_if(|tok| tok.kind == token::TokenKind::Semi)
-            .ok_or_else(|| self.expected_err(";"))?;
+        self.bump_kind(token::TokenKind::Semi)?;
         Ok(stmt)
     }
 
     fn parse_if(&mut self) -> Result<Stmt> {
-        let offset = self
-            .bump_if(|tok| tok.try_as_keyword().unwrap() == token::Keyword::If)
-            .unwrap()
-            .offset;
+        let id = self.gen_id();
+        let keyword = self.bump_keyword(token::Keyword::If)?;
         self.skip_spaces();
-        let expr = self.parse_expr()?;
+        let expr = Some(self.parse_expr()?);
         self.skip_spaces();
         let block = self.parse_block()?;
         self.skip_spaces();
@@ -325,17 +380,18 @@ impl<'src> Parser<'src> {
             }
             _ => None,
         };
-        Ok(Stmt::new_if(
-            self.gen_id(),
-            IfStmt::new(self.gen_id(), offset, Some(expr), block, else_if),
-        ))
+        Ok(Stmt::If(IfStmt {
+            id,
+            keyword,
+            expr,
+            block,
+            else_if,
+        }))
     }
 
     fn parse_else(&mut self) -> Result<IfStmt> {
-        let offset = self
-            .bump_if(|tok| tok.try_as_keyword().unwrap() == token::Keyword::Else)
-            .unwrap()
-            .offset;
+        let id = self.gen_id();
+        let keyword = self.bump_keyword(token::Keyword::Else)?;
         self.skip_spaces();
         let expr = if self.is_next_kind(token::TokenKind::LBrace) {
             None
@@ -353,7 +409,13 @@ impl<'src> Parser<'src> {
             }
             _ => None,
         };
-        Ok(IfStmt::new(self.gen_id(), offset, expr, block, else_if))
+        Ok(IfStmt {
+            id,
+            keyword,
+            expr,
+            block,
+            else_if,
+        })
     }
 
     fn parse_expr(&mut self) -> Result<Expr> {
@@ -363,36 +425,69 @@ impl<'src> Parser<'src> {
     fn parse_assoc_expr_with(&mut self, prec: u8) -> Result<Expr> {
         let mut lhs = self.parse_prefix_expr()?;
         self.skip_spaces();
+
         let mut bin_op = match self.peek() {
             Some(tok) if BinOpKind::try_from(tok.kind).is_ok() => {
-                let bin_op = BinOpKind::try_from(tok.kind).unwrap();
-                if bin_op.precedence() < prec
-                    || bin_op.precedence() == prec && bin_op.assoc().is_left()
+                let op_kind = BinOpKind::try_from(tok.kind).unwrap();
+                if op_kind.precedence() < prec
+                    || op_kind.precedence() == prec && op_kind.assoc().is_left()
                 {
+                    // If the parsed BinOpKind is lower priority than
+                    // previous operator like this:
+                    //
+                    //  prec
+                    //   ↓
+                    // 4 * 3 - 2
+                    //       ↑
+                    //     op_kind
+                    //
+                    // `4 * 3` will be a lhs and `2` will be a rhs at here.
+                    // Priority will be determined by an associativity of that
+                    // operator if the precedences are same.
+                    //
+                    // 4 + 3 + 2
+                    // → (4 + 3) + 2
+                    // (because `+` is left associativity)
                     return Ok(lhs);
                 }
-                BinOp::new(self.bump().unwrap())
+                self.bump();
+                BinOp {
+                    id: self.gen_id(),
+                    kind: op_kind,
+                    pos: Pos::default(),
+                }
             }
             _ => return Ok(lhs),
         };
         self.skip_spaces();
-        let mut rhs = self.parse_assoc_expr_with(bin_op.op_kind().precedence())?;
+
+        let mut rhs = self.parse_assoc_expr_with(bin_op.kind.precedence())?;
         loop {
-            lhs = Expr::new_binary(self.gen_id(), bin_op, Box::new(lhs), Box::new(rhs));
+            lhs = Expr::Binary(Binary {
+                id: self.gen_id(),
+                op: bin_op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            });
             bin_op = match self.peek() {
                 Some(tok) if BinOpKind::try_from(tok.kind).is_ok() => {
-                    let bin_op = BinOpKind::try_from(tok.kind).unwrap();
-                    if bin_op.precedence() < prec
-                        || bin_op.precedence() == prec && bin_op.assoc().is_left()
+                    let op_kind = BinOpKind::try_from(tok.kind).unwrap();
+                    if op_kind.precedence() < prec
+                        || op_kind.precedence() == prec && op_kind.assoc().is_left()
                     {
                         return Ok(lhs);
                     }
-                    BinOp::new(self.bump().unwrap())
+                    self.bump();
+                    BinOp {
+                        id: self.gen_id(),
+                        kind: op_kind,
+                        pos: Pos::default(),
+                    }
                 }
                 _ => return Ok(lhs),
             };
             self.skip_spaces();
-            rhs = self.parse_assoc_expr_with(bin_op.op_kind().precedence())?;
+            rhs = self.parse_assoc_expr_with(bin_op.kind.precedence())?;
         }
     }
 
@@ -400,11 +495,21 @@ impl<'src> Parser<'src> {
         let tok = self
             .peek()
             .ok_or_else(|| self.compile_error(ParseError::UnexpectedEof))?;
-        if ast::UnOpKind::try_from(tok.kind).is_ok() {
-            let op = self.bump().unwrap();
+        if let Ok(op_kind) = ast::UnOpKind::try_from(tok.kind) {
+            self.bump();
             self.skip_spaces();
+            // FIXME: pos
+            let op = UnOp {
+                id: self.gen_id(),
+                kind: op_kind,
+                pos: Pos::default(),
+            };
             let expr = self.parse_prefix_expr()?;
-            Ok(Expr::new_unary(self.gen_id(), op, Box::new(expr)))
+            Ok(Expr::Unary(Unary {
+                id: self.gen_id(),
+                op,
+                expr: Box::new(expr),
+            }))
         } else {
             self.parse_postfix_expr()
         }
@@ -413,18 +518,21 @@ impl<'src> Parser<'src> {
     fn parse_postfix_expr(&mut self) -> Result<Expr> {
         let primary = self.parse_primary_expr()?;
         self.skip_spaces();
-        match primary.kind {
-            ExprKind::Path(tok) if self.is_next_kind(token::TokenKind::LParen) => {
+        match primary {
+            Expr::Path(path) if self.is_next_kind(token::TokenKind::LParen) => {
+                // Call
                 self.bump();
                 self.skip_spaces();
-                if self
-                    .bump_if(|tok| tok.kind == token::TokenKind::RParen)
-                    .is_some()
-                {
-                    return Ok(Expr::new_call(self.gen_id(), tok, Vec::new()));
-                }
 
                 let mut args = Vec::new();
+                if self.bump_if_kind(token::TokenKind::RParen).is_some() {
+                    return Ok(Expr::Call(Call {
+                        id: self.gen_id(),
+                        path,
+                        args,
+                    }));
+                }
+
                 loop {
                     args.push(self.parse_expr()?);
                     self.skip_spaces();
@@ -438,49 +546,50 @@ impl<'src> Parser<'src> {
                             self.bump();
                             self.skip_spaces();
                         }
-                        Some(tok) => {
-                            return Err(CompileError::new(
-                                self.src.pos_from_offset(tok.offset),
-                                ParseError::Expected(") or ,".to_string()).into(),
-                            ))
+                        Some(_) => {
+                            return Err(self.expected_err(") or ,".to_string()));
                         }
-                        None => {
-                            return Err(CompileError::new(
-                                self.src.pos_from_offset(self.last_offset),
-                                ParseError::UnexpectedEof.into(),
-                            ))
-                        }
+                        None => return Err(self.compile_error(ParseError::UnexpectedEof)),
                     };
                 }
-                Ok(Expr::new_call(self.gen_id(), tok, args))
+                Ok(Expr::Call(Call {
+                    id: self.gen_id(),
+                    path,
+                    args,
+                }))
             }
             _ => Ok(primary),
         }
     }
 
     fn parse_primary_expr(&mut self) -> Result<Expr> {
-        self.bump_if(|tok| {
-            matches!(
-                tok.kind,
-                token::TokenKind::Ident | token::TokenKind::Lit(_) | token::TokenKind::LParen
-            )
-        })
-        .ok_or_else(|| self.compile_error(ParseError::InvalidExpr))
-        .and_then(|tok| match tok.kind {
+        let peek = self
+            .peek()
+            .ok_or_else(|| self.compile_error(ParseError::UnexpectedEof))?;
+        match peek.kind {
             token::TokenKind::Lit(kind) => {
-                Ok(Expr::new_lit(self.gen_id(), LitKind::from(kind), tok))
+                let tok = self.bump().unwrap();
+                // FIXME: pos
+                Ok(Expr::Lit(Lit {
+                    id: self.gen_id(),
+                    kind,
+                    raw: tok.raw,
+                    pos: Pos::default(),
+                }))
             }
             token::TokenKind::Ident => {
-                if tok.is_keyword() {
-                    Err(CompileError::new(
-                        self.src.pos_from_offset(tok.offset),
-                        ParseError::CannotUseKeyword(tok.raw).into(),
-                    ))
+                if let Some(keyword) = peek.try_as_keyword() {
+                    Err(self.compile_error(ParseError::FoundKeyword(keyword.to_string())))
                 } else {
-                    Ok(Expr::new_path(self.gen_id(), tok))
+                    let ident = self.parse_ident()?;
+                    Ok(Expr::Path(Path {
+                        id: self.gen_id(),
+                        ident,
+                    }))
                 }
             }
             token::TokenKind::LParen => {
+                self.bump();
                 self.skip_spaces();
                 let expr = self.parse_expr()?;
                 self.skip_spaces();
@@ -490,7 +599,7 @@ impl<'src> Parser<'src> {
                 self.bump();
                 Ok(expr)
             }
-            _ => unreachable!(),
-        })
+            _ => Err(self.compile_error(ParseError::InvalidExpr)),
+        }
     }
 }

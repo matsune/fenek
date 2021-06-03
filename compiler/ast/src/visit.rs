@@ -1,159 +1,233 @@
 use crate::*;
-use pos::Offset;
 
-pub enum Node<'a> {
-    Fun(&'a Fun),
-    FunArg(&'a FunArg),
-    RetTy(&'a RetTy),
-    Ty(&'a Ty),
-    Block(&'a Block),
-    Stmt(&'a Stmt),
-    Expr(&'a Expr),
-}
-
-impl<'a> Node<'a> {
-    pub fn as_stmt(&self) -> &'a Stmt {
-        match self {
-            Self::Stmt(stmt) => stmt,
-            _ => panic!(),
+macro_rules! enum_node {
+    ($($name:ident),*) => {
+        /// ASTs which has `id: NodeId` field
+        pub enum Node<'a> {
+            $(
+                $name(&'a $name),
+            )*
         }
-    }
 
-    pub fn offset(&self) -> Offset {
-        match self {
-            Self::Fun(fun) => fun.name.offset,
-            Self::FunArg(arg) => arg.name.offset,
-            Self::RetTy(ty) => ty.offset(),
-            Self::Ty(ty) => ty.offset(),
-            Self::Block(block) => block.offset(),
-            Self::Stmt(stmt) => stmt.offset(),
-            Self::Expr(expr) => expr.offset(),
+        impl<'a> Node<'a> {
+            pub fn id(&self) -> NodeId {
+                match self {
+                $(
+                    Self::$name(inner) => inner.id,
+                )*
+                }
+            }
         }
     }
 }
 
-macro_rules! return_if_some {
-    ($e:expr) => {
-        let res = $e;
-        if res.is_some() {
-            return res;
+enum_node!(
+    Fun, Ident, KwIdent, FunArg, RetTy, Ty, Block, EmptyStmt, RetStmt, VarDecl, Assign, IfStmt,
+    Path, Call, Lit, Binary, BinOp, Unary, UnOp
+);
+
+pub fn find_node<F>(module: &Module, id: NodeId, callback: F)
+where
+    F: Fn(Node<'_>),
+{
+    visit_module(module, |node| {
+        if node.id() == id {
+            callback(node);
         }
-    };
+    });
 }
 
-pub fn visit_module<'a>(module: &'a Module, id: NodeId) -> Option<Node<'a>> {
+pub fn visit_module<F>(module: &Module, f: F)
+where
+    F: Fn(Node<'_>),
+{
     for fun in &module.funs {
-        return_if_some!(visit_fun(&fun, id));
+        visit_fun(&fun, &f);
     }
-    None
 }
 
-pub fn visit_fun<'a>(fun: &'a Fun, id: NodeId) -> Option<Node<'a>> {
-    if fun.id == id {
-        return Some(Node::Fun(fun));
-    }
-
-    return_if_some!(visit_fun_args(&fun.args, id));
-
+pub fn visit_fun<F>(fun: &Fun, f: &F)
+where
+    F: Fn(Node<'_>),
+{
+    f(Node::Fun(fun));
+    f(Node::KwIdent(&fun.keyword));
+    f(Node::Ident(&fun.name));
+    visit_fun_args(&fun.args, f);
     if let Some(ret_ty) = &fun.ret_ty {
-        if ret_ty.id == id {
-            return Some(Node::RetTy(ret_ty));
-        }
-        return_if_some!(visit_ty(&ret_ty.ty, id));
+        visit_ret_ty(&ret_ty, f);
     }
-
-    visit_block(&fun.block, id)
+    visit_block(&fun.block, f);
 }
 
-fn visit_fun_args<'a>(args: &'a [FunArg], id: NodeId) -> Option<Node<'a>> {
+fn visit_fun_args<F>(args: &[FunArg], f: &F)
+where
+    F: Fn(Node<'_>),
+{
     for arg in args.iter() {
-        if arg.id == id {
-            return Some(Node::FunArg(arg));
+        f(Node::FunArg(arg));
+        if let Some(keyword) = &arg.keyword {
+            f(Node::KwIdent(&keyword));
         }
-        return_if_some!(visit_ty(&arg.ty, id));
-    }
-    None
-}
-
-fn visit_ty<'a>(ty: &'a Ty, id: NodeId) -> Option<Node> {
-    if ty.id == id {
-        Some(Node::Ty(&ty))
-    } else {
-        None
+        f(Node::Ident(&arg.name));
+        visit_ty(&arg.ty, f);
     }
 }
 
-fn visit_block<'a>(block: &'a Block, id: NodeId) -> Option<Node<'a>> {
-    if block.id == id {
-        return Some(Node::Block(&block));
+fn visit_ty<F>(ty: &Ty, f: &F)
+where
+    F: Fn(Node<'_>),
+{
+    f(Node::Ty(ty));
+    match &ty.kind {
+        TyKind::Basic(ident) => f(Node::Ident(ident)),
+        TyKind::Ptr(ty) => visit_ty(&ty, f),
     }
+}
+
+fn visit_ret_ty<F>(ret_ty: &RetTy, f: &F)
+where
+    F: Fn(Node<'_>),
+{
+    f(Node::RetTy(ret_ty));
+    if let Some(keyword) = &ret_ty.keyword {
+        f(Node::KwIdent(&keyword));
+    }
+    visit_ty(&ret_ty.ty, f);
+}
+
+fn visit_block<F>(block: &Block, f: &F)
+where
+    F: Fn(Node<'_>),
+{
+    f(Node::Block(block));
     for stmt in block.stmts.iter() {
-        return_if_some!(visit_stmt(stmt, id));
+        visit_stmt(&stmt, f);
     }
-    None
 }
 
-fn visit_stmt<'a>(stmt: &'a Stmt, id: NodeId) -> Option<Node<'a>> {
-    if stmt.id == id {
-        return Some(Node::Stmt(stmt));
+fn visit_stmt<F>(stmt: &Stmt, f: &F)
+where
+    F: Fn(Node<'_>),
+{
+    match &stmt {
+        Stmt::Empty(inner) => visit_empty_stmt(inner, f),
+        Stmt::Expr(inner) => visit_expr(inner, f),
+        Stmt::Ret(inner) => visit_ret_stmt(inner, f),
+        Stmt::VarDecl(inner) => visit_var_decl(inner, f),
+        Stmt::Assign(inner) => visit_assign(inner, f),
+        Stmt::If(inner) => visit_if_stmt(inner, f),
     }
-    match &stmt.kind {
-        StmtKind::VarDecl {
-            keyword: _,
-            name: _,
-            ty: _,
-            init,
-        } => {
-            return_if_some!(visit_expr(init, id));
-        }
-        StmtKind::Expr(expr) => {
-            return_if_some!(visit_expr(expr, id));
-        }
-        StmtKind::Assign(left, right) => {
-            return_if_some!(visit_expr(left, id));
-            return_if_some!(visit_expr(right, id));
-        }
-        StmtKind::Empty(_) => {}
-        StmtKind::Ret { keyword, expr } => {
-            if let Some(expr) = expr {
-                return_if_some!(visit_expr(expr, id));
-            }
-        }
-        StmtKind::If(if_stmt) => {
-            return_if_some!(visit_if(&if_stmt, id));
-        }
-    };
-    None
 }
 
-fn visit_if<'a>(stmt: &'a IfStmt, id: NodeId) -> Option<Node<'a>> {
+fn visit_empty_stmt<F>(stmt: &EmptyStmt, f: &F)
+where
+    F: Fn(Node<'_>),
+{
+    f(Node::EmptyStmt(stmt));
+}
+
+fn visit_ret_stmt<F>(stmt: &RetStmt, f: &F)
+where
+    F: Fn(Node<'_>),
+{
+    f(Node::RetStmt(stmt));
+    f(Node::KwIdent(&stmt.keyword));
     if let Some(expr) = &stmt.expr {
-        return_if_some!(visit_expr(&expr, id));
+        visit_expr(&expr, f);
     }
-    return_if_some!(visit_block(&stmt.block, id));
-    if let Some(else_if) = &stmt.else_if {
-        return_if_some!(visit_if(&else_if, id));
-    }
-    None
 }
 
-fn visit_expr<'a>(expr: &'a Expr, id: NodeId) -> Option<Node<'a>> {
-    if expr.id == id {
-        return Some(Node::Expr(expr));
+fn visit_var_decl<F>(var_decl: &VarDecl, f: &F)
+where
+    F: Fn(Node<'_>),
+{
+    f(Node::VarDecl(var_decl));
+    f(Node::KwIdent(&var_decl.keyword));
+    f(Node::Ident(&var_decl.name));
+    if let Some(ty) = &var_decl.ty {
+        visit_ty(&ty, f);
     }
-    match &expr.kind {
-        ExprKind::Binary(_, lhs, rhs) => {
-            return_if_some!(visit_expr(&lhs, id));
-            visit_expr(&rhs, id)
-        }
-        ExprKind::Unary(_, expr) => visit_expr(&expr, id),
-        ExprKind::Path(_) => None,
-        ExprKind::Call(_, exprs) => {
-            for expr in exprs {
-                return_if_some!(visit_expr(expr, id));
-            }
-            None
-        }
-        ExprKind::Lit(_) => None,
+    visit_expr(&var_decl.init, f);
+}
+
+fn visit_assign<F>(stmt: &Assign, f: &F)
+where
+    F: Fn(Node<'_>),
+{
+    f(Node::Assign(stmt));
+    visit_expr(&stmt.left, f);
+    visit_expr(&stmt.right, f);
+}
+
+fn visit_if_stmt<F>(stmt: &IfStmt, f: &F)
+where
+    F: Fn(Node<'_>),
+{
+    f(Node::IfStmt(stmt));
+    f(Node::KwIdent(&stmt.keyword));
+    if let Some(expr) = &stmt.expr {
+        visit_expr(&expr, f);
     }
+    visit_block(&stmt.block, f);
+    if let Some(if_stmt) = &stmt.else_if {
+        visit_if_stmt(&if_stmt, f);
+    }
+}
+
+fn visit_expr<F>(expr: &Expr, f: &F)
+where
+    F: Fn(Node<'_>),
+{
+    match &expr {
+        Expr::Path(inner) => visit_path(inner, f),
+        Expr::Call(inner) => visit_call(inner, f),
+        Expr::Lit(inner) => visit_lit(inner, f),
+        Expr::Binary(inner) => visit_binary(inner, f),
+        Expr::Unary(inner) => visit_unary(inner, f),
+    }
+}
+
+fn visit_path<F>(path: &Path, f: &F)
+where
+    F: Fn(Node<'_>),
+{
+    f(Node::Path(path));
+    f(Node::Ident(&path.ident));
+}
+
+fn visit_call<F>(call: &Call, f: &F)
+where
+    F: Fn(Node<'_>),
+{
+    f(Node::Call(call));
+    f(Node::Path(&call.path));
+    for arg in call.args.iter() {
+        visit_expr(&arg, f);
+    }
+}
+
+fn visit_lit<F>(lit: &Lit, f: &F)
+where
+    F: Fn(Node<'_>),
+{
+    f(Node::Lit(lit));
+}
+
+fn visit_binary<F>(binary: &Binary, f: &F)
+where
+    F: Fn(Node<'_>),
+{
+    f(Node::Binary(binary));
+    f(Node::BinOp(&binary.op));
+    visit_expr(&binary.lhs, f);
+    visit_expr(&binary.rhs, f);
+}
+
+fn visit_unary<F>(unary: &Unary, f: &F)
+where
+    F: Fn(Node<'_>),
+{
+    f(Node::Unary(unary));
+    f(Node::UnOp(&unary.op));
 }

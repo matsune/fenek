@@ -74,8 +74,8 @@ pub enum ParseError {
     InvalidArgName,
     #[error("invalid type name")]
     InvalidTypeName,
-    #[error("invalid function name")]
-    InvalidFunName,
+    #[error("expected identifier, found keyword {0}")]
+    FoundKeyword(String),
 }
 
 #[derive(Error, Debug)]

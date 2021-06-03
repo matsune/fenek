@@ -1,7 +1,9 @@
 use super::scanner::*;
 use super::token::*;
 use error::{CompileError, LexerError, LitError, Result};
-use pos::{Offset, SrcFile};
+use pos::Pos;
+use std::convert::TryInto;
+use std::str::Chars;
 
 #[inline]
 fn is_newline(c: char) -> bool {
@@ -61,40 +63,47 @@ fn is_hex_digit(c: char) -> bool {
     matches!(c, '0'..='9' | 'A'..='F' | 'a'..='f' )
 }
 
-pub fn lex(src: &SrcFile) -> Result<Vec<Token>> {
-    Lexer::new(&src).lex()
+pub fn lex(chars: Chars) -> Result<Vec<Token>> {
+    Lexer::new(chars).lex()
 }
 
 struct Lexer<'src> {
-    src: &'src SrcFile,
     scanner: Scanner<'src>,
-    offset: Offset,
+    pos: Pos,
 }
 
 impl<'src> Lexer<'src> {
-    fn new(src: &'src SrcFile) -> Self {
+    fn new(chars: Chars<'src>) -> Self {
         Lexer {
-            src,
-            scanner: Scanner::new(src.chars()),
-            offset: 0,
+            scanner: Scanner::new(chars),
+            pos: Pos::default(),
         }
     }
 
-    fn peek(&mut self) -> char {
+    fn peek(&self) -> char {
         self.scanner.peek()
     }
 
     fn bump(&mut self) -> char {
-        self.offset += 1;
-        self.scanner.bump()
+        let c = self.scanner.bump();
+        if c == '\n' || c == '\r' {
+            self.pos.newline();
+        } else if c != EOF {
+            self.pos.add_row(c.len_utf16().try_into().unwrap());
+        }
+        c
     }
 
-    fn mk_tok<T: std::string::ToString>(&self, kind: TokenKind, raw: T, offset: Offset) -> Token {
-        Token::new(kind, raw.to_string(), offset)
+    fn mk_tok<T: std::string::ToString>(&self, kind: TokenKind, raw: T, pos: Pos) -> Token {
+        Token {
+            kind,
+            raw: raw.to_string(),
+            pos,
+        }
     }
 
-    fn compile_error(&self, offset: Offset, err: LexerError) -> CompileError {
-        CompileError::new(self.src.pos_from_offset(offset), Box::new(err))
+    fn compile_error(&self, pos: Pos, err: LexerError) -> CompileError {
+        CompileError::new(pos, Box::new(err))
     }
 
     fn lex(&mut self) -> Result<Vec<Token>> {
@@ -110,16 +119,16 @@ impl<'src> Lexer<'src> {
     }
 
     fn scan(&mut self) -> Result<Token> {
-        let offset = self.offset;
+        let pos = self.pos;
         let tok = match self.peek() {
-            EOF => self.mk_tok(TokenKind::Eof, EOF, offset),
+            EOF => self.mk_tok(TokenKind::Eof, EOF, pos),
             c if is_whitespace(c) => {
                 let raw = self.scan_while(is_whitespace);
-                self.mk_tok(TokenKind::Spaces, raw, offset)
+                self.mk_tok(TokenKind::Spaces, raw, pos)
             }
             c if is_newline(c) => {
                 let raw = self.scan_while(is_newline);
-                self.mk_tok(TokenKind::Newlines, raw, offset)
+                self.mk_tok(TokenKind::Newlines, raw, pos)
             }
             '/' => {
                 self.bump();
@@ -131,7 +140,7 @@ impl<'src> Lexer<'src> {
                         if is_newline(c) {
                             raw.push(c);
                         }
-                        self.mk_tok(TokenKind::LineComment, raw, offset)
+                        self.mk_tok(TokenKind::LineComment, raw, pos)
                     }
                     '*' => {
                         // block comment
@@ -144,112 +153,106 @@ impl<'src> Lexer<'src> {
                                 '*' => {
                                     if self.peek() == '/' {
                                         raw.push(self.bump());
-                                        return Ok(self.mk_tok(
-                                            TokenKind::BlockComment,
-                                            raw,
-                                            offset,
-                                        ));
+                                        return Ok(self.mk_tok(TokenKind::BlockComment, raw, pos));
                                     }
                                 }
                                 EOF => {
-                                    return Err(self.compile_error(
-                                        offset,
-                                        LitError::UnterminatedComment.into(),
-                                    ))
+                                    return Err(self
+                                        .compile_error(pos, LitError::UnterminatedComment.into()))
                                 }
                                 _ => {}
                             }
                         }
                     }
-                    _ => self.mk_tok(TokenKind::Slash, "/", offset),
+                    _ => self.mk_tok(TokenKind::Slash, "/", pos),
                 }
             }
             ';' => {
                 let c = self.bump();
-                self.mk_tok(TokenKind::Semi, c, offset)
+                self.mk_tok(TokenKind::Semi, c, pos)
             }
             ',' => {
                 let c = self.bump();
-                self.mk_tok(TokenKind::Comma, c, offset)
+                self.mk_tok(TokenKind::Comma, c, pos)
             }
             '(' => {
                 let c = self.bump();
-                self.mk_tok(TokenKind::LParen, c, offset)
+                self.mk_tok(TokenKind::LParen, c, pos)
             }
             ')' => {
                 let c = self.bump();
-                self.mk_tok(TokenKind::RParen, c, offset)
+                self.mk_tok(TokenKind::RParen, c, pos)
             }
             '{' => {
                 let c = self.bump();
-                self.mk_tok(TokenKind::LBrace, c, offset)
+                self.mk_tok(TokenKind::LBrace, c, pos)
             }
             '}' => {
                 let c = self.bump();
-                self.mk_tok(TokenKind::RBrace, c, offset)
+                self.mk_tok(TokenKind::RBrace, c, pos)
             }
             ':' => {
                 let c = self.bump();
-                self.mk_tok(TokenKind::Colon, c, offset)
+                self.mk_tok(TokenKind::Colon, c, pos)
             }
             '=' => {
                 let c = self.bump();
-                self.mk_tok(TokenKind::Eq, c, offset)
+                self.mk_tok(TokenKind::Eq, c, pos)
             }
             '!' => {
                 let c = self.bump();
-                self.mk_tok(TokenKind::Not, c, offset)
+                self.mk_tok(TokenKind::Not, c, pos)
             }
             '<' => {
                 self.bump();
                 if self.peek() == '=' {
                     self.bump();
-                    self.mk_tok(TokenKind::Le, "<=", offset)
+                    self.mk_tok(TokenKind::Le, "<=", pos)
                 } else {
-                    self.mk_tok(TokenKind::Lt, "<", offset)
+                    self.mk_tok(TokenKind::Lt, "<", pos)
                 }
             }
             '>' => {
                 self.bump();
                 if self.peek() == '=' {
                     self.bump();
-                    self.mk_tok(TokenKind::Ge, ">=", offset)
+                    self.mk_tok(TokenKind::Ge, ">=", pos)
                 } else {
-                    self.mk_tok(TokenKind::Gt, ">", offset)
+                    self.mk_tok(TokenKind::Gt, ">", pos)
                 }
             }
             '-' => {
                 self.bump();
                 if self.peek() == '>' {
                     self.bump();
-                    self.mk_tok(TokenKind::Arrow, "->", offset)
+                    self.mk_tok(TokenKind::Arrow, "->", pos)
                 } else {
-                    self.mk_tok(TokenKind::Minus, "-", offset)
+                    self.mk_tok(TokenKind::Minus, "-", pos)
                 }
             }
             '&' => {
                 let c = self.bump();
-                self.mk_tok(TokenKind::And, c, offset)
+                self.mk_tok(TokenKind::And, c, pos)
             }
             '|' => {
                 let c = self.bump();
-                self.mk_tok(TokenKind::Or, c, offset)
+                self.mk_tok(TokenKind::Or, c, pos)
             }
             '+' => {
                 let c = self.bump();
-                self.mk_tok(TokenKind::Plus, c, offset)
+                self.mk_tok(TokenKind::Plus, c, pos)
             }
             '*' => {
                 let c = self.bump();
-                self.mk_tok(TokenKind::Star, c, offset)
+                self.mk_tok(TokenKind::Star, c, pos)
             }
             '^' => {
                 let c = self.bump();
-                self.mk_tok(TokenKind::Caret, c, offset)
+                self.mk_tok(TokenKind::Caret, c, pos)
             }
             '%' => {
                 let c = self.bump();
-                self.mk_tok(TokenKind::Percent, c, offset)
+                self.mk_tok(TokenKind::Percent, c, pos)
             }
             c if is_num(c) => self.scan_number()?,
             '"' => self.scan_string()?,
@@ -260,9 +263,9 @@ impl<'src> Lexer<'src> {
                     "true" | "false" => TokenKind::Lit(LitKind::Bool),
                     _ => TokenKind::Ident,
                 };
-                self.mk_tok(kind, raw, offset)
+                self.mk_tok(kind, raw, pos)
             }
-            c => return Err(self.compile_error(offset, LexerError::UnknwonToken(c))),
+            c => return Err(self.compile_error(pos, LexerError::UnknwonToken(c))),
         };
         Ok(tok)
     }
@@ -287,7 +290,7 @@ impl<'src> Lexer<'src> {
     }
 
     fn scan_number(&mut self) -> Result<Token> {
-        let offset = self.offset;
+        let pos = self.pos;
         let c = self.bump();
         let mut raw = String::from(c);
         if c == '0' {
@@ -302,10 +305,10 @@ impl<'src> Lexer<'src> {
                                     base: IntBase::Binary,
                                 }),
                                 raw,
-                                offset,
+                                pos,
                             )
                         })
-                        .map_err(|err| self.compile_error(offset, err.into()));
+                        .map_err(|err| self.compile_error(pos, err.into()));
                 }
                 'o' | 'O' => {
                     raw.push(self.bump());
@@ -317,10 +320,10 @@ impl<'src> Lexer<'src> {
                                     base: IntBase::Octal,
                                 }),
                                 raw,
-                                offset,
+                                pos,
                             )
                         })
-                        .map_err(|err| self.compile_error(offset, err.into()));
+                        .map_err(|err| self.compile_error(pos, err.into()));
                 }
                 'x' | 'X' => {
                     raw.push(self.bump());
@@ -330,10 +333,10 @@ impl<'src> Lexer<'src> {
                             self.mk_tok(
                                 TokenKind::Lit(LitKind::Int { base: IntBase::Hex }),
                                 raw,
-                                offset,
+                                pos,
                             )
                         })
-                        .map_err(|err| self.compile_error(offset, err.into()));
+                        .map_err(|err| self.compile_error(pos, err.into()));
                 }
                 _ => {}
             }
@@ -344,18 +347,18 @@ impl<'src> Lexer<'src> {
                 // floating point
                 raw.push(self.bump());
                 if !is_num(self.peek()) {
-                    return Err(self.compile_error(offset, LitError::InvalidFloatLit.into()));
+                    return Err(self.compile_error(pos, LitError::InvalidFloatLit.into()));
                 }
                 raw.push(self.bump());
                 self.bump_while(is_num_or_underscore, |c| raw.push(c));
-                self.mk_tok(TokenKind::Lit(LitKind::Float), raw, offset)
+                self.mk_tok(TokenKind::Lit(LitKind::Float), raw, pos)
             }
             _ => self.mk_tok(
                 TokenKind::Lit(LitKind::Int {
                     base: IntBase::Decimal,
                 }),
                 raw,
-                offset,
+                pos,
             ),
         };
         Ok(tok)
@@ -428,7 +431,7 @@ impl<'src> Lexer<'src> {
     }
 
     fn scan_string(&mut self) -> Result<Token> {
-        let offset = self.offset;
+        let pos = self.pos;
         let mut raw = self.bump().to_string();
         let mut terminated = false;
         loop {
@@ -453,10 +456,9 @@ impl<'src> Lexer<'src> {
                         '0' => '\0',
                         'x' => unimplemented!("hex_digit"),
                         c => {
-                            return Err(self.compile_error(
-                                self.offset,
-                                LitError::UnknownCharEscape(c).into(),
-                            ));
+                            return Err(
+                                self.compile_error(self.pos, LitError::UnknownCharEscape(c).into())
+                            );
                         }
                     };
                     raw.push(escaped_c);
@@ -466,9 +468,9 @@ impl<'src> Lexer<'src> {
             }
         }
         if terminated {
-            Ok(self.mk_tok(TokenKind::Lit(LitKind::String), raw, offset))
+            Ok(self.mk_tok(TokenKind::Lit(LitKind::String), raw, pos))
         } else {
-            Err(self.compile_error(offset, LitError::UnterminatedString(raw).into()))
+            Err(self.compile_error(pos, LitError::UnterminatedString(raw).into()))
         }
     }
 

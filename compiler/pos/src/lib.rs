@@ -2,8 +2,6 @@ mod src_file;
 
 pub use src_file::SrcFile;
 
-pub type Offset = u32;
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Pos {
     pub col: u32,

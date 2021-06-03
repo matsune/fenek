@@ -1,83 +1,78 @@
 use lex::token;
-use pos::Offset;
+use pos::Pos;
 use std::convert::TryFrom;
 
 pub mod visit;
 
 pub type NodeId = usize;
 
+#[derive(Debug)]
 pub struct Module {
     pub funs: Vec<Fun>,
 }
 
-impl Module {
-    pub fn new(funs: Vec<Fun>) -> Self {
-        Self { funs }
-    }
-}
-
-pub struct RetTy {
+#[derive(Debug)]
+pub struct Ident {
     pub id: NodeId,
-    pub keyword: Option<token::Token>,
-    pub ty: Ty,
+    pub raw: String,
+    pub pos: Pos,
 }
 
-impl RetTy {
-    pub fn new(id: NodeId, keyword: Option<token::Token>, ty: Ty) -> Self {
-        Self { id, keyword, ty }
-    }
-
-    pub fn offset(&self) -> Offset {
-        self.keyword
-            .as_ref()
-            .map(|k| k.offset)
-            .unwrap_or_else(|| self.ty.offset())
-    }
+#[derive(Debug)]
+pub struct KwIdent {
+    pub id: NodeId,
+    pub kind: token::Keyword,
+    pub pos: Pos,
 }
 
+#[derive(Debug)]
 pub struct Fun {
     pub id: NodeId,
-    pub name: token::Token,
+    pub keyword: KwIdent,
+    pub name: Ident,
     pub args: FunArgs,
     pub ret_ty: Option<RetTy>,
     pub block: Block,
 }
 
 impl Fun {
-    pub fn new(
-        id: NodeId,
-        name: token::Token,
-        args: FunArgs,
-        ret_ty: Option<RetTy>,
-        block: Block,
-    ) -> Self {
-        Self {
-            id,
-            name,
-            args,
-            ret_ty,
-            block,
-        }
+    pub fn pos(&self) -> Pos {
+        self.keyword.pos
     }
 }
 
 pub type FunArgs = Vec<FunArg>;
 
+#[derive(Debug)]
 pub struct FunArg {
     pub id: NodeId,
-    pub keyword: Option<token::Token>,
-    pub name: token::Token,
+    pub keyword: Option<KwIdent>,
+    pub name: Ident,
     pub ty: Ty,
 }
 
 impl FunArg {
-    pub fn new(id: NodeId, keyword: Option<token::Token>, name: token::Token, ty: Ty) -> Self {
-        Self {
-            id,
-            keyword,
-            name,
-            ty,
-        }
+    pub fn pos(&self) -> Pos {
+        self.keyword
+            .as_ref()
+            .map(|k| k.pos)
+            .unwrap_or(self.name.pos)
+    }
+}
+
+#[derive(Debug)]
+pub struct RetTy {
+    pub id: NodeId,
+    pub keyword: Option<KwIdent>,
+    pub ty: Ty,
+}
+
+impl RetTy {
+    pub fn pos(&self) -> Pos {
+        self.keyword
+            .as_ref()
+            .map(|k| k.pos)
+            .unwrap_or_else(|| self.ty.pos())
     }
 }
 
@@ -94,10 +89,10 @@ impl ToString for Ty {
 }
 
 impl Ty {
-    pub fn new_basic(id: NodeId, tok: token::Token) -> Self {
+    pub fn new_basic(id: NodeId, ident: Ident) -> Self {
         Self {
             id,
-            kind: TyKind::Basic(tok),
+            kind: TyKind::Basic(ident),
         }
     }
 
@@ -108,16 +103,18 @@ impl Ty {
         }
     }
 
-    pub fn offset(&self) -> Offset {
-        self.kind.offset()
+    pub fn pos(&self) -> Pos {
+        match &self.kind {
+            TyKind::Basic(ident) => ident.pos,
+            TyKind::Ptr(ty) => ty.pos(),
+        }
     }
 }
 
 #[derive(Debug)]
 pub enum TyKind {
-    Basic(token::Token),
+    Basic(Ident),
     Ptr(Box<Ty>),
-    // Lambda, Tuple...
 }
 
 impl ToString for TyKind {
@@ -130,13 +127,6 @@ impl ToString for TyKind {
 }
 
 impl TyKind {
-    pub fn offset(&self) -> Offset {
-        match self {
-            Self::Basic(tok) => tok.offset,
-            Self::Ptr(ty) => ty.offset(),
-        }
-    }
-
     pub fn is_ptr(&self) -> bool {
         matches!(self, Self::Ptr(_))
     }
@@ -145,275 +135,197 @@ impl TyKind {
 #[derive(Debug)]
 pub struct Block {
     pub id: NodeId,
-    pub lbrace: token::Token,
     pub stmts: Vec<Stmt>,
+    pub pos: Pos,
 }
 
 impl Block {
-    pub fn new(id: NodeId, lbrace: token::Token, stmts: Vec<Stmt>) -> Self {
-        Self { id, lbrace, stmts }
-    }
-
-    pub fn offset(&self) -> Offset {
-        self.lbrace.offset
+    pub fn pos(&self) -> Pos {
+        self.pos
     }
 }
 
 #[derive(Debug)]
-pub struct Stmt {
-    pub id: NodeId,
-    pub kind: StmtKind,
-}
-
-impl Stmt {
-    pub fn new(id: NodeId, kind: StmtKind) -> Self {
-        Self { id, kind }
-    }
-
-    pub fn new_empty(id: NodeId, offset: Offset) -> Self {
-        Self {
-            id,
-            kind: StmtKind::Empty(offset),
-        }
-    }
-
-    pub fn new_ret(id: NodeId, keyword: token::Token, expr: Option<Expr>) -> Self {
-        Self {
-            id,
-            kind: StmtKind::Ret { keyword, expr },
-        }
-    }
-
-    pub fn new_var_decl(
-        id: NodeId,
-        keyword: token::Token,
-        name: token::Token,
-        ty: Option<Ty>,
-        init: Expr,
-    ) -> Self {
-        Self {
-            id,
-            kind: StmtKind::VarDecl {
-                keyword,
-                name,
-                ty,
-                init,
-            },
-        }
-    }
-
-    pub fn new_assign(id: NodeId, left: Expr, right: Expr) -> Self {
-        Self {
-            id,
-            kind: StmtKind::Assign(left, right),
-        }
-    }
-
-    pub fn new_expr(id: NodeId, expr: Expr) -> Self {
-        Self {
-            id,
-            kind: StmtKind::Expr(expr),
-        }
-    }
-
-    pub fn new_if(id: NodeId, if_stmt: IfStmt) -> Self {
-        Self {
-            id,
-            kind: StmtKind::If(if_stmt),
-        }
-    }
-
-    pub fn offset(&self) -> Offset {
-        self.kind.offset()
-    }
-}
-
-#[derive(Debug)]
-pub enum StmtKind {
+pub enum Stmt {
+    Empty(EmptyStmt),
     Expr(Expr),
-    Ret {
-        keyword: token::Token,
-        expr: Option<Expr>,
-    },
-    VarDecl {
-        keyword: token::Token,
-        name: token::Token,
-        ty: Option<Ty>,
-        init: Expr,
-    },
-    Assign(Expr, Expr),
-    Empty(Offset),
+    Ret(RetStmt),
+    VarDecl(VarDecl),
+    Assign(Assign),
     If(IfStmt),
 }
 
-impl StmtKind {
-    pub fn offset(&self) -> Offset {
-        use StmtKind::*;
+#[derive(Debug)]
+pub struct EmptyStmt {
+    pub id: NodeId,
+    pub pos: Pos,
+}
+
+impl Stmt {
+    pub fn id(&self) -> NodeId {
         match self {
-            Expr(expr) => expr.offset(),
-            Ret { keyword, expr: _ } => keyword.offset,
-            VarDecl {
-                keyword,
-                name: _,
-                ty: _,
-                init: _,
-            } => keyword.offset,
-            Assign(l, _) => l.offset(),
-            Empty(offset) => *offset,
-            If(if_stmt) => if_stmt.offset,
+            Self::Empty(inner) => inner.id,
+            Self::Expr(inner) => inner.id(),
+            Self::Ret(inner) => inner.id,
+            Self::VarDecl(inner) => inner.id,
+            Self::Assign(inner) => inner.id,
+            Self::If(inner) => inner.id,
         }
+    }
+
+    pub fn pos(&self) -> Pos {
+        match self {
+            Self::Empty(inner) => inner.pos,
+            Self::Expr(inner) => inner.pos(),
+            Self::Ret(inner) => inner.pos(),
+            Self::VarDecl(inner) => inner.pos(),
+            Self::Assign(inner) => inner.pos(),
+            Self::If(inner) => inner.pos(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct RetStmt {
+    pub id: NodeId,
+    pub keyword: KwIdent,
+    pub expr: Option<Expr>,
+}
+
+impl RetStmt {
+    pub fn pos(&self) -> Pos {
+        self.keyword.pos
+    }
+}
+
+#[derive(Debug)]
+pub struct VarDecl {
+    pub id: NodeId,
+    pub keyword: KwIdent,
+    pub name: Ident,
+    pub ty: Option<Ty>,
+    pub init: Expr,
+}
+
+impl VarDecl {
+    pub fn pos(&self) -> Pos {
+        self.keyword.pos
+    }
+}
+
+#[derive(Debug)]
+pub struct Assign {
+    pub id: NodeId,
+    pub left: Expr,
+    pub right: Expr,
+}
+
+impl Assign {
+    pub fn pos(&self) -> Pos {
+        self.left.pos()
     }
 }
 
 #[derive(Debug)]
 pub struct IfStmt {
     pub id: NodeId,
-    pub offset: Offset,
+    pub keyword: KwIdent,
     pub expr: Option<Expr>,
     pub block: Block,
     pub else_if: Option<Box<IfStmt>>,
 }
 
 impl IfStmt {
-    pub fn new(
-        id: NodeId,
-        offset: Offset,
-        expr: Option<Expr>,
-        block: Block,
-        else_if: Option<Box<IfStmt>>,
-    ) -> Self {
-        Self {
-            id,
-            offset,
-            expr,
-            block,
-            else_if,
-        }
+    pub fn pos(&self) -> Pos {
+        self.keyword.pos
     }
 }
 
 #[derive(Debug)]
-pub struct Expr {
-    pub id: NodeId,
-    pub kind: ExprKind,
+pub enum Expr {
+    Path(Path),
+    Call(Call),
+    Lit(Lit),
+    Binary(Binary),
+    Unary(Unary),
 }
 
 impl Expr {
-    pub fn new(id: NodeId, kind: ExprKind) -> Self {
-        Self { id, kind }
-    }
-
-    pub fn new_path(id: NodeId, token: token::Token) -> Self {
-        Self {
-            id,
-            kind: ExprKind::Path(token),
+    pub fn id(&self) -> NodeId {
+        match self {
+            Self::Path(inner) => inner.id,
+            Self::Call(inner) => inner.id,
+            Self::Lit(inner) => inner.id,
+            Self::Binary(inner) => inner.id,
+            Self::Unary(inner) => inner.id,
         }
     }
 
-    pub fn new_call(id: NodeId, token: token::Token, args: Vec<Expr>) -> Self {
-        Self {
-            id,
-            kind: ExprKind::Call(token, args),
+    pub fn pos(&self) -> Pos {
+        match self {
+            Self::Path(inner) => inner.pos(),
+            Self::Call(inner) => inner.pos(),
+            Self::Lit(inner) => inner.pos,
+            Self::Binary(inner) => inner.pos(),
+            Self::Unary(inner) => inner.pos(),
         }
-    }
-
-    pub fn new_lit(id: NodeId, lit_kind: LitKind, token: token::Token) -> Self {
-        Self {
-            id,
-            kind: ExprKind::Lit(Lit::new(lit_kind, token)),
-        }
-    }
-
-    pub fn new_binary(id: NodeId, op: BinOp, lhs: Box<Expr>, rhs: Box<Expr>) -> Self {
-        Self {
-            id,
-            kind: ExprKind::Binary(op, lhs, rhs),
-        }
-    }
-
-    pub fn new_unary(id: NodeId, op_raw: token::Token, expr: Box<Expr>) -> Self {
-        Self {
-            id,
-            kind: ExprKind::Unary(UnOp::new(op_raw), expr),
-        }
-    }
-
-    pub fn offset(&self) -> Offset {
-        self.kind.offset()
     }
 }
 
 #[derive(Debug)]
-pub enum ExprKind {
-    // `Path` will have an array of tokens to represent
-    // either variable, method or field of struct.
-    Path(token::Token),
-    Call(token::Token, Vec<Expr>),
-    Lit(Lit),
-    Binary(BinOp, Box<Expr>, Box<Expr>),
-    Unary(UnOp, Box<Expr>),
+pub struct Path {
+    pub id: NodeId,
+    // TODO: should be Vec<Ident> to represent member access
+    // like `obj.field1.field2`
+    pub ident: Ident,
 }
 
-impl ExprKind {
-    pub fn offset(&self) -> Offset {
-        match self {
-            Self::Path(tok) => tok.offset,
-            Self::Call(tok, _) => tok.offset,
-            Self::Lit(lit) => lit.token.offset,
-            Self::Binary(_, lhs, _) => lhs.offset(),
-            Self::Unary(op, _) => op.raw.offset,
-        }
+impl Path {
+    pub fn pos(&self) -> Pos {
+        self.ident.pos
+    }
+}
+
+#[derive(Debug)]
+pub struct Call {
+    pub id: NodeId,
+    pub path: Path,
+    pub args: Vec<Expr>,
+}
+
+impl Call {
+    pub fn pos(&self) -> Pos {
+        self.path.pos()
     }
 }
 
 #[derive(Debug)]
 pub struct Lit {
-    pub kind: LitKind,
-    pub token: token::Token,
+    pub id: NodeId,
+    pub kind: token::LitKind,
+    pub raw: String,
+    pub pos: Pos,
 }
 
-impl Lit {
-    pub fn new(kind: LitKind, token: token::Token) -> Self {
-        Self { kind, token }
-    }
-
-    pub fn offset(&self) -> Offset {
-        self.token.offset
-    }
+#[derive(Debug)]
+pub struct Binary {
+    pub id: NodeId,
+    pub op: BinOp,
+    pub lhs: Box<Expr>,
+    pub rhs: Box<Expr>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum LitKind {
-    Int(token::IntBase),
-    Float,
-    Bool,
-    String,
-}
-
-impl From<token::LitKind> for LitKind {
-    fn from(kind: token::LitKind) -> Self {
-        match kind {
-            token::LitKind::Int { base } => Self::Int(base),
-            token::LitKind::Float => Self::Float,
-            token::LitKind::Bool => Self::Bool,
-            token::LitKind::String => Self::String,
-        }
+impl Binary {
+    pub fn pos(&self) -> Pos {
+        self.lhs.pos()
     }
 }
 
 #[derive(Debug)]
 pub struct BinOp {
-    pub raw: token::Token,
-}
-
-impl BinOp {
-    pub fn new(raw: token::Token) -> Self {
-        Self { raw }
-    }
-
-    pub fn op_kind(&self) -> BinOpKind {
-        BinOpKind::try_from(self.raw.kind).unwrap()
-    }
+    pub id: NodeId,
+    pub kind: BinOpKind,
+    pub pos: Pos,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -474,18 +386,23 @@ impl Assoc {
 }
 
 #[derive(Debug)]
-pub struct UnOp {
-    pub raw: token::Token,
+pub struct Unary {
+    pub id: NodeId,
+    pub op: UnOp,
+    pub expr: Box<Expr>,
 }
 
-impl UnOp {
-    fn new(raw: token::Token) -> Self {
-        Self { raw }
+impl Unary {
+    pub fn pos(&self) -> Pos {
+        self.op.pos
     }
+}
 
-    pub fn op_kind(&self) -> UnOpKind {
-        UnOpKind::try_from(self.raw.kind).unwrap()
-    }
+#[derive(Debug)]
+pub struct UnOp {
+    pub id: NodeId,
+    pub kind: UnOpKind,
+    pub pos: Pos,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

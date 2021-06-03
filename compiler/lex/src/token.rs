@@ -1,31 +1,15 @@
-use pos::Offset;
+use pos::Pos;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Token {
     pub kind: TokenKind,
     pub raw: String,
-    pub offset: Offset,
+    pub pos: Pos,
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, raw: String, offset: Offset) -> Self {
-        Token { kind, raw, offset }
-    }
-
-    pub fn is_kind(&self, kind: TokenKind) -> bool {
-        self.kind == kind
-    }
-
     pub fn try_as_keyword(&self) -> Option<Keyword> {
         Keyword::try_from(&self.raw)
-    }
-
-    pub fn is_keyword(&self) -> bool {
-        self.try_as_keyword().is_some()
-    }
-
-    pub fn is_ident(&self) -> bool {
-        self.kind == TokenKind::Ident
     }
 }
 
@@ -167,6 +151,20 @@ pub enum Keyword {
     Fun,
     If,
     Else,
+}
+
+impl std::string::ToString for Keyword {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Mut => "mut",
+            Self::Let => "let",
+            Self::Ret => "ret",
+            Self::Fun => "fun",
+            Self::If => "if",
+            Self::Else => "else",
+        }
+        .to_owned()
+    }
 }
 
 impl Keyword {
