@@ -15,6 +15,7 @@ version = "0.1.0"
 dependencies = [
  "lex",
  "pos",
+ "serde",
 ]
 
 [[package]]
@@ -85,19 +86,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "codegen"
-version = "0.1.0"
-dependencies = [
- "ast",
- "hir",
- "inkwell",
- "parse",
- "printer",
- "typeck",
- "types",
-]
-
-[[package]]
 name = "either"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -117,14 +105,12 @@ version = "0.1.0"
 dependencies = [
  "ast",
  "clap",
- "codegen",
  "error",
  "inkwell",
  "lex",
  "parse",
  "pos",
  "printer",
- "typeck",
  "typed-arena",
 ]
 
@@ -222,6 +208,7 @@ version = "0.1.0"
 dependencies = [
  "error",
  "pos",
+ "serde",
 ]
 
 [[package]]
@@ -257,15 +244,6 @@ name = "memchr"
 version = "2.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ee1c47aaa256ecabcaea351eae4a9b01ef39ed810004e298d2511ed284b1525"
-
-[[package]]
-name = "num-traits"
-version = "0.2.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a64b1ec5cda2586e284722486d802acf1f7dbdc623e2bfc57e65ca1cd099290"
-dependencies = [
- "autocfg",
-]
 
 [[package]]
 name = "once_cell"
@@ -332,6 +310,9 @@ dependencies = [
 [[package]]
 name = "pos"
 version = "0.1.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "printer"
@@ -533,22 +514,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "typeck"
-version = "0.1.0"
-dependencies = [
- "ast",
- "error",
- "hir",
- "lex",
- "num-traits",
- "parse",
- "paste",
- "pos",
- "typed-arena",
- "types",
 ]
 
 [[package]]

@@ -1,4 +1,5 @@
 use pos::Pos;
+use serde::{Serialize, Serializer};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Token {
@@ -13,7 +14,7 @@ impl Token {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize)]
 pub enum LitKind {
     Int { base: IntBase },
     Float,
@@ -22,7 +23,7 @@ pub enum LitKind {
     String,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize)]
 pub enum IntBase {
     Binary,
     Octal,
@@ -178,5 +179,14 @@ impl Keyword {
             "else" => Some(Self::Else),
             _ => None,
         }
+    }
+}
+
+impl Serialize for Keyword {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
     }
 }

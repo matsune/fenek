@@ -97,18 +97,14 @@ impl Parser {
     }
 
     fn bump_keyword(&mut self, keyword: token::Keyword) -> Result<ast::KwIdent> {
-        let kind = self
-            .bump_if(|tok| {
-                matches!( tok.try_as_keyword() ,
-                Some(kw) if kw == keyword)
-            })
-            .map(|tok| tok.try_as_keyword().unwrap())
+        let (kind, pos) = self
+            .bump_if(|tok| matches!(tok.try_as_keyword(), Some(kw) if kw == keyword))
+            .map(|tok| (tok.try_as_keyword().unwrap(), tok.pos))
             .ok_or_else(|| self.expected_err(keyword))?;
-        // FIXME: pos
         Ok(ast::KwIdent {
             id: self.gen_id(),
             kind,
-            pos: Pos::default(),
+            pos,
         })
     }
 
@@ -129,11 +125,10 @@ impl Parser {
         if let Some(keyword) = ident.try_as_keyword() {
             Err(self.compile_error(ParseError::FoundKeyword(keyword.to_string())))
         } else {
-            // FIXME: pos
             Ok(ast::Ident {
                 id: self.gen_id(),
                 raw: ident.raw,
-                pos: Pos::default(),
+                pos: ident.pos,
             })
         }
     }
@@ -146,12 +141,12 @@ impl Parser {
             )
         })
         .map(|tok| {
-            let kw = tok.try_as_keyword().unwrap();
-            // FIXME: pos
+            let pos = tok.pos;
+            let kind = tok.try_as_keyword().unwrap();
             KwIdent {
                 id: self.gen_id(),
-                kind: kw,
-                pos: Pos::default(),
+                kind,
+                pos,
             }
         })
     }
@@ -255,7 +250,7 @@ impl Parser {
 
     fn parse_block(&mut self) -> Result<Block> {
         let id = self.gen_id();
-        self.bump_kind(token::TokenKind::LBrace)?;
+        let pos = self.bump_kind(token::TokenKind::LBrace)?.pos;
         let mut stmts = Vec::new();
         loop {
             self.skip_spaces();
@@ -270,12 +265,7 @@ impl Parser {
             }
         }
         self.bump_kind(token::TokenKind::RBrace)?;
-        // FIXME: pos
-        Ok(Block {
-            id,
-            stmts,
-            pos: Pos::default(),
-        })
+        Ok(Block { id, stmts, pos })
     }
 
     fn parse_var_decl(&mut self) -> Result<Stmt> {
@@ -328,10 +318,10 @@ impl Parser {
             .ok_or_else(|| self.compile_error(ParseError::UnexpectedEof))?;
         let stmt = match tok.kind {
             token::TokenKind::Semi => {
-                // FIXME: pos
+                let pos = tok.pos;
                 Stmt::Empty(EmptyStmt {
                     id: self.gen_id(),
-                    pos: Pos::default(),
+                    pos,
                 })
             }
             token::TokenKind::Ident if tok.try_as_keyword().is_some() => {
@@ -496,13 +486,12 @@ impl Parser {
             .peek()
             .ok_or_else(|| self.compile_error(ParseError::UnexpectedEof))?;
         if let Ok(op_kind) = ast::UnOpKind::try_from(tok.kind) {
-            self.bump();
+            let pos = self.bump().unwrap().pos;
             self.skip_spaces();
-            // FIXME: pos
             let op = UnOp {
                 id: self.gen_id(),
                 kind: op_kind,
-                pos: Pos::default(),
+                pos,
             };
             let expr = self.parse_prefix_expr()?;
             Ok(Expr::Unary(Unary {
@@ -569,12 +558,12 @@ impl Parser {
         match peek.kind {
             token::TokenKind::Lit(kind) => {
                 let tok = self.bump().unwrap();
-                // FIXME: pos
+                let pos = tok.pos;
                 Ok(Expr::Lit(Lit {
                     id: self.gen_id(),
                     kind,
                     raw: tok.raw,
-                    pos: Pos::default(),
+                    pos,
                 }))
             }
             token::TokenKind::Ident => {

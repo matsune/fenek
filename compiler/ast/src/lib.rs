@@ -1,31 +1,49 @@
 use lex::token;
 use pos::Pos;
+use serde::{Serialize, Serializer};
 use std::convert::TryFrom;
 
 pub mod visit;
 
 pub type NodeId = usize;
 
-#[derive(Debug)]
+macro_rules! impl_Serialize_for_ToString {
+    ($($name:ident),*) => {
+        $(
+            impl Serialize for $name {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: Serializer,
+                {
+                    serializer.serialize_str(&self.to_string())
+                }
+            }
+        )*
+    }
+}
+
+impl_Serialize_for_ToString!(TyKind, BinOpKind, UnOpKind);
+
+#[derive(Debug, Serialize)]
 pub struct Module {
     pub funs: Vec<Fun>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Ident {
     pub id: NodeId,
     pub raw: String,
     pub pos: Pos,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct KwIdent {
     pub id: NodeId,
     pub kind: token::Keyword,
     pub pos: Pos,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Fun {
     pub id: NodeId,
     pub keyword: KwIdent,
@@ -43,7 +61,7 @@ impl Fun {
 
 pub type FunArgs = Vec<FunArg>;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct FunArg {
     pub id: NodeId,
     pub keyword: Option<KwIdent>,
@@ -60,7 +78,7 @@ impl FunArg {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct RetTy {
     pub id: NodeId,
     pub keyword: Option<KwIdent>,
@@ -76,7 +94,7 @@ impl RetTy {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Ty {
     pub id: NodeId,
     pub kind: TyKind,
@@ -117,11 +135,11 @@ pub enum TyKind {
     Ptr(Box<Ty>),
 }
 
-impl ToString for TyKind {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for TyKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Basic(tok) => tok.raw.clone(),
-            Self::Ptr(ty) => format!("{}*", ty.to_string()),
+            Self::Basic(tok) => write!(f, "{}", &tok.raw),
+            Self::Ptr(ty) => write!(f, "{}*", ty.to_string()),
         }
     }
 }
@@ -132,7 +150,7 @@ impl TyKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Block {
     pub id: NodeId,
     pub stmts: Vec<Stmt>,
@@ -145,7 +163,7 @@ impl Block {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum Stmt {
     Empty(EmptyStmt),
     Expr(Expr),
@@ -155,7 +173,7 @@ pub enum Stmt {
     If(IfStmt),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct EmptyStmt {
     pub id: NodeId,
     pub pos: Pos,
@@ -185,7 +203,7 @@ impl Stmt {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct RetStmt {
     pub id: NodeId,
     pub keyword: KwIdent,
@@ -198,7 +216,7 @@ impl RetStmt {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct VarDecl {
     pub id: NodeId,
     pub keyword: KwIdent,
@@ -213,7 +231,7 @@ impl VarDecl {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Assign {
     pub id: NodeId,
     pub left: Expr,
@@ -226,7 +244,7 @@ impl Assign {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct IfStmt {
     pub id: NodeId,
     pub keyword: KwIdent,
@@ -241,7 +259,7 @@ impl IfStmt {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum Expr {
     Path(Path),
     Call(Call),
@@ -272,7 +290,7 @@ impl Expr {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Path {
     pub id: NodeId,
     // TODO: should be Vec<Ident> to represent member access
@@ -286,7 +304,7 @@ impl Path {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Call {
     pub id: NodeId,
     pub path: Path,
@@ -299,7 +317,7 @@ impl Call {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Lit {
     pub id: NodeId,
     pub kind: token::LitKind,
@@ -307,7 +325,7 @@ pub struct Lit {
     pub pos: Pos,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Binary {
     pub id: NodeId,
     pub op: BinOp,
@@ -321,7 +339,7 @@ impl Binary {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct BinOp {
     pub id: NodeId,
     pub kind: BinOpKind,
@@ -359,6 +377,25 @@ impl TryFrom<token::TokenKind> for BinOpKind {
     }
 }
 
+impl std::fmt::Display for BinOpKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Add => "+",
+                Self::Sub => "-",
+                Self::Mul => "*",
+                Self::Div => "/",
+                Self::Lt => "<",
+                Self::Gt => ">",
+                Self::Le => "<=",
+                Self::Ge => ">=",
+            }
+        )
+    }
+}
+
 impl BinOpKind {
     pub fn precedence(&self) -> u8 {
         match self {
@@ -373,7 +410,7 @@ impl BinOpKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum Assoc {
     Left,
     Right,
@@ -385,7 +422,7 @@ impl Assoc {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Unary {
     pub id: NodeId,
     pub op: UnOp,
@@ -398,7 +435,7 @@ impl Unary {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct UnOp {
     pub id: NodeId,
     pub kind: UnOpKind,
@@ -429,5 +466,20 @@ impl TryFrom<token::TokenKind> for UnOpKind {
             _ => return Err("unknown unary op"),
         };
         Ok(kind)
+    }
+}
+
+impl std::fmt::Display for UnOpKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Neg => "-",
+                Self::Not => "!",
+                Self::Ref => "&",
+                Self::Deref => "*",
+            }
+        )
     }
 }
