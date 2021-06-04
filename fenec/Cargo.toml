@@ -15,7 +15,7 @@ clap = "3.0.0-beta.2"
 ast = { path = "../compiler/ast" }
 error = { path = "../compiler/error" }
 typeck = { path = "../compiler/typeck" }
-# codegen = { path = "../compiler/codegen" }
+codegen = { path = "../compiler/codegen" }
 pos = { path = "../compiler/pos" }
 lex = { path = "../compiler/lex" }
 parse = { path = "../compiler/parse" }

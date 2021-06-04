@@ -60,7 +60,7 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
     fn build_stmt(&mut self, stmt: &hir::Stmt) {
         match stmt {
             hir::Stmt::VarDecl(var_decl) => {
-                let name = &var_decl.name.raw;
+                let name = &var_decl.name;
                 let val = self.build_expr(&var_decl.init).unwrap();
                 let ptr = self
                     .builder()
@@ -144,7 +144,16 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
 
     fn build_expr_left(&self, expr: &hir::Expr) -> BasicValueEnum<'ctx> {
         match expr {
-            hir::Expr::Path(ident) => self.function.var_map.get(&ident.def.id).unwrap().ptr.into(),
+            hir::Expr::Path(path) => self
+                .function
+                .var_map
+                .get(&path.def.id)
+                .expect(&format!(
+                    "expr id {:?} \n>>>>{:?}",
+                    expr, self.function.var_map
+                ))
+                .ptr
+                .into(),
             hir::Expr::DerefExpr(deref_expr) => {
                 let ptr = self.build_expr_left(&deref_expr.expr).into_pointer_value();
                 self.builder().build_load(ptr, "")
@@ -198,7 +207,7 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
                 for arg in &call.args {
                     args.push(self.build_expr(&arg).unwrap());
                 }
-                let fn_value = self.ctx.def_fn_value_map.get(&call.def.id).unwrap();
+                let fn_value = self.ctx.def_fn_value_map.get(&call.path.def.id).unwrap();
                 self.builder()
                     .build_call(*fn_value, &args, "")
                     .try_as_basic_value()

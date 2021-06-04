@@ -185,7 +185,6 @@ impl Parser {
     }
 
     fn parse_fun_args(&mut self) -> Result<FunArgs> {
-        let id = self.gen_id();
         self.bump_kind(token::TokenKind::LParen)?;
         self.skip_spaces();
 
@@ -206,7 +205,7 @@ impl Parser {
 
             let ty = self.parse_ty()?;
             args.push(FunArg {
-                id,
+                id: self.gen_id(),
                 keyword,
                 name,
                 ty,
