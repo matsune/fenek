@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 pub type DefId = usize;
 
 /// User defined symbols. This will be created when
@@ -7,14 +9,14 @@ pub type DefId = usize;
 /// Generic type <Ty> will be `infer_ty::InferTy` or
 /// `ty::Type` because this will be used by either
 /// type inference and type checking.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Def<Ty> {
     pub id: DefId,
     pub ty: Ty,
     pub kind: DefKind,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum DefKind {
     Var { is_mut: bool },
     // array of arguments mutability

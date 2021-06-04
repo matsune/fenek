@@ -1,19 +1,16 @@
+use serde::Serialize;
+
 pub mod def;
 
 use def::*;
-use lex::token;
 use types::ty;
 
+#[derive(Serialize)]
 pub struct Module {
     pub funs: Vec<Fun>,
 }
 
-impl Module {
-    pub fn new(funs: Vec<Fun>) -> Self {
-        Self { funs }
-    }
-}
-
+#[derive(Serialize)]
 pub struct Fun {
     pub id: ast::NodeId,
     pub name: String,
@@ -22,36 +19,15 @@ pub struct Fun {
     pub def: Def<ty::Type>,
 }
 
-impl Fun {
-    pub fn new(
-        id: ast::NodeId,
-        name: String,
-        args: FunArgs,
-        block: Block,
-        def: Def<ty::Type>,
-    ) -> Self {
-        Fun {
-            id,
-            name,
-            args,
-            block,
-            def,
-        }
-    }
-}
-
 pub type FunArgs = Vec<Path>;
 
+#[derive(Debug, Serialize)]
 pub struct Block {
     pub id: ast::NodeId,
     pub stmts: Vec<Stmt>,
 }
 
 impl Block {
-    pub fn new(id: ast::NodeId, stmts: Vec<Stmt>) -> Self {
-        Block { id, stmts }
-    }
-
     pub fn is_terminated(&self) -> bool {
         self.stmts
             .last()
@@ -60,25 +36,26 @@ impl Block {
     }
 }
 
-macro_rules! Enum {
-    ($name:ident [$($Var:ident),*]) => {
-        pub enum $name {
+macro_rules! stmt_enum {
+    ($($Var:ident),*) => {
+        #[derive(Debug, Serialize)]
+        pub enum Stmt {
             $(
                 $Var($Var),
             )*
         }
 
         $(
-            impl Into<$name> for $Var {
-                fn into(self) -> $name {
-                    $name::$Var(self)
+            impl Into<Stmt> for $Var {
+                fn into(self) -> Stmt {
+                    Stmt::$Var(self)
                 }
             }
         )*
     }
 }
 
-Enum!(Stmt [VarDecl, Ret, Expr, Assign, IfStmt]);
+stmt_enum!(VarDecl, Ret, Expr, Assign, IfStmt);
 
 impl Stmt {
     pub fn is_terminator(&self) -> bool {
@@ -90,6 +67,7 @@ impl Stmt {
     }
 }
 
+#[derive(Debug, Serialize)]
 pub struct IfStmt {
     pub id: ast::NodeId,
     pub expr: Option<Expr>,
@@ -98,20 +76,6 @@ pub struct IfStmt {
 }
 
 impl IfStmt {
-    pub fn new(
-        id: ast::NodeId,
-        expr: Option<Expr>,
-        block: Block,
-        else_if: Option<Box<IfStmt>>,
-    ) -> Self {
-        Self {
-            id,
-            expr,
-            block,
-            else_if,
-        }
-    }
-
     pub fn is_terminator(&self) -> bool {
         let is_terminated = self.block.is_terminated();
         match &self.else_if {
@@ -121,6 +85,7 @@ impl IfStmt {
     }
 }
 
+#[derive(Debug, Serialize)]
 pub struct Assign {
     pub id: ast::NodeId,
     pub left: Box<Expr>,
@@ -137,15 +102,16 @@ impl Assign {
     }
 }
 
+#[derive(Debug, Serialize)]
 pub struct VarDecl {
     pub id: ast::NodeId,
-    pub name: token::Token,
+    pub name: String,
     pub init: Box<Expr>,
     pub def: Def<ty::Type>,
 }
 
 impl VarDecl {
-    pub fn new(id: ast::NodeId, name: token::Token, init: Expr, def: Def<ty::Type>) -> Self {
+    pub fn new(id: ast::NodeId, name: String, init: Expr, def: Def<ty::Type>) -> Self {
         Self {
             id,
             name,
@@ -155,47 +121,42 @@ impl VarDecl {
     }
 }
 
+#[derive(Debug, Serialize)]
 pub struct Ret {
     pub id: ast::NodeId,
     pub expr: Option<Expr>,
 }
 
-impl Ret {
-    pub fn new(id: ast::NodeId, expr: Option<Expr>) -> Self {
-        Self { id, expr }
-    }
-}
-
-macro_rules! Enum_with_type {
-    ($name:ident [$($Var:ident),*]) => {
-        #[derive(Debug)]
-        pub enum $name {
+macro_rules! expr_enum {
+    ($($Var:ident),*) => {
+        #[derive(Debug, Serialize)]
+        pub enum Expr {
             $(
                 $Var($Var),
             )*
         }
 
-        impl $name {
+        impl Expr {
             pub fn get_type(&self) -> ty::Type {
                 match self {
                     $(
-                        $name::$Var(v) => v.get_type(),
+                        Self::$Var(v) => v.get_type(),
                     )*
                 }
             }
         }
 
         $(
-            impl Into<$name> for $Var {
-                fn into(self) -> $name {
-                    $name::$Var(self)
+            impl Into<Expr> for $Var {
+                fn into(self) -> Expr {
+                    Expr::$Var(self)
                 }
             }
         )*
     }
 }
 
-Enum_with_type!(Expr [Lit, Path, Call, Binary, RefExpr, DerefExpr, NegExpr, NotExpr]);
+expr_enum!(Lit, Path, Call, Binary, RefExpr, DerefExpr, NegExpr, NotExpr);
 
 impl Expr {
     pub fn is_lvalue(&self) -> bool {
@@ -216,7 +177,7 @@ impl Expr {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Lit {
     pub id: ast::NodeId,
     pub kind: LitKind,
@@ -224,16 +185,12 @@ pub struct Lit {
 }
 
 impl Lit {
-    pub fn new(id: ast::NodeId, kind: LitKind, ty: ty::Type) -> Self {
-        Self { id, kind, ty }
-    }
-
     pub fn get_type(&self) -> ty::Type {
         self.ty.clone()
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum LitKind {
     I8(i8),
     I16(i16),
@@ -253,40 +210,31 @@ impl LitKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Path {
     pub raw: String,
     pub def: Def<ty::Type>,
 }
 
 impl Path {
-    pub fn new(raw: String, def: Def<ty::Type>) -> Self {
-        Self { raw, def }
-    }
-
     pub fn get_type(&self) -> ty::Type {
         self.def.ty.clone()
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Call {
-    pub path: String,
+    pub path: Path,
     pub args: Vec<Expr>,
-    pub def: Def<ty::Type>,
 }
 
 impl Call {
-    pub fn new(path: String, args: Vec<Expr>, def: Def<ty::Type>) -> Self {
-        Self { path, args, def }
-    }
-
     pub fn get_type(&self) -> ty::Type {
-        self.def.ty.clone()
+        *self.path.get_type().as_fun().ret.clone()
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Binary {
     pub id: ast::NodeId,
     pub op: ast::BinOpKind,
@@ -297,7 +245,7 @@ pub struct Binary {
 
 impl Binary {
     pub fn new(id: ast::NodeId, op: ast::BinOpKind, lhs: Expr, rhs: Expr, ty: ty::Type) -> Self {
-        Binary {
+        Self {
             id,
             op,
             lhs: Box::new(lhs),
@@ -311,10 +259,10 @@ impl Binary {
     }
 }
 
-macro_rules! UnaryEnum {
+macro_rules! unary_expr {
     ($($name:ident),*) => {
         $(
-            #[derive(Debug)]
+            #[derive(Debug, Serialize)]
             pub struct $name {
                 pub id: ast::NodeId,
                 pub expr: Box<Expr>,
@@ -332,7 +280,7 @@ macro_rules! UnaryEnum {
     }
 }
 
-UnaryEnum!(RefExpr, DerefExpr, NegExpr, NotExpr);
+unary_expr!(RefExpr, DerefExpr, NegExpr, NotExpr);
 
 impl RefExpr {
     pub fn get_type(&self) -> ty::Type {

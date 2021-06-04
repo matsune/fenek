@@ -4,7 +4,8 @@ use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
 use lex::token;
 use num_traits::Num;
-use pos::{Pos, SrcFile};
+use pos::Pos;
+use std::ops::Deref;
 use std::str::FromStr;
 use types::infer::InferTyArena;
 use types::solve::Solver;
@@ -51,7 +52,7 @@ fn parse_int_literal<T: Num>(base: token::IntBase, literal: &str) -> Result<T, T
 
 type LowerResult<T> = Result<T, (ast::NodeId, TypeCkError)>;
 
-pub fn lower(src: &SrcFile, module: ast::Module) -> Result<hir::Module> {
+pub fn lower(module: ast::Module) -> Result<hir::Module> {
     // lifetime 'lower is this block scope
     let ty_arena = InferTyArena::default();
     let solver = Solver::new(&ty_arena);
@@ -60,17 +61,15 @@ pub fn lower(src: &SrcFile, module: ast::Module) -> Result<hir::Module> {
     let mut lower = {
         // 1. analyze AST and make hash maps to infer types of each nodes
         let (node_infer_ty_map, node_infer_def_map) =
-            TyAnalyzer::new(src, &solver, &def_arena).analyze_module(&module)?;
+            TyAnalyzer::new(&solver, &def_arena).analyze_module(&module)?;
 
         // 2. finalize inferring type into concrete ty::Type
         let (node_ty_map, node_def_map) = {
             let mut node_ty_map = NodeMap::with_capacity(node_infer_ty_map.len());
             for (node_id, infer_ty) in node_infer_ty_map.iter() {
                 let final_ty = solver.solve_type(infer_ty).map_err(|err| {
-                    let offset = ast::visit::visit_module(&module, *node_id)
-                        .unwrap()
-                        .offset();
-                    CompileError::new(src.pos_from_offset(offset), err.into())
+                    let node = ast::visit::find_node(&module, *node_id).unwrap();
+                    CompileError::new(node.pos(), err.into())
                 })?;
                 node_ty_map.insert(*node_id, final_ty);
             }
@@ -84,31 +83,24 @@ pub fn lower(src: &SrcFile, module: ast::Module) -> Result<hir::Module> {
             (node_ty_map, node_def_map)
         };
 
-        Lower::new(&src, node_ty_map, node_def_map)
+        Lower::new(node_ty_map, node_def_map)
     };
 
     lower.lower_module(&module)
 }
 
-struct Lower<'src> {
-    src: &'src SrcFile,
+struct Lower {
     ty_map: NodeMap<ty::Type>,
     node_def_map: NodeMap<Def<ty::Type>>,
-    // (is_mut, type)
-    current_fun_ret_ty: Option<(bool, ty::Type)>,
 }
 
-impl<'src> Lower<'src> {
-    fn new(
-        src: &'src SrcFile,
-        ty_map: NodeMap<ty::Type>,
-        node_def_map: NodeMap<Def<ty::Type>>,
-    ) -> Self {
+type CurrentRetTy = (bool, ty::Type);
+
+impl Lower {
+    fn new(ty_map: NodeMap<ty::Type>, node_def_map: NodeMap<Def<ty::Type>>) -> Self {
         Self {
-            src,
             ty_map,
             node_def_map,
-            current_fun_ret_ty: None,
         }
     }
 
@@ -116,120 +108,126 @@ impl<'src> Lower<'src> {
         let mut funs = Vec::new();
         for fun in &module.funs {
             funs.push(self.lower_fun(&fun).map_err(|(id, err)| {
-                let offset = ast::visit::visit_module(&module, id)
-                    .unwrap_or_else(|| panic!("fun {:?} error on id {:?}", fun.id, id))
-                    .offset();
-                compile_error(self.src.pos_from_offset(offset), err)
+                let pos = ast::visit::find_node(&module, id).unwrap().pos();
+                compile_error(pos, err)
             })?);
         }
-        Ok(hir::Module::new(funs))
+        Ok(hir::Module { funs })
     }
 
     fn lower_fun(&mut self, fun: &ast::Fun) -> LowerResult<hir::Fun> {
         let id = fun.id;
-        let def = self.node_def_map.get(&id).unwrap();
+        let name = fun.name.raw.clone();
+        let def = self.node_def_map.get(&id).unwrap().clone();
         let ret_ty = match &fun.ret_ty {
             Some(ret_ty) => {
-                let is_mut = ret_ty
-                    .keyword
-                    .as_ref()
-                    .map(|tok| matches!(tok.try_as_keyword().unwrap(), token::Keyword::Mut))
-                    .unwrap_or(false);
+                let is_mut = ret_ty.is_mut();
                 let ty = self.ty_map.get(&ret_ty.ty.id).unwrap();
                 if ty.is_fun() {
+                    // returning function type is not supported so far
                     return Err((ret_ty.id, TypeCkError::InvalidReturnType));
                 }
                 (is_mut, ty.clone())
             }
             None => (false, ty::Type::Void),
         };
-        self.current_fun_ret_ty = Some(ret_ty);
         let mut args = Vec::new();
         for arg in &fun.args {
-            let def = self.node_def_map.get(&arg.id).unwrap();
-            args.push(hir::Path::new(arg.name.raw.clone(), def.clone()));
+            let raw = arg.name.raw.clone();
+            let def = self.node_def_map.get(&arg.id).unwrap().clone();
+            args.push(hir::Path { raw, def });
         }
-        let block = self.lower_block(&fun.block)?;
-        Ok(hir::Fun::new(
+        let block = self.lower_block(&fun.block, &ret_ty)?;
+        Ok(hir::Fun {
             id,
-            fun.name.raw.clone(),
+            name,
             args,
             block,
-            def.clone(),
-        ))
+            def,
+        })
     }
 
-    fn lower_block(&self, block: &ast::Block) -> LowerResult<hir::Block> {
+    fn lower_block(
+        &self,
+        block: &ast::Block,
+        current_ret_ty: &CurrentRetTy,
+    ) -> LowerResult<hir::Block> {
+        let id = block.id;
         let mut stmts = Vec::new();
         let stmts_len = block.stmts.len();
         for (idx, stmt) in block.stmts.iter().enumerate() {
-            if matches!(stmt.kind, ast::StmtKind::Empty(_)) {
+            if matches!(stmt, ast::Stmt::Empty(_)) {
                 continue;
             }
             let is_last = idx == stmts_len - 1;
-            let stmt = self.lower_stmt(&stmt, is_last)?;
+            let stmt = self.lower_stmt(&stmt, is_last, current_ret_ty)?;
             stmts.push(stmt);
         }
-        Ok(hir::Block::new(block.id, stmts))
+        Ok(hir::Block { id, stmts })
     }
 
-    fn lower_stmt(&self, stmt: &ast::Stmt, is_last: bool) -> LowerResult<hir::Stmt> {
-        let id = stmt.id;
-        let stmt: hir::Stmt = match &stmt.kind {
-            ast::StmtKind::Expr(expr) => self.lower_expr(&expr)?.into(),
-            ast::StmtKind::VarDecl {
-                keyword: _,
-                name,
-                ty: _,
-                init,
-            } => {
-                let expr = self.lower_expr(&init)?;
-                let def = self.node_def_map.get(&id).unwrap();
+    fn lower_stmt(
+        &self,
+        stmt: &ast::Stmt,
+        is_last: bool,
+        current_ret_ty: &CurrentRetTy,
+    ) -> LowerResult<hir::Stmt> {
+        let id = stmt.id();
+        let stmt: hir::Stmt = match &stmt {
+            ast::Stmt::Expr(expr) => self.lower_expr(&expr)?.into(),
+            ast::Stmt::VarDecl(var_decl) => {
+                let name = var_decl.name.raw.clone();
+                let expr = self.lower_expr(&var_decl.init)?;
+                let def = self.node_def_map.get(&id).unwrap().clone();
                 if matches!(def.ty, ty::Type::Fun(_) | ty::Type::Void) {
                     return Err((id, TypeCkError::NonBasicVar));
                 }
-                hir::VarDecl::new(id, name.clone(), expr, def.clone()).into()
+                hir::VarDecl::new(id, name, expr, def).into()
             }
-            ast::StmtKind::Ret { keyword: _, expr } => {
-                let expr = match expr {
+            ast::Stmt::Ret(ret) => {
+                let expr = match &ret.expr {
                     Some(expr) => Some(self.lower_expr(&expr)?),
                     None => None,
                 };
-                if self.current_fun_ret_ty.as_ref().unwrap().0
-                    && !expr.as_ref().map(|e| e.is_mutable()).unwrap_or(false)
-                {
-                    // check mutability
+                if current_ret_ty.0 && !expr.as_ref().map(|e| e.is_mutable()).unwrap_or(false) {
+                    // return type of this function is mutable but expr is not mutable
                     return Err((id, TypeCkError::RequiresMutableVar));
                 }
-                hir::Ret::new(id, expr).into()
+                hir::Ret { id, expr }.into()
             }
-            ast::StmtKind::Assign(left, right) => {
-                let left = self.lower_expr(&left)?;
+            ast::Stmt::Assign(assign) => {
+                let left = self.lower_expr(&assign.left)?;
                 if !left.is_lvalue() {
                     return Err((id, TypeCkError::LvalueRequired));
                 }
                 if !left.is_mutable() {
                     return Err((id, TypeCkError::AssigningReadonly));
                 }
-                let right = self.lower_expr(&right)?;
+                let right = self.lower_expr(&assign.right)?;
                 hir::Assign::new(id, left, right).into()
             }
-            ast::StmtKind::Empty(_) => unreachable!(),
-            ast::StmtKind::If(if_stmt) => {
+            ast::Stmt::Empty(_) => unreachable!(),
+            ast::Stmt::If(if_stmt) => {
                 let expr = self.lower_expr(if_stmt.expr.as_ref().unwrap())?;
-                let block = self.lower_block(&if_stmt.block)?;
+                let block = self.lower_block(&if_stmt.block, current_ret_ty)?;
                 let else_if = match &if_stmt.else_if {
-                    Some(e) => Some(Box::new(self.lower_else_if(e)?)),
+                    Some(e) => Some(Box::new(self.lower_else_if(e, current_ret_ty)?)),
                     None => None,
                 };
-                hir::IfStmt::new(id, Some(expr), block, else_if).into()
+                hir::IfStmt {
+                    id,
+                    expr: Some(expr),
+                    block,
+                    else_if,
+                }
+                .into()
             }
         };
         match (is_last, stmt.is_terminator()) {
             (true, true) => {}
             (true, false) => {
                 // ret_ty should be void
-                if !self.current_fun_ret_ty.as_ref().unwrap().1.is_void() {
+                if !current_ret_ty.1.is_void() {
                     return Err((id, TypeCkError::MustBeRetStmt));
                 }
             }
@@ -239,25 +237,40 @@ impl<'src> Lower<'src> {
         Ok(stmt)
     }
 
-    fn lower_else_if(&self, else_stmt: &ast::IfStmt) -> LowerResult<hir::IfStmt> {
+    fn lower_else_if(
+        &self,
+        else_stmt: &ast::IfStmt,
+        current_ret_ty: &CurrentRetTy,
+    ) -> LowerResult<hir::IfStmt> {
+        let id = else_stmt.id;
         let expr = match &else_stmt.expr {
             Some(e) => Some(self.lower_expr(e)?),
             None => None,
         };
-        let block = self.lower_block(&else_stmt.block)?;
+        let block = self.lower_block(&else_stmt.block, current_ret_ty)?;
         let else_if = match &else_stmt.else_if {
-            Some(e) => Some(Box::new(self.lower_else_if(e)?)),
+            Some(e) => Some(Box::new(self.lower_else_if(e, current_ret_ty)?)),
             None => None,
         };
-        Ok(hir::IfStmt::new(else_stmt.id, expr, block, else_if))
+        Ok(hir::IfStmt {
+            id,
+            expr,
+            block,
+            else_if,
+        })
     }
 
-    fn lower_lit(&self, id: ast::NodeId, lit: &ast::Lit) -> LowerResult<hir::Lit> {
+    fn lower_lit(&self, lit: &ast::Lit) -> LowerResult<hir::Lit> {
+        let id = lit.id;
         let ty = self.ty_map.get(&id).unwrap();
-        let lit_kind = self
-            .lower_literal(ty, &lit.kind, &lit.token.raw)
+        let kind = self
+            .lower_literal(ty, &lit.kind, &lit.raw)
             .map_err(|err| (id, err))?;
-        Ok(hir::Lit::new(id, lit_kind, ty.clone()))
+        Ok(hir::Lit {
+            id,
+            kind,
+            ty: ty.clone(),
+        })
     }
 
     fn lower_literal(
@@ -268,7 +281,7 @@ impl<'src> Lower<'src> {
     ) -> Result<hir::LitKind, TypeCkError> {
         let kind = match lit_kind {
             // int literal
-            ast::LitKind::Int(base) => match ty {
+            ast::LitKind::Int { base } => match ty {
                 // to int
                 ty::Type::Int(kind) => match kind {
                     // to i8
@@ -374,117 +387,41 @@ impl<'src> Lower<'src> {
         Ok(kind)
     }
 
+    fn lower_path(&self, path: &ast::Path) -> hir::Path {
+        let raw = path.ident.raw.clone();
+        let def = self.node_def_map.get(&path.id).unwrap().clone();
+        hir::Path { raw, def }
+    }
+
+    fn lower_call(&self, call: &ast::Call) -> LowerResult<hir::Call> {
+        let path = self.lower_path(&call.path);
+        let arg_muts = path.def.as_fn();
+        let mut args = Vec::new();
+        for (idx, arg) in call.args.iter().enumerate() {
+            let expr = self.lower_expr(&arg)?;
+            if arg_muts[idx] && !expr.is_mutable() {
+                return Err((arg.id(), TypeCkError::RequiresMutableVar));
+            }
+            args.push(expr);
+        }
+        Ok(hir::Call { path, args })
+    }
+
     fn lower_expr(&self, expr: &ast::Expr) -> LowerResult<hir::Expr> {
-        let id = expr.id;
-        let ty = self.ty_map.get(&id).unwrap().clone();
-        match &expr.kind {
-            ast::ExprKind::Lit(lit) => self.lower_lit(id, lit).map(|v| v.into()),
-            ast::ExprKind::Path(tok) => {
-                let def = self.node_def_map.get(&expr.id).unwrap();
-                let expr = hir::Path::new(
-                    tok.raw.clone(),
-                    Def::new(def.id, def.ty.clone(), def.kind.clone()),
-                )
-                .into();
-                Ok(expr)
-            }
-            ast::ExprKind::Call(path, args) => {
-                let path = path.raw.clone();
-                let def = self.node_def_map.get(&expr.id).unwrap();
-                let arg_muts = def.as_fn();
-                let mut _args = Vec::new();
-                for (idx, arg) in args.iter().enumerate() {
-                    let expr = self.lower_expr(&arg)?;
-                    if arg_muts[idx] && !expr.is_mutable() {
-                        return Err((arg.id, TypeCkError::RequiresMutableVar));
-                    }
-                    _args.push(expr);
-                }
-                Ok(hir::Call::new(path, _args, def.clone()).into())
-            }
-            ast::ExprKind::Binary(op, lhs, rhs) => self.lower_binary(id, op, lhs, rhs),
-            ast::ExprKind::Unary(op, expr) => {
-                match &expr.kind {
-                    ast::ExprKind::Lit(lit) => {
-                        match op.op_kind() {
-                            ast::UnOpKind::Neg => {
-                                // - should have number
-                                if !ty.is_int() && !ty.is_float() {
-                                    return Err((id, TypeCkError::InvalidUnaryTypes));
-                                }
-                                let mut literal = String::from("-");
-                                literal.push_str(&lit.token.raw);
-                                self.lower_literal(&ty, &lit.kind, &literal)
-                                    .map(|lit_kind| hir::Lit::new(id, lit_kind, ty).into())
-                                    .map_err(|err| (id, err))
-                            }
-                            ast::UnOpKind::Not => {
-                                // ! should have bool
-                                if !ty.is_bool() {
-                                    return Err((id, TypeCkError::InvalidUnaryTypes));
-                                }
-                                self.lower_lit(id, &lit).map(|v| {
-                                    // toggle bool value
-                                    let mut v = v;
-                                    v.kind = hir::LitKind::Bool(!v.kind.as_bool());
-                                    v.into()
-                                })
-                            }
-                            ast::UnOpKind::Ref | ast::UnOpKind::Deref => {
-                                Err((id, TypeCkError::LvalueRequired))
-                            }
-                        }
-                    }
-                    _ => {
-                        let expr = self.lower_expr(&expr)?;
-                        let expr_ty = expr.get_type();
-                        match op.op_kind() {
-                            ast::UnOpKind::Neg => {
-                                // + and - should have number
-                                if !expr_ty.is_int() && !expr_ty.is_float() {
-                                    return Err((id, TypeCkError::InvalidUnaryTypes));
-                                }
-                                Ok(hir::NegExpr::new(id, expr).into())
-                            }
-                            ast::UnOpKind::Not => {
-                                // ! should have bool
-                                if !expr_ty.is_bool() {
-                                    return Err((id, TypeCkError::InvalidUnaryTypes));
-                                }
-                                Ok(hir::NotExpr::new(id, expr).into())
-                            }
-                            ast::UnOpKind::Ref => {
-                                if expr_ty.is_void() {
-                                    return Err((id, TypeCkError::InvalidUnaryTypes));
-                                }
-                                if !expr.is_lvalue() {
-                                    return Err((id, TypeCkError::LvalueRequired));
-                                }
-                                Ok(hir::RefExpr::new(id, expr).into())
-                            }
-                            ast::UnOpKind::Deref => {
-                                if expr_ty.is_void() {
-                                    return Err((id, TypeCkError::InvalidUnaryTypes));
-                                }
-                                Ok(hir::DerefExpr::new(id, expr).into())
-                            }
-                        }
-                    }
-                }
-            }
+        match &expr {
+            ast::Expr::Lit(lit) => self.lower_lit(lit).map(|v| v.into()),
+            ast::Expr::Path(path) => Ok(self.lower_path(path).into()),
+            ast::Expr::Call(call) => self.lower_call(call).map(|v| v.into()),
+            ast::Expr::Binary(binary) => self.lower_binary(binary).map(|v| v.into()),
+            ast::Expr::Unary(unary) => self.lower_unary(unary),
         }
     }
 
-    fn lower_binary(
-        &self,
-        id: ast::NodeId,
-        op: &ast::BinOp,
-        lhs: &ast::Expr,
-        rhs: &ast::Expr,
-    ) -> LowerResult<hir::Expr> {
-        let lhs = self.lower_expr(lhs)?;
-        let rhs = self.lower_expr(rhs)?;
-        match op.op_kind() {
+    fn lower_binary(&self, binary: &ast::Binary) -> LowerResult<hir::Binary> {
+        let id = binary.id;
+        let lhs = self.lower_expr(&binary.lhs)?;
+        let rhs = self.lower_expr(&binary.rhs)?;
+        match binary.op.kind {
             ast::BinOpKind::Add
             | ast::BinOpKind::Sub
             | ast::BinOpKind::Mul
@@ -498,13 +435,79 @@ impl<'src> Lower<'src> {
                 _ => return Err((id, TypeCkError::InvalidBinaryTypes)),
             },
         };
-        Ok(hir::Binary::new(
-            id,
-            op.op_kind(),
-            lhs,
-            rhs,
-            self.ty_map.get(&id).unwrap().clone(),
-        )
-        .into())
+        let ty = self.ty_map.get(&id).unwrap().clone();
+        Ok(hir::Binary::new(id, binary.op.kind, lhs, rhs, ty))
+    }
+
+    fn lower_unary(&self, unary: &ast::Unary) -> LowerResult<hir::Expr> {
+        let id = unary.id;
+        let ty = self.ty_map.get(&id).unwrap().clone();
+        match unary.expr.deref() {
+            ast::Expr::Lit(lit) => {
+                match unary.op.kind {
+                    ast::UnOpKind::Neg => {
+                        // - should have number
+                        if !ty.is_int() && !ty.is_float() {
+                            return Err((id, TypeCkError::InvalidUnaryTypes));
+                        }
+                        let mut literal = String::from("-");
+                        literal.push_str(&lit.raw);
+                        self.lower_literal(&ty, &lit.kind, &literal)
+                            .map(|kind| hir::Lit { id, kind, ty }.into())
+                            .map_err(|err| (id, err))
+                    }
+                    ast::UnOpKind::Not => {
+                        // ! should have bool
+                        if !ty.is_bool() {
+                            return Err((id, TypeCkError::InvalidUnaryTypes));
+                        }
+                        self.lower_lit(&lit).map(|v| {
+                            // toggle bool value
+                            let mut v = v;
+                            v.kind = hir::LitKind::Bool(!v.kind.as_bool());
+                            v.into()
+                        })
+                    }
+                    ast::UnOpKind::Ref | ast::UnOpKind::Deref => {
+                        Err((id, TypeCkError::LvalueRequired))
+                    }
+                }
+            }
+            _ => {
+                let expr = self.lower_expr(&unary.expr)?;
+                let expr_ty = expr.get_type();
+                match unary.op.kind {
+                    ast::UnOpKind::Neg => {
+                        // + and - should have number
+                        if !expr_ty.is_int() && !expr_ty.is_float() {
+                            return Err((id, TypeCkError::InvalidUnaryTypes));
+                        }
+                        Ok(hir::NegExpr::new(id, expr).into())
+                    }
+                    ast::UnOpKind::Not => {
+                        // ! should have bool
+                        if !expr_ty.is_bool() {
+                            return Err((id, TypeCkError::InvalidUnaryTypes));
+                        }
+                        Ok(hir::NotExpr::new(id, expr).into())
+                    }
+                    ast::UnOpKind::Ref => {
+                        if expr_ty.is_void() {
+                            return Err((id, TypeCkError::InvalidUnaryTypes));
+                        }
+                        if !expr.is_lvalue() {
+                            return Err((id, TypeCkError::LvalueRequired));
+                        }
+                        Ok(hir::RefExpr::new(id, expr).into())
+                    }
+                    ast::UnOpKind::Deref => {
+                        if expr_ty.is_void() {
+                            return Err((id, TypeCkError::InvalidUnaryTypes));
+                        }
+                        Ok(hir::DerefExpr::new(id, expr).into())
+                    }
+                }
+            }
+        }
     }
 }

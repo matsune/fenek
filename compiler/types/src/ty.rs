@@ -133,3 +133,20 @@ impl ToString for FloatType {
         .to_string()
     }
 }
+
+macro_rules! impl_Serialize_for_ToString {
+    ($($name:ident),*) => {
+        $(
+            impl serde::Serialize for $name {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: serde::Serializer,
+                {
+                    serializer.serialize_str(&self.to_string())
+                }
+            }
+        )*
+    }
+}
+
+impl_Serialize_for_ToString!(Type, IntType, FloatType, FunType);

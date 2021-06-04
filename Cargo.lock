@@ -112,6 +112,7 @@ dependencies = [
  "pos",
  "serde",
  "serde_json",
+ "typeck",
  "typed-arena",
 ]
 
@@ -137,6 +138,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "322f4de77956e22ed0e5032c359a0f1273f1f7f0d79bfa3b8ffbc730d7fbcc5c"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "hir"
+version = "0.1.0"
+dependencies = [
+ "ast",
+ "lex",
+ "serde",
+ "types",
 ]
 
 [[package]]
@@ -238,6 +249,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ee1c47aaa256ecabcaea351eae4a9b01ef39ed810004e298d2511ed284b1525"
 
 [[package]]
+name = "num-traits"
+version = "0.2.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a64b1ec5cda2586e284722486d802acf1f7dbdc623e2bfc57e65ca1cd099290"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -283,6 +303,12 @@ dependencies = [
  "lex",
  "pos",
 ]
+
+[[package]]
+name = "paste"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "acbf547ad0c65e31259204bd90935776d1c693cec2f4ff7abb7a1bbbd40dfe58"
 
 [[package]]
 name = "pest"
@@ -491,10 +517,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "typeck"
+version = "0.1.0"
+dependencies = [
+ "ast",
+ "error",
+ "hir",
+ "lex",
+ "num-traits",
+ "parse",
+ "paste",
+ "pos",
+ "typed-arena",
+ "types",
+]
+
+[[package]]
 name = "typed-arena"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0685c84d5d54d1c26f7d3eb96cd41550adb97baed141a761cf335d3d33bcd0ae"
+
+[[package]]
+name = "types"
+version = "0.1.0"
+dependencies = [
+ "error",
+ "paste",
+ "serde",
+ "typed-arena",
+]
 
 [[package]]
 name = "ucd-trie"

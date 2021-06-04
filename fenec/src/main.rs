@@ -22,25 +22,27 @@ fn parse_ast(src: &SrcFile) -> Result<ast::Module> {
     parse::parse(tokens.into())
 }
 
-pub fn print_ast(module: &ast::Module) -> serde_json::Result<()> {
-    let json = serde_json::to_string(&module)?;
+pub fn print<S: serde::Serialize>(s: S) -> serde_json::Result<()> {
+    let json = serde_json::to_string(&s)?;
     println!("{}", json);
     Ok(())
 }
 
 fn run_main() -> Result<(), Box<dyn Error>> {
     let opts = Opts::parse();
-    let src = SrcFile::open(opts.src)?;
     let module = {
-        let ast = parse_ast(&src)?;
+        let ast = {
+            let src = SrcFile::open(opts.src)?;
+            parse_ast(&src)?
+        };
         if opts.emit.contains(&opts::Emit::Ast) {
-            print_ast(&ast)?;
+            print(&ast)?;
         }
-        // typeck::lower(&src, ast)?
+        typeck::lower(ast)?
     };
-    // if opts.emit.contains(&opts::Emit::Hir) {
-    //     printer::hir::print(&module)?;
-    // }
+    if opts.emit.contains(&opts::Emit::Hir) {
+        print(&module)?;
+    }
 
     // let ctx = Context::create();
     // let mut codegen = Codegen::new(&ctx);

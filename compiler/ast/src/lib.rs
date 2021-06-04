@@ -1,39 +1,28 @@
 use lex::token;
 use pos::Pos;
-use serde::{Serialize, Serializer};
+use serde::Serialize;
 use std::convert::TryFrom;
 
 pub mod visit;
 
 pub type NodeId = usize;
 
-macro_rules! impl_Serialize_for_ToString {
-    ($($name:ident),*) => {
-        $(
-            impl Serialize for $name {
-                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-                where
-                    S: Serializer,
-                {
-                    serializer.serialize_str(&self.to_string())
-                }
-            }
-        )*
-    }
-}
-
-impl_Serialize_for_ToString!(TyKind, BinOpKind, UnOpKind);
-
 #[derive(Debug, Serialize)]
 pub struct Module {
     pub funs: Vec<Fun>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Ident {
     pub id: NodeId,
     pub raw: String,
     pub pos: Pos,
+}
+
+impl Ident {
+    pub fn pos(&self) -> Pos {
+        self.pos
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -41,6 +30,16 @@ pub struct KwIdent {
     pub id: NodeId,
     pub kind: token::Keyword,
     pub pos: Pos,
+}
+
+impl KwIdent {
+    pub fn is_mut(&self) -> bool {
+        self.kind == token::Keyword::Mut
+    }
+
+    pub fn pos(&self) -> Pos {
+        self.pos
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -76,6 +75,10 @@ impl FunArg {
             .map(|k| k.pos)
             .unwrap_or(self.name.pos)
     }
+
+    pub fn is_mut(&self) -> bool {
+        self.keyword.as_ref().map(|k| k.is_mut()).unwrap_or(false)
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -91,6 +94,10 @@ impl RetTy {
             .as_ref()
             .map(|k| k.pos)
             .unwrap_or_else(|| self.ty.pos())
+    }
+
+    pub fn is_mut(&self) -> bool {
+        self.keyword.as_ref().map(|k| k.is_mut()).unwrap_or(false)
     }
 }
 
@@ -179,6 +186,12 @@ pub struct EmptyStmt {
     pub pos: Pos,
 }
 
+impl EmptyStmt {
+    pub fn pos(&self) -> Pos {
+        self.pos
+    }
+}
+
 impl Stmt {
     pub fn id(&self) -> NodeId {
         match self {
@@ -193,7 +206,7 @@ impl Stmt {
 
     pub fn pos(&self) -> Pos {
         match self {
-            Self::Empty(inner) => inner.pos,
+            Self::Empty(inner) => inner.pos(),
             Self::Expr(inner) => inner.pos(),
             Self::Ret(inner) => inner.pos(),
             Self::VarDecl(inner) => inner.pos(),
@@ -228,6 +241,10 @@ pub struct VarDecl {
 impl VarDecl {
     pub fn pos(&self) -> Pos {
         self.keyword.pos
+    }
+
+    pub fn is_mut(&self) -> bool {
+        self.keyword.is_mut()
     }
 }
 
@@ -283,7 +300,7 @@ impl Expr {
         match self {
             Self::Path(inner) => inner.pos(),
             Self::Call(inner) => inner.pos(),
-            Self::Lit(inner) => inner.pos,
+            Self::Lit(inner) => inner.pos(),
             Self::Binary(inner) => inner.pos(),
             Self::Unary(inner) => inner.pos(),
         }
@@ -317,12 +334,21 @@ impl Call {
     }
 }
 
+pub type IntBase = token::IntBase;
+pub type LitKind = token::LitKind;
+
 #[derive(Debug, Serialize)]
 pub struct Lit {
     pub id: NodeId,
-    pub kind: token::LitKind,
+    pub kind: LitKind,
     pub raw: String,
     pub pos: Pos,
+}
+
+impl Lit {
+    pub fn pos(&self) -> Pos {
+        self.pos
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -344,6 +370,12 @@ pub struct BinOp {
     pub id: NodeId,
     pub kind: BinOpKind,
     pub pos: Pos,
+}
+
+impl BinOp {
+    pub fn pos(&self) -> Pos {
+        self.pos
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -442,6 +474,12 @@ pub struct UnOp {
     pub pos: Pos,
 }
 
+impl UnOp {
+    pub fn pos(&self) -> Pos {
+        self.pos
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum UnOpKind {
     // -
@@ -483,3 +521,20 @@ impl std::fmt::Display for UnOpKind {
         )
     }
 }
+
+macro_rules! impl_Serialize_for_ToString {
+    ($($name:ident),*) => {
+        $(
+            impl serde::Serialize for $name {
+                fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+                where
+                    S: serde::Serializer,
+                {
+                    serializer.serialize_str(&self.to_string())
+                }
+            }
+        )*
+    }
+}
+
+impl_Serialize_for_ToString!(TyKind, BinOpKind, UnOpKind);
