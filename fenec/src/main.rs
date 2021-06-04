@@ -22,13 +22,19 @@ fn parse_ast(src: &SrcFile) -> Result<ast::Module> {
     parse::parse(tokens.into())
 }
 
+pub fn print_ast(module: &ast::Module) -> serde_json::Result<()> {
+    let json = serde_json::to_string(&module)?;
+    println!("{}", json);
+    Ok(())
+}
+
 fn run_main() -> Result<(), Box<dyn Error>> {
     let opts = Opts::parse();
     let src = SrcFile::open(opts.src)?;
     let module = {
         let ast = parse_ast(&src)?;
         if opts.emit.contains(&opts::Emit::Ast) {
-            printer::print_ast(&ast)?;
+            print_ast(&ast)?;
         }
         // typeck::lower(&src, ast)?
     };

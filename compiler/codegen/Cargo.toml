@@ -10,7 +10,6 @@ edition = "2018"
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm11-0"] }
 parse = { path = "../parse" }
 typeck = { path = "../typeck" }
-printer = { path = "../printer" }
 hir = { path = "../hir" }
 ast = { path = "../ast" }
 types = { path = "../types" }
