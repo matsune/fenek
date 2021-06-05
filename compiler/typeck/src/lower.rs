@@ -182,6 +182,9 @@ impl Lower {
                 if matches!(def.ty, ty::Type::Fun(_) | ty::Type::Void) {
                     return Err((id, TypeCkError::NonBasicVar));
                 }
+                if var_decl.is_mut() && def.ty.is_ptr() && !expr.is_mutable() {
+                    return Err((id, TypeCkError::RequiresMut));
+                }
                 hir::VarDecl::new(id, name, expr, def).into()
             }
             ast::Stmt::Ret(ret) => {
@@ -189,9 +192,12 @@ impl Lower {
                     Some(expr) => Some(self.lower_expr(&expr)?),
                     None => None,
                 };
-                if current_ret_ty.0 && !expr.as_ref().map(|e| e.is_mutable()).unwrap_or(false) {
+                if current_ret_ty.0
+                    && current_ret_ty.1.is_ptr()
+                    && !expr.as_ref().map(|e| e.is_mutable()).unwrap_or(false)
+                {
                     // return type of this function is mutable but expr is not mutable
-                    return Err((id, TypeCkError::RequiresMutableVar));
+                    return Err((id, TypeCkError::RequiresMut));
                 }
                 hir::Ret { id, expr }.into()
             }
@@ -395,16 +401,21 @@ impl Lower {
 
     fn lower_call(&self, call: &ast::Call) -> LowerResult<hir::Call> {
         let path = self.lower_path(&call.path);
-        let arg_muts = path.def.as_fn();
+        let fn_type = path.def.ty.as_fun();
+        let (arg_muts, ret_mut) = path.def.as_fn();
         let mut args = Vec::new();
         for (idx, arg) in call.args.iter().enumerate() {
             let expr = self.lower_expr(&arg)?;
-            if arg_muts[idx] && !expr.is_mutable() {
-                return Err((arg.id(), TypeCkError::RequiresMutableVar));
+            if arg_muts[idx] && fn_type.args[idx].is_ptr() && !expr.is_mutable() {
+                return Err((arg.id(), TypeCkError::RequiresMut));
             }
             args.push(expr);
         }
-        Ok(hir::Call { path, args })
+        Ok(hir::Call {
+            path,
+            args,
+            is_mut: ret_mut,
+        })
     }
 
     fn lower_expr(&self, expr: &ast::Expr) -> LowerResult<hir::Expr> {

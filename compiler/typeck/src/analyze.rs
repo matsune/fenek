@@ -105,7 +105,7 @@ impl<'lower> TyAnalyzer<'lower> {
             self.node_ty_map.insert(arg.id, arg_ty);
         }
 
-        let ret_ty = match &fun.ret_ty {
+        let (is_ret_mut, ret_ty) = match &fun.ret_ty {
             Some(ret_ty) => {
                 let ret_ty_id = ret_ty.ty.id;
                 let ty = self.get_type_from_ty(&ret_ty.ty).ok_or_else(|| {
@@ -115,14 +115,14 @@ impl<'lower> TyAnalyzer<'lower> {
                     )
                 })?;
                 self.node_ty_map.insert(ret_ty_id, ty);
-                ty
+                (ret_ty.is_mut(), ty)
             }
-            None => self.solver.arena.alloc_void(),
+            None => (false, self.solver.arena.alloc_void()),
         };
 
         Ok(self.def_arena.alloc(
             self.solver.arena.alloc_fun(arg_tys, ret_ty),
-            DefKind::Fn(arg_muts),
+            DefKind::Fn(arg_muts, is_ret_mut),
         ))
     }
 

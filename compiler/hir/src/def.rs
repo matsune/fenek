@@ -20,7 +20,7 @@ pub struct Def<Ty> {
 pub enum DefKind {
     Var { is_mut: bool },
     // array of arguments mutability
-    Fn(Vec<bool>),
+    Fn(Vec<bool>, bool),
 }
 
 impl<Ty> Def<Ty> {
@@ -36,9 +36,9 @@ impl<Ty> Def<Ty> {
         matches!(self.kind, DefKind::Var { is_mut: true })
     }
 
-    pub fn as_fn(&self) -> &[bool] {
+    pub fn as_fn(&self) -> (&[bool], bool) {
         match &self.kind {
-            DefKind::Fn(muts) => muts,
+            DefKind::Fn(arg_muts, ret_mut) => (arg_muts, *ret_mut),
             _ => panic!(),
         }
     }

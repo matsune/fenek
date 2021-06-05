@@ -169,6 +169,7 @@ impl Expr {
 
     pub fn is_mutable(&self) -> bool {
         match self {
+            Self::Call(call) => call.is_mut,
             Self::Path(path) => path.def.is_mutable(),
             Self::DerefExpr(deref_expr) => deref_expr.expr.is_mutable(),
             Self::RefExpr(ref_expr) => ref_expr.expr.is_mutable(),
@@ -226,6 +227,7 @@ impl Path {
 pub struct Call {
     pub path: Path,
     pub args: Vec<Expr>,
+    pub is_mut: bool,
 }
 
 impl Call {
