@@ -109,13 +109,14 @@ impl Parser {
     }
 
     pub fn parse_module(&mut self) -> Result<Module> {
+        let id = self.gen_id();
         let mut funs = Vec::new();
         self.skip_spaces();
         while self.peek().is_some() {
             funs.push(self.parse_fun()?);
             self.skip_spaces();
         }
-        Ok(Module { funs })
+        Ok(Module { id, funs })
     }
 
     fn parse_ident(&mut self) -> Result<ast::Ident> {

@@ -1,5 +1,6 @@
 use super::analyze::{NodeMap, TyAnalyzer};
 use super::arena::*;
+use ast::Node;
 use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
 use lex::token;

@@ -1,5 +1,6 @@
 use super::arena::*;
 use crate::scope::*;
+use ast::Node;
 use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
 use pos::Pos;

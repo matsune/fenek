@@ -7,9 +7,25 @@ pub mod visit;
 
 pub type NodeId = usize;
 
+pub trait Node {
+    fn id(&self) -> NodeId;
+    fn pos(&self) -> Pos;
+}
+
 #[derive(Debug, Serialize)]
 pub struct Module {
+    pub id: NodeId,
     pub funs: Vec<Fun>,
+}
+
+impl Node for Module {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
+        Pos::default()
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -19,8 +35,12 @@ pub struct Ident {
     pub pos: Pos,
 }
 
-impl Ident {
-    pub fn pos(&self) -> Pos {
+impl Node for Ident {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
         self.pos
     }
 }
@@ -32,13 +52,19 @@ pub struct KwIdent {
     pub pos: Pos,
 }
 
+impl Node for KwIdent {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
+        self.pos
+    }
+}
+
 impl KwIdent {
     pub fn is_mut(&self) -> bool {
         self.kind == token::Keyword::Mut
-    }
-
-    pub fn pos(&self) -> Pos {
-        self.pos
     }
 }
 
@@ -52,8 +78,12 @@ pub struct Fun {
     pub block: Block,
 }
 
-impl Fun {
-    pub fn pos(&self) -> Pos {
+impl Node for Fun {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
         self.keyword.pos
     }
 }
@@ -68,14 +98,20 @@ pub struct FunArg {
     pub ty: Ty,
 }
 
-impl FunArg {
-    pub fn pos(&self) -> Pos {
+impl Node for FunArg {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
         self.keyword
             .as_ref()
             .map(|k| k.pos)
             .unwrap_or(self.name.pos)
     }
+}
 
+impl FunArg {
     pub fn is_mut(&self) -> bool {
         self.keyword.as_ref().map(|k| k.is_mut()).unwrap_or(false)
     }
@@ -88,14 +124,20 @@ pub struct RetTy {
     pub ty: Ty,
 }
 
-impl RetTy {
-    pub fn pos(&self) -> Pos {
+impl Node for RetTy {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
         self.keyword
             .as_ref()
             .map(|k| k.pos)
             .unwrap_or_else(|| self.ty.pos())
     }
+}
 
+impl RetTy {
     pub fn is_mut(&self) -> bool {
         self.keyword.as_ref().map(|k| k.is_mut()).unwrap_or(false)
     }
@@ -113,6 +155,19 @@ impl ToString for Ty {
     }
 }
 
+impl Node for Ty {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
+        match &self.kind {
+            TyKind::Basic(ident) => ident.pos,
+            TyKind::Ptr(ty) => ty.pos(),
+        }
+    }
+}
+
 impl Ty {
     pub fn new_basic(id: NodeId, ident: Ident) -> Self {
         Self {
@@ -125,13 +180,6 @@ impl Ty {
         Self {
             id,
             kind: TyKind::Ptr(Box::new(ty)),
-        }
-    }
-
-    pub fn pos(&self) -> Pos {
-        match &self.kind {
-            TyKind::Basic(ident) => ident.pos,
-            TyKind::Ptr(ty) => ty.pos(),
         }
     }
 }
@@ -164,8 +212,12 @@ pub struct Block {
     pub pos: Pos,
 }
 
-impl Block {
-    pub fn pos(&self) -> Pos {
+impl Node for Block {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
         self.pos
     }
 }
@@ -186,14 +238,18 @@ pub struct EmptyStmt {
     pub pos: Pos,
 }
 
-impl EmptyStmt {
-    pub fn pos(&self) -> Pos {
+impl Node for EmptyStmt {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
         self.pos
     }
 }
 
-impl Stmt {
-    pub fn id(&self) -> NodeId {
+impl Node for Stmt {
+    fn id(&self) -> NodeId {
         match self {
             Self::Empty(inner) => inner.id,
             Self::Expr(inner) => inner.id(),
@@ -204,7 +260,7 @@ impl Stmt {
         }
     }
 
-    pub fn pos(&self) -> Pos {
+    fn pos(&self) -> Pos {
         match self {
             Self::Empty(inner) => inner.pos(),
             Self::Expr(inner) => inner.pos(),
@@ -223,8 +279,12 @@ pub struct RetStmt {
     pub expr: Option<Expr>,
 }
 
-impl RetStmt {
-    pub fn pos(&self) -> Pos {
+impl Node for RetStmt {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
         self.keyword.pos
     }
 }
@@ -238,11 +298,17 @@ pub struct VarDecl {
     pub init: Expr,
 }
 
-impl VarDecl {
-    pub fn pos(&self) -> Pos {
-        self.keyword.pos
+impl Node for VarDecl {
+    fn id(&self) -> NodeId {
+        self.id
     }
 
+    fn pos(&self) -> Pos {
+        self.keyword.pos
+    }
+}
+
+impl VarDecl {
     pub fn is_mut(&self) -> bool {
         self.keyword.is_mut()
     }
@@ -255,8 +321,12 @@ pub struct Assign {
     pub right: Expr,
 }
 
-impl Assign {
-    pub fn pos(&self) -> Pos {
+impl Node for Assign {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
         self.left.pos()
     }
 }
@@ -270,8 +340,12 @@ pub struct IfStmt {
     pub else_if: Option<Box<IfStmt>>,
 }
 
-impl IfStmt {
-    pub fn pos(&self) -> Pos {
+impl Node for IfStmt {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
         self.keyword.pos
     }
 }
@@ -285,8 +359,8 @@ pub enum Expr {
     Unary(Unary),
 }
 
-impl Expr {
-    pub fn id(&self) -> NodeId {
+impl Node for Expr {
+    fn id(&self) -> NodeId {
         match self {
             Self::Path(inner) => inner.id,
             Self::Call(inner) => inner.id,
@@ -296,7 +370,7 @@ impl Expr {
         }
     }
 
-    pub fn pos(&self) -> Pos {
+    fn pos(&self) -> Pos {
         match self {
             Self::Path(inner) => inner.pos(),
             Self::Call(inner) => inner.pos(),
@@ -315,8 +389,12 @@ pub struct Path {
     pub ident: Ident,
 }
 
-impl Path {
-    pub fn pos(&self) -> Pos {
+impl Node for Path {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
         self.ident.pos
     }
 }
@@ -328,8 +406,12 @@ pub struct Call {
     pub args: Vec<Expr>,
 }
 
-impl Call {
-    pub fn pos(&self) -> Pos {
+impl Node for Call {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
         self.path.pos()
     }
 }
@@ -345,8 +427,12 @@ pub struct Lit {
     pub pos: Pos,
 }
 
-impl Lit {
-    pub fn pos(&self) -> Pos {
+impl Node for Lit {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
         self.pos
     }
 }
@@ -359,8 +445,12 @@ pub struct Binary {
     pub rhs: Box<Expr>,
 }
 
-impl Binary {
-    pub fn pos(&self) -> Pos {
+impl Node for Binary {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
         self.lhs.pos()
     }
 }
@@ -372,8 +462,12 @@ pub struct BinOp {
     pub pos: Pos,
 }
 
-impl BinOp {
-    pub fn pos(&self) -> Pos {
+impl Node for BinOp {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
         self.pos
     }
 }
@@ -461,8 +555,12 @@ pub struct Unary {
     pub expr: Box<Expr>,
 }
 
-impl Unary {
-    pub fn pos(&self) -> Pos {
+impl Node for Unary {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
         self.op.pos
     }
 }
@@ -474,8 +572,12 @@ pub struct UnOp {
     pub pos: Pos,
 }
 
-impl UnOp {
-    pub fn pos(&self) -> Pos {
+impl Node for UnOp {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
         self.pos
     }
 }
