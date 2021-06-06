@@ -132,4 +132,6 @@ pub enum TypeCkError {
     NonBasicVar,
     #[error("requires mutable")]
     RequiresMut,
+    #[error("returning address of local variable")]
+    ReturingLocalVar,
 }

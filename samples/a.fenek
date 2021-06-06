@@ -1,4 +1,4 @@
-fun get_ref_ref(a: i32**) {
+fun get_ref_ref(mut a: i32**) {
   mut b = a;
   **b = 21;
   ret;

@@ -1,8 +1,9 @@
-fun a(mut n: i8) -> mut i8 {
-  ret n;
+fun a(mut n: i8) -> mut i8* {
+  // error
+  ret &n;
 }
 
 fun main() -> i8 {
   let n2 = a(20);
-  ret n2;
+  ret *n2;
 }

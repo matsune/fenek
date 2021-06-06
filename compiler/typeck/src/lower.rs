@@ -166,6 +166,17 @@ impl Lower {
         Ok(hir::Block { id, stmts })
     }
 
+    fn is_returning_local_var(&self, expr: &hir::Expr) -> bool {
+        match expr {
+            // TODO: check scope level if introduced global variable, struct and etc.
+            hir::Expr::Path(path) => !path.def.ty.is_ptr(),
+            hir::Expr::Call(_) => false,
+            hir::Expr::RefExpr(ref_expr) => self.is_returning_local_var(&ref_expr.expr),
+            hir::Expr::DerefExpr(deref_expr) => self.is_returning_local_var(&deref_expr.expr),
+            _ => unreachable!(),
+        }
+    }
+
     fn lower_stmt(
         &self,
         stmt: &ast::Stmt,
@@ -189,16 +200,20 @@ impl Lower {
             }
             ast::Stmt::Ret(ret) => {
                 let expr = match &ret.expr {
-                    Some(expr) => Some(self.lower_expr(&expr)?),
+                    Some(expr) => {
+                        let expr = self.lower_expr(&expr)?;
+                        if current_ret_ty.0 && current_ret_ty.1.is_ptr() {
+                            if !expr.is_mutable() {
+                                // return type of this function is mutable but expr is not mutable
+                                return Err((id, TypeCkError::RequiresMut));
+                            } else if self.is_returning_local_var(&expr) {
+                                return Err((id, TypeCkError::ReturingLocalVar));
+                            }
+                        }
+                        Some(expr)
+                    }
                     None => None,
                 };
-                if current_ret_ty.0
-                    && current_ret_ty.1.is_ptr()
-                    && !expr.as_ref().map(|e| e.is_mutable()).unwrap_or(false)
-                {
-                    // return type of this function is mutable but expr is not mutable
-                    return Err((id, TypeCkError::RequiresMut));
-                }
                 hir::Ret { id, expr }.into()
             }
             ast::Stmt::Assign(assign) => {
