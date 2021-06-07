@@ -211,7 +211,7 @@ impl Node for Ty {
 }
 
 impl Ty {
-    pub fn new_basic(id: NodeId, ident: Ident) -> Self {
+    pub fn new_raw(id: NodeId, ident: Ident) -> Self {
         Self {
             id,
             kind: TyKind::Raw(ident),
@@ -236,7 +236,7 @@ impl std::fmt::Display for TyKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Raw(tok) => write!(f, "{}", &tok.raw),
-            Self::Ptr(ty) => write!(f, "{}*", ty.to_string()),
+            Self::Ptr(ty) => write!(f, "*{}", ty.to_string()),
         }
     }
 }

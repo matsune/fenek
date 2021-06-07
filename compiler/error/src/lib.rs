@@ -60,6 +60,8 @@ pub enum ParseError {
     UnexpectedEof,
     #[error("expected {0}")]
     Expected(String),
+    #[error("expected type name")]
+    ExpectedTypeName,
     #[error("invalid var decl")]
     InvalidVarDecl,
     #[error("invalid expr")]

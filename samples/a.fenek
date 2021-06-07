@@ -1,10 +1,10 @@
-fun get_ref_ref(mut a: i32**) {
+fun get_ref_ref(mut a: **i32) {
   mut b = a;
   **b = 21;
   ret;
 }
 
-fun get_ref(mut a: i32*) -> mut i32* {
+fun get_ref(mut a: *i32) -> mut *i32 {
   *a = 3;
   ret a;
 }

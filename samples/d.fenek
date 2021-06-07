@@ -1,4 +1,4 @@
-fun a(mut n: i8) -> mut i8* {
+fun a(mut n: i8) -> mut *i8 {
   // error
   ret &n;
 }
