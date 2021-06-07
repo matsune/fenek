@@ -1,4 +1,4 @@
-fun a(mut n1: i8*, let n2: i8*, n3: i8*) -> mut i8* {
+fun a(mut n1: *i8, let n2: *i8, n3: *i8) -> mut *i8 {
   *n1 = 100;
   /// *n2 = 100;
   /// *n3 = 100;

@@ -67,7 +67,7 @@ where
 {
     return_some!(f(ty));
     match &ty.kind {
-        TyKind::Basic(ident) => f(ident),
+        TyKind::Raw(ident) => f(ident),
         TyKind::Ptr(ty) => visit_ty(&ty, f),
     }
 }

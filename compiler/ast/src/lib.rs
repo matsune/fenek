@@ -162,17 +162,17 @@ impl Node for Ty {
 
     fn pos(&self) -> Pos {
         match &self.kind {
-            TyKind::Basic(ident) => ident.pos,
+            TyKind::Raw(ident) => ident.pos,
             TyKind::Ptr(ty) => ty.pos(),
         }
     }
 }
 
 impl Ty {
-    pub fn new_basic(id: NodeId, ident: Ident) -> Self {
+    pub fn new_raw(id: NodeId, ident: Ident) -> Self {
         Self {
             id,
-            kind: TyKind::Basic(ident),
+            kind: TyKind::Raw(ident),
         }
     }
 
@@ -186,15 +186,15 @@ impl Ty {
 
 #[derive(Debug)]
 pub enum TyKind {
-    Basic(Ident),
+    Raw(Ident),
     Ptr(Box<Ty>),
 }
 
 impl std::fmt::Display for TyKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Basic(tok) => write!(f, "{}", &tok.raw),
-            Self::Ptr(ty) => write!(f, "{}*", ty.to_string()),
+            Self::Raw(tok) => write!(f, "{}", &tok.raw),
+            Self::Ptr(ty) => write!(f, "*{}", ty.to_string()),
         }
     }
 }

@@ -233,19 +233,25 @@ impl Parser {
     }
 
     fn parse_ty(&mut self) -> Result<Ty> {
-        let ident = self.parse_ident()?;
-        let mut ty = Ty::new_basic(self.gen_id(), ident);
-        loop {
-            self.skip_spaces();
-            if self
-                .bump_if(|tok| tok.kind == token::TokenKind::Star)
-                .is_some()
-            {
-                ty = Ty::new_ptr(self.gen_id(), ty);
-            } else {
-                return Ok(ty);
-            }
+        let peek = self
+            .peek()
+            .ok_or_else(|| self.compile_error(ParseError::ExpectedTypeName))?;
+        match peek.kind {
+            token::TokenKind::Ident => self.parse_raw_ty(),
+            token::TokenKind::Star => self.parse_ptr_ty(),
+            _ => Err(self.compile_error(ParseError::ExpectedTypeName)),
         }
+    }
+
+    fn parse_raw_ty(&mut self) -> Result<Ty> {
+        let id = self.gen_id();
+        self.parse_ident().map(|ident| Ty::new_raw(id, ident))
+    }
+
+    fn parse_ptr_ty(&mut self) -> Result<Ty> {
+        let id = self.gen_id();
+        self.bump_kind(token::TokenKind::Star)?;
+        self.parse_ty().map(|ty| Ty::new_ptr(id, ty))
     }
 
     fn parse_block(&mut self) -> Result<Block> {

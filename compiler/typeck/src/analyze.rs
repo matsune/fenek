@@ -38,7 +38,7 @@ impl<'lower> TyAnalyzer<'lower> {
 
     fn get_type_from_ty(&self, ty: &ast::Ty) -> Option<&'lower InferTy<'lower>> {
         let infer_ty = match &ty.kind {
-            ast::TyKind::Basic(tok) => match tok.raw.as_str() {
+            ast::TyKind::Raw(tok) => match tok.raw.as_str() {
                 "i8" => self.solver.arena.alloc_i8(),
                 "i16" => self.solver.arena.alloc_i16(),
                 "i32" => self.solver.arena.alloc_i32(),
