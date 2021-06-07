@@ -79,6 +79,7 @@ pub enum InferTyKind<'a> {
     Fun(FunTy<'a>),
     Ref(&'a InferTy<'a>),
     Deref(&'a InferTy<'a>),
+    Struct(String),
 }
 
 impl<'a> PartialEq for InferTyKind<'a> {
@@ -99,6 +100,7 @@ impl<'a> PartialEq for InferTyKind<'a> {
             }
             (Ref(l), Ref(r)) => l.kind == r.kind,
             (Deref(l), Deref(r)) => l.kind == r.kind,
+            (Struct(l), Struct(r)) => l == r,
             _ => false,
         }
     }
@@ -151,6 +153,7 @@ impl<'a> ToString for InferTyKind<'a> {
             ),
             Self::Ref(k) => format!("&{}", k.kind.to_string()),
             Self::Deref(k) => format!("*{}", k.kind.to_string()),
+            Self::Struct(k) => k.clone(),
         }
     }
 }

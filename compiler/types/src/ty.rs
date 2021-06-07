@@ -9,6 +9,7 @@ pub enum Type {
     Ptr(Box<Type>),
     Void,
     Fun(FunType),
+    Struct(String),
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -69,13 +70,6 @@ impl Type {
             _ => panic!(),
         }
     }
-
-    // pub fn elem_ty(&self) -> Option<&Type> {
-    //     match self {
-    //         Self::Ptr(ty) => Some(ty),
-    //         _ => None,
-    //     }
-    // }
 }
 
 impl FunType {
@@ -94,6 +88,7 @@ impl ToString for Type {
             // Self::String => "string".to_string(),
             Self::Fun(fun) => fun.to_string(),
             Self::Ptr(ty) => format!("{}*", ty.to_string()),
+            Self::Struct(name) => name.clone(),
         }
     }
 }

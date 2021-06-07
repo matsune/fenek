@@ -70,4 +70,8 @@ impl<'a> InferTyArena<'a> {
     pub fn alloc_deref(&'a self, ty: &'a InferTy<'a>) -> &'a InferTy<'a> {
         self.alloc(InferTyKind::Deref(ty.prune()))
     }
+
+    pub fn alloc_struct<S: ToString>(&'a self, strukt: S) -> &'a InferTy<'a> {
+        self.alloc(InferTyKind::Struct(strukt.to_string()))
+    }
 }

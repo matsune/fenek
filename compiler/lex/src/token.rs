@@ -152,6 +152,7 @@ pub enum Keyword {
     Fun,
     If,
     Else,
+    Struct,
 }
 
 impl std::string::ToString for Keyword {
@@ -163,6 +164,7 @@ impl std::string::ToString for Keyword {
             Self::Fun => "fun",
             Self::If => "if",
             Self::Else => "else",
+            Self::Struct => "struct",
         }
         .to_owned()
     }
@@ -177,6 +179,7 @@ impl Keyword {
             "fun" => Some(Self::Fun),
             "if" => Some(Self::If),
             "else" => Some(Self::Else),
+            "struct" => Some(Self::Struct),
             _ => None,
         }
     }

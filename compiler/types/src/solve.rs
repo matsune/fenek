@@ -125,6 +125,7 @@ impl<'a> Solver<'a> {
                     _ => return Err(TypeError::DerefNonPtrType(ty.to_string())),
                 }
             }
+            InferTyKind::Struct(ty) => Type::Struct(ty.clone()),
         };
         Ok(final_ty)
     }

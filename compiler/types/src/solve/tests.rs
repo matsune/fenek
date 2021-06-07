@@ -198,4 +198,16 @@ fn test_solve() {
         bind!(a, arena.alloc_i8());
         test_error!(b);
     }
+
+    // A a
+    // var b = &a
+    // a: A
+    // b: A*
+    {
+        let a = arena.alloc_struct("A");
+        let b = arena.alloc_var();
+        bind!(b, arena.alloc_ref(a));
+        test_type!("A" => a);
+        test_type!("A*" => b);
+    }
 }

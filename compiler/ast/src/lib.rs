@@ -16,6 +16,7 @@ pub trait Node {
 pub struct Module {
     pub id: NodeId,
     pub funs: Vec<Fun>,
+    pub structs: Vec<Struct>,
 }
 
 impl Node for Module {
@@ -65,6 +66,47 @@ impl Node for KwIdent {
 impl KwIdent {
     pub fn is_mut(&self) -> bool {
         self.kind == token::Keyword::Mut
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct Struct {
+    pub id: NodeId,
+    pub keyword: KwIdent,
+    pub name: Ident,
+    pub fields: Fields,
+}
+
+impl Node for Struct {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
+        self.keyword.pos
+    }
+}
+
+pub type Fields = Vec<Field>;
+
+#[derive(Debug, Serialize)]
+pub struct Field {
+    pub id: NodeId,
+    pub keyword: Option<KwIdent>,
+    pub name: Ident,
+    pub ty: Ty,
+}
+
+impl Node for Field {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
+        self.keyword
+            .as_ref()
+            .map(|k| k.pos)
+            .unwrap_or(self.name.pos)
     }
 }
 
@@ -162,7 +204,7 @@ impl Node for Ty {
 
     fn pos(&self) -> Pos {
         match &self.kind {
-            TyKind::Basic(ident) => ident.pos,
+            TyKind::Raw(ident) => ident.pos,
             TyKind::Ptr(ty) => ty.pos(),
         }
     }
@@ -172,7 +214,7 @@ impl Ty {
     pub fn new_basic(id: NodeId, ident: Ident) -> Self {
         Self {
             id,
-            kind: TyKind::Basic(ident),
+            kind: TyKind::Raw(ident),
         }
     }
 
@@ -186,14 +228,14 @@ impl Ty {
 
 #[derive(Debug)]
 pub enum TyKind {
-    Basic(Ident),
+    Raw(Ident),
     Ptr(Box<Ty>),
 }
 
 impl std::fmt::Display for TyKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Basic(tok) => write!(f, "{}", &tok.raw),
+            Self::Raw(tok) => write!(f, "{}", &tok.raw),
             Self::Ptr(ty) => write!(f, "{}*", ty.to_string()),
         }
     }

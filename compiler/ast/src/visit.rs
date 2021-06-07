@@ -28,6 +28,35 @@ where
     for fun in &module.funs {
         return_some!(visit_fun(&fun, &f))
     }
+    for strukt in &module.structs {
+        return_some!(visit_struct(&strukt, &f))
+    }
+    None
+}
+
+fn visit_struct<'a, F>(strukt: &'a Struct, f: &F) -> Option<&'a dyn Node>
+where
+    F: Fn(&'a dyn Node) -> Option<&'a dyn Node>,
+{
+    return_some!(f(strukt));
+    return_some!(f(&strukt.keyword));
+    return_some!(f(&strukt.name));
+    return_some!(visit_fields(&strukt.fields, f));
+    None
+}
+
+fn visit_fields<'a, F>(fields: &'a [Field], f: &F) -> Option<&'a dyn Node>
+where
+    F: Fn(&'a dyn Node) -> Option<&'a dyn Node>,
+{
+    for field in fields.iter() {
+        return_some!(f(field));
+        if let Some(keyword) = &field.keyword {
+            return_some!(f(keyword));
+        }
+        return_some!(f(&field.name));
+        return_some!(visit_ty(&field.ty, f));
+    }
     None
 }
 
@@ -67,7 +96,7 @@ where
 {
     return_some!(f(ty));
     match &ty.kind {
-        TyKind::Basic(ident) => f(ident),
+        TyKind::Raw(ident) => f(ident),
         TyKind::Ptr(ty) => visit_ty(&ty, f),
     }
 }

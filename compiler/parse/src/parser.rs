@@ -111,12 +111,70 @@ impl Parser {
     pub fn parse_module(&mut self) -> Result<Module> {
         let id = self.gen_id();
         let mut funs = Vec::new();
+        let mut structs = Vec::new();
         self.skip_spaces();
-        while self.peek().is_some() {
-            funs.push(self.parse_fun()?);
+        while let Some(peek) = self.peek() {
+            match peek.try_as_keyword() {
+                Some(token::Keyword::Fun) => funs.push(self.parse_fun()?),
+                Some(token::Keyword::Struct) => structs.push(self.parse_struct()?),
+                _ => return Err(self.expected_err("fun or struct")),
+            }
             self.skip_spaces();
         }
-        Ok(Module { id, funs })
+        Ok(Module { id, funs, structs })
+    }
+
+    fn parse_struct(&mut self) -> Result<ast::Struct> {
+        let id = self.gen_id();
+        let keyword = self.bump_keyword(token::Keyword::Struct)?;
+        self.skip_spaces();
+        let name = self.parse_ident()?;
+        self.skip_spaces();
+        self.bump_kind(token::TokenKind::LBrace)?;
+        self.skip_spaces();
+        let fields = self.parse_struct_fields()?;
+        self.bump_kind(token::TokenKind::RBrace)?;
+        self.skip_spaces();
+        Ok(ast::Struct {
+            id,
+            keyword,
+            name,
+            fields,
+        })
+    }
+
+    fn parse_struct_fields(&mut self) -> Result<ast::Fields> {
+        let mut fields = ast::Fields::new();
+        while let Some(peek) = self.peek() {
+            if !is_ident(peek) {
+                break;
+            }
+            fields.push(self.parse_field()?);
+            self.skip_spaces();
+            if self.bump_if_kind(token::TokenKind::Comma).is_none() {
+                break;
+            }
+            self.skip_spaces();
+        }
+        Ok(fields)
+    }
+
+    fn parse_field(&mut self) -> Result<ast::Field> {
+        let id = self.gen_id();
+        let keyword = self.bump_if_mut_or_let();
+        self.skip_spaces();
+        let name = self.parse_ident()?;
+        self.skip_spaces();
+        self.bump_kind(token::TokenKind::Colon)?;
+        self.skip_spaces();
+        let ty = self.parse_ty()?;
+        self.skip_spaces();
+        Ok(ast::Field {
+            id,
+            keyword,
+            name,
+            ty,
+        })
     }
 
     fn parse_ident(&mut self) -> Result<ast::Ident> {
@@ -329,7 +387,7 @@ impl Parser {
                     token::Keyword::Ret => self.parse_ret()?,
                     token::Keyword::Mut | token::Keyword::Let => self.parse_var_decl()?,
                     token::Keyword::If => return self.parse_if(),
-                    token::Keyword::Fun | token::Keyword::Else => {
+                    token::Keyword::Fun | token::Keyword::Else | token::Keyword::Struct => {
                         return Err(self.compile_error(ParseError::InvalidStmt))
                     }
                 }
