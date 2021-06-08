@@ -73,8 +73,11 @@ impl Type {
 }
 
 impl FunType {
-    pub fn new(args: Vec<Type>, ret: Box<Type>) -> Self {
-        Self { args, ret }
+    pub fn new(args: Vec<Type>, ret: Type) -> Self {
+        Self {
+            args,
+            ret: Box::new(ret),
+        }
     }
 }
 
@@ -87,7 +90,7 @@ impl ToString for Type {
             Self::Bool => "bool".to_string(),
             // Self::String => "string".to_string(),
             Self::Fun(fun) => fun.to_string(),
-            Self::Ptr(ty) => format!("{}*", ty.to_string()),
+            Self::Ptr(ty) => format!("*{}", ty.to_string()),
             Self::Struct(name) => name.clone(),
         }
     }

@@ -1,5 +1,7 @@
 mod arena;
+mod solve;
 mod ty;
 
-pub use arena::*;
-pub use ty::*;
+use error::TypeError;
+
+pub type Result<T> = std::result::Result<T, TypeError>;

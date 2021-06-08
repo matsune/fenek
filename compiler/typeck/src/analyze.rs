@@ -36,8 +36,8 @@ impl<'lower> TyAnalyzer<'lower> {
         }
     }
 
-    fn get_type_from_ty(&self, ty: &ast::Ty) -> Option<&'lower InferTy<'lower>> {
-        let infer_ty = match &ty.kind {
+    fn get_type_from_ty(&self, ty: &ast::Ty) -> &'lower InferTy<'lower> {
+        match &ty.kind {
             ast::TyKind::Raw(tok) => match tok.raw.as_str() {
                 "i8" => self.solver.arena.alloc_i8(),
                 "i16" => self.solver.arena.alloc_i16(),
@@ -48,11 +48,10 @@ impl<'lower> TyAnalyzer<'lower> {
                 "bool" => self.solver.arena.alloc_bool(),
                 // "string" => self.solver.arena.alloc_string(),
                 "void" => self.solver.arena.alloc_void(),
-                _ => return None,
+                _ => self.solver.arena.alloc_struct(tok.raw),
             },
-            ast::TyKind::Ptr(ty) => self.solver.arena.alloc_ref(self.get_type_from_ty(ty)?),
-        };
-        Some(infer_ty)
+            ast::TyKind::Ptr(ty) => self.solver.arena.alloc_ref(self.get_type_from_ty(ty)),
+        }
     }
 
     pub fn analyze_module(

@@ -88,6 +88,10 @@ pub enum TypeError {
     UnresolvedType,
     #[error("dereferencing non-pointer type {0}")]
     DerefNonPtrType(String),
+    #[error("unknown type {0}")]
+    UnknownType(String),
+    #[error("already defined type {0}")]
+    AlreadyDefinedType(String),
 }
 
 #[derive(Error, Debug)]
