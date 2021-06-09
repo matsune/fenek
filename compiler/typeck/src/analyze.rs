@@ -5,8 +5,7 @@ use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
 use pos::Pos;
 use std::collections::{HashMap, HashSet};
-use types::infer::*;
-use types::solve::Solver;
+use types::infer::ty::InferTy;
 
 pub type NodeMap<T> = HashMap<ast::NodeId, T>;
 
@@ -15,7 +14,6 @@ fn compile_error(pos: Pos, typeck_err: TypeCkError) -> CompileError {
 }
 
 pub struct TyAnalyzer<'lower> {
-    solver: &'lower Solver<'lower>,
     def_arena: &'lower DefArena<&'lower InferTy<'lower>>,
     node_ty_map: NodeMap<&'lower InferTy<'lower>>,
     node_def_map: NodeMap<&'lower Def<&'lower InferTy<'lower>>>,
@@ -23,12 +21,8 @@ pub struct TyAnalyzer<'lower> {
 }
 
 impl<'lower> TyAnalyzer<'lower> {
-    pub fn new(
-        solver: &'lower Solver<'lower>,
-        def_arena: &'lower DefArena<&'lower InferTy<'lower>>,
-    ) -> Self {
+    pub fn new(def_arena: &'lower DefArena<&'lower InferTy<'lower>>) -> Self {
         TyAnalyzer {
-            solver,
             def_arena,
             node_ty_map: NodeMap::new(),
             node_def_map: NodeMap::new(),

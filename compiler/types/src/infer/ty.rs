@@ -1,4 +1,4 @@
-use crate::ty::Type;
+use crate::ty::{FloatType, IntType};
 use std::cell::Cell;
 
 pub type InferTyID = usize;
@@ -56,23 +56,15 @@ impl<'a> InferTy<'a> {
 #[derive(Debug)]
 pub enum TyKind<'a> {
     Any,
-    Atom(AtomTy),
+    IntLit,
+    FloatLit,
+    Int(IntType),
+    Float(FloatType),
+    Bool,
+    Void,
+    Struct(String),
     Ptr(&'a InferTy<'a>),
     Fun(FunTy<'a>),
-}
-
-#[derive(Debug)]
-pub struct AtomTy {
-    pub id: AtomTyID,
-    pub name: String,
-    pub family: Vec<AtomTyID>,
-    pub solve_ty: Type,
-}
-
-impl AtomTy {
-    pub fn solve_ty(&self) -> Type {
-        self.solve_ty.clone()
-    }
 }
 
 #[derive(Debug)]
@@ -85,7 +77,13 @@ impl<'a> ToString for TyKind<'a> {
     fn to_string(&self) -> String {
         match self {
             Self::Any => "Any".to_string(),
-            Self::Atom(atom) => atom.name.to_string(),
+            Self::IntLit => "int_lit".to_string(),
+            Self::FloatLit => "float_lit".to_string(),
+            Self::Int(int_ty) => int_ty.to_string(),
+            Self::Float(float_ty) => float_ty.to_string(),
+            Self::Bool => "bool".to_string(),
+            Self::Void => "void".to_string(),
+            Self::Struct(name) => name.clone(),
             Self::Ptr(ptr) => format!("*{}", ptr.kind.to_string()),
             Self::Fun(fun) => format!(
                 "{} -> {}",

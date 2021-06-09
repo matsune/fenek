@@ -2,8 +2,7 @@ use super::*;
 
 #[test]
 fn test_solve() {
-    let mut arena = InferTyArena::default();
-    arena.init().unwrap();
+    let arena = InferTyArena::default();
 
     macro_rules! alloc_fun {
         ($name: ident: ($($arg:ident),*) -> $ret:ident) => {
@@ -217,13 +216,7 @@ fn test_solve() {
     // a: A
     // b: *A
     {
-        let mut arena = InferTyArena::default();
-        arena.init().unwrap();
-        arena.register_type("A").unwrap();
-
-        let a = arena
-            .alloc_atom("A", Vec::new(), Type::Struct("A".to_string()))
-            .unwrap();
+        let a = arena.alloc_struct("A");
         alloc!(b: any);
         bind!(b, arena.alloc_ptr(a));
         test_type!("A" => a);

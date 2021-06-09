@@ -1,7 +1,7 @@
 use super::arena::InferTyArena;
 use super::ty::*;
 use super::Result;
-use crate::ty::{FunType, Type};
+use crate::ty::{FloatType, FunType, IntType, Type};
 use error::TypeError;
 
 #[cfg(test)]
@@ -23,20 +23,20 @@ pub fn bind<'a>(
         (TyKind::Any, _) => b,
         (_, TyKind::Any) => a,
 
-        (TyKind::Atom(atom_a), TyKind::Atom(atom_b)) => {
-            if atom_a.id == atom_b.id {
-                a
-            } else if atom_a.family.contains(&atom_b.id) {
-                b
-            } else if atom_b.family.contains(&atom_a.id) {
-                a
-            } else {
-                return Err(TypeError::ConflictTypes(
-                    a.kind.to_string(),
-                    b.kind.to_string(),
-                ));
-            }
-        }
+        (TyKind::IntLit, TyKind::IntLit)
+        | (TyKind::IntLit, TyKind::FloatLit)
+        | (TyKind::IntLit, TyKind::Int(_))
+        | (TyKind::IntLit, TyKind::Float(_)) => b,
+        (_, TyKind::IntLit) => bind(arena, b, a)?,
+
+        (TyKind::FloatLit, TyKind::FloatLit) | (TyKind::FloatLit, TyKind::Float(_)) => b,
+        (_, TyKind::FloatLit) => bind(arena, b, a)?,
+
+        (TyKind::Int(ty_a), TyKind::Int(ty_b)) if ty_a == ty_b => a,
+        (TyKind::Float(ty_a), TyKind::Float(ty_b)) if ty_a == ty_b => a,
+        (TyKind::Bool, TyKind::Bool) => a,
+        (TyKind::Void, TyKind::Void) => a,
+        (TyKind::Struct(ty_a), TyKind::Struct(ty_b)) if ty_a == ty_b => a,
 
         (TyKind::Ptr(ptr_a), TyKind::Ptr(ptr_b)) => {
             let inner = bind(arena, ptr_a, ptr_b)?;
@@ -77,7 +77,13 @@ pub fn solve_type<'a>(ty: &'a InferTy<'a>) -> Result<Type> {
     let ty = ty.prune();
     match &ty.kind {
         TyKind::Any => Err(TypeError::UnresolvedType),
-        TyKind::Atom(atom) => Ok(atom.solve_ty()),
+        TyKind::IntLit => Ok(Type::Int(IntType::I64)),
+        TyKind::FloatLit => Ok(Type::Float(FloatType::F64)),
+        TyKind::Int(inner) => Ok(Type::Int(*inner)),
+        TyKind::Float(inner) => Ok(Type::Float(*inner)),
+        TyKind::Bool => Ok(Type::Bool),
+        TyKind::Void => Ok(Type::Void),
+        TyKind::Struct(name) => Ok(Type::Struct(name.clone())),
         TyKind::Ptr(elem) => Ok(Type::Ptr(Box::new(solve_type(elem)?))),
         TyKind::Fun(fun) => {
             let mut args = Vec::with_capacity(fun.args.len());
