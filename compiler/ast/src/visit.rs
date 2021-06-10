@@ -41,21 +41,21 @@ where
     return_some!(f(strukt));
     return_some!(f(&strukt.keyword));
     return_some!(f(&strukt.name));
-    return_some!(visit_fields(&strukt.fields, f));
+    return_some!(visit_members(&strukt.members, f));
     None
 }
 
-fn visit_fields<'a, F>(fields: &'a [Field], f: &F) -> Option<&'a dyn Node>
+fn visit_members<'a, F>(members: &'a [Member], f: &F) -> Option<&'a dyn Node>
 where
     F: Fn(&'a dyn Node) -> Option<&'a dyn Node>,
 {
-    for field in fields.iter() {
-        return_some!(f(field));
-        if let Some(keyword) = &field.keyword {
+    for member in members.iter() {
+        return_some!(f(member));
+        if let Some(keyword) = &member.keyword {
             return_some!(f(keyword));
         }
-        return_some!(f(&field.name));
-        return_some!(visit_ty(&field.ty, f));
+        return_some!(f(&member.name));
+        return_some!(visit_ty(&member.ty, f));
     }
     None
 }

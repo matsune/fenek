@@ -74,7 +74,7 @@ pub struct Struct {
     pub id: NodeId,
     pub keyword: KwIdent,
     pub name: Ident,
-    pub fields: Fields,
+    pub members: Members,
 }
 
 impl Node for Struct {
@@ -87,17 +87,17 @@ impl Node for Struct {
     }
 }
 
-pub type Fields = Vec<Field>;
+pub type Members = Vec<Member>;
 
 #[derive(Debug, Serialize)]
-pub struct Field {
+pub struct Member {
     pub id: NodeId,
     pub keyword: Option<KwIdent>,
     pub name: Ident,
     pub ty: Ty,
 }
 
-impl Node for Field {
+impl Node for Member {
     fn id(&self) -> NodeId {
         self.id
     }
@@ -107,6 +107,12 @@ impl Node for Field {
             .as_ref()
             .map(|k| k.pos)
             .unwrap_or(self.name.pos)
+    }
+}
+
+impl Member {
+    pub fn is_mut(&self) -> bool {
+        self.keyword.as_ref().map(|k| k.is_mut()).unwrap_or(false)
     }
 }
 

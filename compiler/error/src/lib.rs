@@ -96,6 +96,8 @@ pub enum TypeError {
 
 #[derive(Error, Debug)]
 pub enum TypeCkError {
+    #[error("already defined struct `{0}`")]
+    AlreadyDefinedStruct(String),
     #[error("already defined function `{0}`")]
     AlreadyDefinedFun(String),
     #[error("already defined variable `{0}`")]

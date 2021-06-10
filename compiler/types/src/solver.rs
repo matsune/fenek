@@ -2,29 +2,31 @@ use super::infer::{InferTy, InferTyArena};
 use super::result::Result;
 use super::ty::*;
 use error::TypeError;
+use std::cell::RefCell;
 
 #[cfg(test)]
 mod tests;
 
 pub struct Solver<'a> {
-    arena: &'a InferTyArena<'a>,
-    structs: Vec<StructType>,
+    pub arena: &'a InferTyArena<'a>,
+    pub structs: RefCell<Vec<StructType>>,
 }
 
 impl<'a> Solver<'a> {
     pub fn new(arena: &'a InferTyArena<'a>) -> Self {
         Self {
             arena,
-            structs: Vec::new(),
+            structs: RefCell::new(Vec::new()),
         }
     }
 
-    pub fn add_struct<S: ToString>(&mut self, name: S, members: Vec<StructMember>) -> StructID {
-        let id = self.structs.len();
-        self.structs.push(StructType {
+    pub fn add_struct<S: ToString>(&self, name: S) -> StructID {
+        let id = self.structs.borrow().len();
+        let name = name.to_string();
+        self.structs.borrow_mut().push(StructType {
             id,
-            name: name.to_string(),
-            members,
+            name,
+            members: Vec::new(),
         });
         id
     }
@@ -127,7 +129,7 @@ impl<'a> Solver<'a> {
             InferTy::Float(inner) => Ok(Type::Float(*inner)),
             InferTy::Bool => Ok(Type::Bool),
             InferTy::Void => Ok(Type::Void),
-            InferTy::Struct(id) => Ok(Type::Struct(self.structs[*id].clone())),
+            InferTy::Struct(id) => Ok(Type::Struct(self.structs.borrow()[*id].clone())),
             InferTy::Ptr(elem) => Ok(Type::Ptr(Box::new(self.solve_type(elem)?))),
             InferTy::Fun(fun) => {
                 let mut args = Vec::with_capacity(fun.args.len());

@@ -1,4 +1,4 @@
-use hir::def::Def;
+use hir::def::{Def, DefFun, DefStruct, DefVar};
 use std::collections::HashMap;
 use types::infer::InferTy;
 
@@ -34,39 +34,48 @@ impl<'lower> Scopes<'lower> {
         self.scopes[self.scope_idx].insert(key, value)
     }
 
-    pub fn lookup_fun(&self, name: &str) -> Option<&'lower Def<&'lower InferTy<'lower>>> {
-        let scopes = &self.scopes;
-        let mut tmp_idx = self.scope_idx;
-        while let Some(scope_table) = scopes.get(tmp_idx) {
-            match scope_table.lookup_fun(name) {
-                Some(def) => {
-                    return Some(def);
-                }
-                None => match scope_table.parent {
-                    Some(parent_idx) => tmp_idx = parent_idx,
-                    None => break,
-                },
-            }
+    pub fn lookup_fun(
+        &self,
+        name: &str,
+        only_this: bool,
+    ) -> Option<&'lower DefFun<&'lower InferTy<'lower>>> {
+        if only_this {
+            return self.scopes[self.scope_idx].lookup_fun(name);
         }
-        None
+        self.iterate_scope(|scope_table| scope_table.lookup_fun(name))
     }
 
     pub fn lookup_var(
         &self,
         name: &str,
         only_this: bool,
-    ) -> Option<&'lower Def<&'lower InferTy<'lower>>> {
+    ) -> Option<&'lower DefVar<&'lower InferTy<'lower>>> {
         if only_this {
             return self.scopes[self.scope_idx].lookup_var(name);
         }
+        self.iterate_scope(|scope_table| scope_table.lookup_var(name))
+    }
 
+    // pub fn lookup_struct(
+    //     &self,
+    //     name: &str,
+    //     only_this: bool,
+    // ) -> Option<&'lower DefStruct<&'lower InferTy<'lower>>> {
+    //     if only_this {
+    //         return self.scopes[self.scope_idx].lookup_struct(name);
+    //     }
+    //     self.iterate_scope(|scope_table| scope_table.lookup_struct(name))
+    // }
+
+    fn iterate_scope<T, F>(&self, f: F) -> Option<T>
+    where
+        F: Fn(&ScopeTable<'lower>) -> Option<T>,
+    {
         let scopes = &self.scopes;
         let mut tmp_idx = self.scope_idx;
         while let Some(scope_table) = scopes.get(tmp_idx) {
-            match scope_table.lookup_var(name) {
-                Some(def) => {
-                    return Some(def);
-                }
+            match f(scope_table) {
+                Some(t) => return Some(t),
                 None => match scope_table.parent {
                     Some(parent_idx) => tmp_idx = parent_idx,
                     None => break,
@@ -97,29 +106,27 @@ impl<'lower> ScopeTable<'lower> {
         self.table.insert(key, value);
     }
 
-    pub fn lookup_fun(&self, symbol: &str) -> Option<&'lower Def<&'lower InferTy<'lower>>> {
+    pub fn lookup_fun(&self, symbol: &str) -> Option<&'lower DefFun<&'lower InferTy<'lower>>> {
         match self.table.get(symbol) {
-            Some(def) => {
-                if def.ty.kind.is_fun() {
-                    Some(def)
-                } else {
-                    None
-                }
-            }
+            Some(Def::Fun(inner)) => Some(inner),
             _ => None,
         }
     }
 
-    pub fn lookup_var(&self, symbol: &str) -> Option<&'lower Def<&'lower InferTy<'lower>>> {
+    pub fn lookup_var(&self, symbol: &str) -> Option<&'lower DefVar<&'lower InferTy<'lower>>> {
         match self.table.get(symbol) {
-            Some(def) => {
-                if def.ty.kind.is_var() {
-                    Some(def)
-                } else {
-                    None
-                }
-            }
+            Some(Def::Var(inner)) => Some(inner),
             _ => None,
         }
     }
+
+    // pub fn lookup_struct(
+    //     &self,
+    //     symbol: &str,
+    // ) -> Option<&'lower DefStruct<&'lower InferTy<'lower>>> {
+    //     match self.table.get(symbol) {
+    //         Some(Def::Struct(inner)) => Some(inner),
+    //         _ => None,
+    //     }
+    // }
 }

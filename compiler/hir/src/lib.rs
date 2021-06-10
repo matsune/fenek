@@ -219,7 +219,7 @@ pub struct Path {
 
 impl Path {
     pub fn get_type(&self) -> ty::Type {
-        self.def.ty.clone()
+        self.def.ty().clone()
     }
 }
 

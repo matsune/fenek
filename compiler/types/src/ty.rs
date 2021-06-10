@@ -157,9 +157,9 @@ impl std::fmt::Display for StructType {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct StructMember {
-    is_mut: bool,
-    name: String,
-    ty: Type,
+    pub is_mut: bool,
+    pub name: String,
+    pub ty: Type,
 }
 
 impl std::fmt::Display for StructMember {

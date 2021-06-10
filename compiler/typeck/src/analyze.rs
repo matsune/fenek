@@ -1,11 +1,13 @@
-use super::arena::*;
 use crate::scope::*;
 use ast::Node;
 use error::{CompileError, Result, TypeCkError};
-use hir::def::*;
+use hir::def;
 use pos::Pos;
 use std::collections::{HashMap, HashSet};
-use types::infer::ty::InferTy;
+use typed_arena::Arena;
+use types::infer::InferTy;
+use types::solver::Solver;
+use types::ty;
 
 pub type NodeMap<T> = HashMap<ast::NodeId, T>;
 
@@ -13,25 +15,33 @@ fn compile_error(pos: Pos, typeck_err: TypeCkError) -> CompileError {
     CompileError::new(pos, Box::new(typeck_err))
 }
 
+type Def<'lower> = def::Def<&'lower InferTy<'lower>>;
+
 pub struct TyAnalyzer<'lower> {
-    def_arena: &'lower DefArena<&'lower InferTy<'lower>>,
+    def_arena: &'lower Arena<Def<'lower>>,
     node_ty_map: NodeMap<&'lower InferTy<'lower>>,
-    node_def_map: NodeMap<&'lower Def<&'lower InferTy<'lower>>>,
+    node_def_map: NodeMap<Def<'lower>>,
+    node_struct_map: NodeMap<ty::StructID>,
+    struct_map: HashMap<String, ty::StructID>,
     scopes: Scopes<'lower>,
+    solver: &'lower Solver<'lower>,
 }
 
 impl<'lower> TyAnalyzer<'lower> {
-    pub fn new(def_arena: &'lower DefArena<&'lower InferTy<'lower>>) -> Self {
+    pub fn new(def_arena: &'lower Arena<Def<'lower>>, solver: &'lower Solver<'lower>) -> Self {
         TyAnalyzer {
             def_arena,
             node_ty_map: NodeMap::new(),
             node_def_map: NodeMap::new(),
+            node_struct_map: NodeMap::new(),
+            struct_map: HashMap::new(),
             scopes: Scopes::default(),
+            solver,
         }
     }
 
-    fn get_type_from_ty(&self, ty: &ast::Ty) -> &'lower InferTy<'lower> {
-        match &ty.kind {
+    fn get_infer_type(&self, ty: &ast::Ty) -> Result<&'lower InferTy<'lower>> {
+        let ty = match &ty.kind {
             ast::TyKind::Raw(tok) => match tok.raw.as_str() {
                 "i8" => self.solver.arena.alloc_i8(),
                 "i16" => self.solver.arena.alloc_i16(),
@@ -42,21 +52,26 @@ impl<'lower> TyAnalyzer<'lower> {
                 "bool" => self.solver.arena.alloc_bool(),
                 // "string" => self.solver.arena.alloc_string(),
                 "void" => self.solver.arena.alloc_void(),
-                _ => self.solver.arena.alloc_struct(tok.raw),
+                _ => {
+                    let struct_id = self.struct_map.get(&tok.raw).ok_or_else(|| {
+                        compile_error(tok.pos, TypeCkError::UndefinedType(tok.raw.clone()))
+                    })?;
+                    self.solver.arena.alloc_struct(*struct_id)
+                }
             },
-            ast::TyKind::Ptr(ty) => self.solver.arena.alloc_ref(self.get_type_from_ty(ty)),
-        }
+            ast::TyKind::Ptr(ty) => self.solver.arena.alloc_ptr(self.get_infer_type(ty)?),
+        };
+        Ok(ty)
     }
 
     pub fn analyze_module(
         mut self,
         module: &ast::Module,
-    ) -> Result<(
-        NodeMap<&'lower InferTy<'lower>>,
-        NodeMap<&'lower Def<&'lower InferTy<'lower>>>,
-    )> {
+    ) -> Result<(NodeMap<&'lower InferTy<'lower>>, NodeMap<Def<'lower>>)> {
+        self.analyze_structs(&module.structs)?;
+
         for fun in &module.funs {
-            if self.scopes.lookup_fun(&fun.name.raw).is_some() {
+            if self.scopes.lookup_fun(&fun.name.raw, true).is_some() {
                 return Err(compile_error(
                     fun.name.pos,
                     TypeCkError::AlreadyDefinedFun(fun.name.raw.clone()),
@@ -64,17 +79,70 @@ impl<'lower> TyAnalyzer<'lower> {
             }
             let fun_def = self.make_fun_def(&fun)?;
             self.scopes.insert(fun.name.raw.clone(), fun_def);
-            self.node_def_map.insert(fun.id, fun_def);
+            self.node_def_map.insert(fun.id, fun_def.clone());
         }
 
         for fun in &module.funs {
             self.analyze_fun(&fun)?;
         }
-
         Ok((self.node_ty_map, self.node_def_map))
     }
 
-    fn make_fun_def(&mut self, fun: &ast::Fun) -> Result<&'lower Def<&'lower InferTy<'lower>>> {
+    fn get_type(&self, ty: &ast::Ty) -> Result<ty::Type> {
+        let ty = match &ty.kind {
+            ast::TyKind::Raw(ident) => match ident.raw.as_str() {
+                "i8" => ty::Type::Int(ty::IntType::I8),
+                "i16" => ty::Type::Int(ty::IntType::I16),
+                "i32" => ty::Type::Int(ty::IntType::I32),
+                "i64" => ty::Type::Int(ty::IntType::I64),
+                "f32" => ty::Type::Float(ty::FloatType::F32),
+                "f64" => ty::Type::Float(ty::FloatType::F64),
+                "bool" => ty::Type::Bool,
+                "void" => ty::Type::Void,
+                _ => {
+                    let struct_id = self.struct_map.get(&ident.raw).ok_or_else(|| {
+                        compile_error(ident.pos, TypeCkError::UndefinedType(ident.raw.clone()))
+                    })?;
+                    ty::Type::Struct(self.solver.structs.borrow()[*struct_id].clone())
+                }
+            },
+            ast::TyKind::Ptr(ty) => ty::Type::Ptr(Box::new(self.get_type(&ty)?)),
+        };
+        Ok(ty)
+    }
+
+    pub fn analyze_structs(&mut self, structs: &[ast::Struct]) -> Result<()> {
+        for strukt in structs {
+            if self.struct_map.contains_key(&strukt.name.raw) {
+                return Err(compile_error(
+                    strukt.name.pos,
+                    TypeCkError::AlreadyDefinedStruct(strukt.name.raw.clone()),
+                ));
+            }
+            let struct_id = self.solver.add_struct(&strukt.name.raw);
+            self.struct_map.insert(strukt.name.raw.clone(), struct_id);
+            self.node_struct_map.insert(strukt.id, struct_id);
+        }
+
+        for strukt in structs {
+            let struct_id = self.node_struct_map[&strukt.id];
+            let mut members = Vec::new();
+            for member in &strukt.members {
+                let is_mut = member.is_mut();
+                let name = member.name.raw.clone();
+                // TODO: check recursive type reference
+                let ty = self.get_type(&member.ty)?;
+                members.push(ty::StructMember { is_mut, name, ty });
+            }
+            self.solver.structs.borrow_mut()[struct_id].members = members;
+        }
+        Ok(())
+    }
+
+    fn make_fun_def(
+        &mut self,
+        fun: &ast::Fun,
+    ) -> Result<&'lower def::Def<&'lower InferTy<'lower>>> {
         let mut arg_muts = Vec::new();
         let mut arg_tys = Vec::new();
         let mut arg_names = HashSet::new();
@@ -89,54 +157,61 @@ impl<'lower> TyAnalyzer<'lower> {
                 ));
             }
             arg_names.insert(arg_name);
-            let arg_ty = self.get_type_from_ty(&arg.ty).ok_or_else(|| {
-                compile_error(arg.ty.pos(), TypeCkError::UndefinedType(arg.ty.to_string()))
-            })?;
-            if !arg_ty.kind.is_variable() {
-                return Err(compile_error(arg.ty.pos(), TypeCkError::InvalidType));
-            }
+            let arg_ty = self.get_infer_type(&arg.ty)?;
+            // if !arg_ty.is_variable() {
+            //     return Err(compile_error(pos, TypeCkError::InvalidType));
+            // }
             arg_tys.push(arg_ty);
             self.node_ty_map.insert(arg.id, arg_ty);
         }
 
-        let (is_ret_mut, ret_ty) = match &fun.ret_ty {
+        let (ret_mut, ret_ty) = match &fun.ret_ty {
             Some(ret_ty) => {
                 let ret_ty_id = ret_ty.ty.id;
-                let ty = self.get_type_from_ty(&ret_ty.ty).ok_or_else(|| {
-                    compile_error(
-                        ret_ty.pos(),
-                        TypeCkError::UndefinedType(ret_ty.ty.to_string()),
-                    )
-                })?;
+                let ty = self.get_infer_type(&ret_ty.ty)?;
                 self.node_ty_map.insert(ret_ty_id, ty);
                 (ret_ty.is_mut(), ty)
             }
             None => (false, self.solver.arena.alloc_void()),
         };
+        let fun_ty = self.solver.arena.alloc_fun(arg_tys, ret_ty);
 
-        Ok(self.def_arena.alloc(
-            self.solver.arena.alloc_fun(arg_tys, ret_ty),
-            DefKind::Fn(arg_muts, is_ret_mut),
-        ))
+        Ok(self.alloc_def_fun(fun_ty, arg_muts, ret_mut))
+    }
+
+    fn alloc_def_fun(
+        &self,
+        ty: &'lower InferTy<'lower>,
+        arg_muts: Vec<bool>,
+        ret_mut: bool,
+    ) -> &'lower Def<'lower> {
+        let id = self.def_arena.len();
+        self.def_arena.alloc(def::Def::Fun(def::DefFun {
+            id,
+            ty,
+            arg_muts,
+            ret_mut,
+        }))
+    }
+
+    fn alloc_def_var(&self, ty: &'lower InferTy<'lower>, is_mut: bool) -> &'lower Def<'lower> {
+        let id = self.def_arena.len();
+        self.def_arena
+            .alloc(def::Def::Var(def::DefVar { id, ty, is_mut }))
     }
 
     fn analyze_fun(&mut self, fun: &ast::Fun) -> Result<()> {
-        let fun_def = self.scopes.lookup_fun(&fun.name.raw).unwrap();
+        let fun_def = self.scopes.lookup_fun(&fun.name.raw, true).unwrap();
         self.scopes.push_scope();
 
         for (idx, arg) in fun.args.iter().enumerate() {
-            let ty = fun_def.ty.kind.as_fun().arg_tys[idx];
-            let def = self.def_arena.alloc(
-                ty,
-                DefKind::Var {
-                    is_mut: arg.is_mut(),
-                },
-            );
+            let ty = fun_def.ty.as_fun().args[idx];
+            let def = self.alloc_def_var(ty, arg.is_mut());
             self.scopes.insert(arg.name.raw.clone(), def);
-            self.node_def_map.insert(arg.id, def);
+            self.node_def_map.insert(arg.id, def.clone());
         }
 
-        self.analyze_block(&fun.block, &fun_def.ty.kind.as_fun().ret_ty)?;
+        self.analyze_block(&fun.block, &fun_def.ty.as_fun().ret)?;
 
         self.scopes.pop_scope();
         Ok(())
@@ -175,27 +250,20 @@ impl<'lower> TyAnalyzer<'lower> {
         let var_ty = match &var_decl.ty {
             Some(ty) => {
                 let pos = ty.pos();
-                let ty = self.get_type_from_ty(&ty).ok_or_else(|| {
-                    compile_error(pos, TypeCkError::UndefinedType(ty.to_string()))
-                })?;
-                if !ty.kind.is_variable() {
-                    return Err(compile_error(pos, TypeCkError::InvalidType));
-                }
+                let ty = self.get_infer_type(&ty)?;
+                // if !ty.kind.is_variable() {
+                //     return Err(compile_error(pos, TypeCkError::InvalidType));
+                // }
                 ty
             }
-            None => self.solver.arena.alloc_var(),
+            None => self.solver.arena.alloc_any(),
         };
         self.solver
             .bind(var_ty, init_ty)
             .map_err(|err| CompileError::new(var_decl.name.pos, err.into()))?;
-        let def = self.def_arena.alloc(
-            init_ty,
-            DefKind::Var {
-                is_mut: var_decl.is_mut(),
-            },
-        );
+        let def = self.alloc_def_var(init_ty, var_decl.is_mut());
         self.scopes.insert(var_decl.name.raw.clone(), def);
-        self.node_def_map.insert(var_decl.id, def);
+        self.node_def_map.insert(var_decl.id, def.clone());
         Ok(())
     }
 
@@ -294,26 +362,27 @@ impl<'lower> TyAnalyzer<'lower> {
                     TypeCkError::UndefinedVariable(path.ident.raw.clone()),
                 )
             })?;
-        self.node_def_map.insert(path.id, def);
+        self.node_def_map.insert(path.id, Def::Var(def.clone()));
         Ok(def.ty)
     }
 
     fn analyze_call(&mut self, call: &ast::Call) -> Result<&'lower InferTy<'lower>> {
         let def = self
             .scopes
-            .lookup_fun(&call.path.ident.raw)
+            .lookup_fun(&call.path.ident.raw, false)
             .ok_or_else(|| {
                 compile_error(
                     call.path.pos(),
                     TypeCkError::UndefinedFun(call.path.ident.raw.clone()),
                 )
             })?;
-        self.node_def_map.insert(call.path.id, def);
-        if def.ty.kind.as_fun().arg_tys.len() != call.args.len() {
+        self.node_def_map
+            .insert(call.path.id, Def::Fun(def.clone()));
+        if def.ty.as_fun().args.len() != call.args.len() {
             return Err(compile_error(call.pos(), TypeCkError::InvalidArgsCount));
         }
-        let ty = self.solver.arena.alloc_var();
-        let arg_tys = &def.ty.kind.as_fun().arg_tys;
+        let ty = self.solver.arena.alloc_any();
+        let arg_tys = &def.ty.as_fun().args;
         for (idx, arg) in call.args.iter().enumerate() {
             let ty = arg_tys[idx];
             let arg_ty = self.analyze_expr(&arg)?;
@@ -322,7 +391,7 @@ impl<'lower> TyAnalyzer<'lower> {
                 .map_err(|err| CompileError::new(arg.pos(), err.into()))?;
         }
         self.solver
-            .bind(ty, &def.ty.kind.as_fun().ret_ty)
+            .bind(ty, &def.ty.as_fun().ret)
             .map_err(|err| CompileError::new(call.pos(), err.into()))?;
         Ok(ty)
     }
@@ -348,10 +417,17 @@ impl<'lower> TyAnalyzer<'lower> {
     fn analyze_unary(&mut self, unary: &ast::Unary) -> Result<&'lower InferTy<'lower>> {
         let expr_ty = self.analyze_expr(&unary.expr)?;
         let ty = match unary.op.kind {
-            ast::UnOpKind::Ref => self.solver.arena.alloc_ref(expr_ty),
-            ast::UnOpKind::Deref => self.solver.arena.alloc_deref(expr_ty),
+            ast::UnOpKind::Ref => self.solver.arena.alloc_ptr(expr_ty),
+            ast::UnOpKind::Deref => {
+                let elem = self.solver.arena.alloc_any();
+                let ptr = self.solver.arena.alloc_ptr(elem);
+                self.solver
+                    .bind(ptr, expr_ty)
+                    .map_err(|err| CompileError::new(unary.expr.pos(), err.into()))?;
+                elem
+            }
             _ => {
-                let ty = self.solver.arena.alloc_var();
+                let ty = self.solver.arena.alloc_any();
                 self.solver
                     .bind(ty, expr_ty)
                     .map_err(|err| CompileError::new(unary.expr.pos(), err.into()))?

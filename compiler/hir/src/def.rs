@@ -10,36 +10,95 @@ pub type DefId = usize;
 /// `ty::Type` because this will be used by either
 /// type inference and type checking.
 #[derive(Debug, Clone, Serialize)]
-pub struct Def<Ty> {
-    pub id: DefId,
-    pub ty: Ty,
-    pub kind: DefKind,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub enum DefKind {
-    Var { is_mut: bool },
-    // array of arguments mutability
-    Fn(Vec<bool>, bool),
+pub enum Def<Ty> {
+    Var(DefVar<Ty>),
+    Fun(DefFun<Ty>),
+    // Struct(DefStruct<Ty>),
 }
 
 impl<Ty> Def<Ty> {
-    pub fn new(id: DefId, ty: Ty, kind: DefKind) -> Self {
-        Self { id, ty, kind }
+    pub fn id(&self) -> DefId {
+        match self {
+            Self::Fun(inner) => inner.id,
+            Self::Var(inner) => inner.id,
+            // Self::Struct(inner) => &inner.ty,
+        }
+    }
+
+    pub fn ty(&self) -> &Ty {
+        match self {
+            Self::Fun(inner) => &inner.ty,
+            Self::Var(inner) => &inner.ty,
+            // Self::Struct(inner) => &inner.ty,
+        }
     }
 
     pub fn is_var(&self) -> bool {
-        matches!(self.kind, DefKind::Var { is_mut: _ })
+        matches!(self, Def::Var(_))
     }
+
+    pub fn is_fun(&self) -> bool {
+        matches!(self, Def::Fun(_))
+    }
+
+    // pub fn is_struct(&self) -> bool {
+    //     matches!(self, Def::Struct(_))
+    // }
 
     pub fn is_mutable(&self) -> bool {
-        matches!(self.kind, DefKind::Var { is_mut: true })
+        matches!(&self, Def::Var(var) if var.is_mut)
     }
 
-    pub fn as_fn(&self) -> (&[bool], bool) {
-        match &self.kind {
-            DefKind::Fn(arg_muts, ret_mut) => (arg_muts, *ret_mut),
+    pub fn as_fun(&self) -> &DefFun<Ty> {
+        match &self {
+            Def::Fun(def_fun) => def_fun,
             _ => panic!(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DefVar<Ty> {
+    pub id: DefId,
+    pub ty: Ty,
+    pub is_mut: bool,
+}
+
+impl<Ty> Into<Def<Ty>> for DefVar<Ty> {
+    fn into(self) -> Def<Ty> {
+        Def::Var(self)
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DefFun<Ty> {
+    pub id: DefId,
+    pub ty: Ty,
+    pub arg_muts: Vec<bool>,
+    pub ret_mut: bool,
+}
+
+impl<Ty> Into<Def<Ty>> for DefFun<Ty> {
+    fn into(self) -> Def<Ty> {
+        Def::Fun(self)
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DefStruct<Ty> {
+    pub id: DefId,
+    pub ty: Ty,
+    pub fields: Vec<Field<Ty>>,
+}
+
+// impl<Ty> Into<Def<Ty>> for DefStruct<Ty> {
+//     fn into(self) -> Def<Ty> {
+//         Def::Struct(self)
+//     }
+// }
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Field<Ty> {
+    pub is_mut: bool,
+    pub ty: Ty,
 }

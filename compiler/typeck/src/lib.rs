@@ -1,5 +1,4 @@
 mod analyze;
-mod arena;
 mod lower;
 pub mod scope;
 

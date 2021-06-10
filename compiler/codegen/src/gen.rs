@@ -161,10 +161,10 @@ impl<'ctx> Codegen<'ctx> {
         for fun in &module.funs {
             let fn_value = self.create_fn_value(
                 &fun.name,
-                &fun.def.ty.as_fun().ret,
-                &fun.def.ty.as_fun().args,
+                &fun.def.ty().as_fun().ret,
+                &fun.def.ty().as_fun().args,
             );
-            self.def_fn_value_map.insert(fun.def.id, fn_value);
+            self.def_fn_value_map.insert(fun.def.id(), fn_value);
         }
 
         for fun in module.funs {
@@ -177,7 +177,7 @@ impl<'ctx> Codegen<'ctx> {
     }
 
     pub fn build_fun(&self, fun: hir::Fun) {
-        let fn_value = self.def_fn_value_map.get(&fun.def.id).unwrap();
+        let fn_value = self.def_fn_value_map.get(&fun.def.id()).unwrap();
         // append and set cursor to an entrance basicblock
         let start_bb = self.context.append_basic_block(*fn_value, "start");
         let builder = self.context.create_builder();

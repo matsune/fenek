@@ -113,6 +113,13 @@ impl<'a> InferTy<'a> {
             _ => None,
         }
     }
+
+    pub fn as_fun(&self) -> &FunTy<'a> {
+        match self {
+            Self::Fun(fun) => fun,
+            _ => panic!(),
+        }
+    }
 }
 
 #[derive(Debug)]

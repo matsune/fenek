@@ -132,34 +132,34 @@ impl Parser {
         self.skip_spaces();
         self.bump_kind(token::TokenKind::LBrace)?;
         self.skip_spaces();
-        let fields = self.parse_struct_fields()?;
+        let members = self.parse_struct_members()?;
         self.bump_kind(token::TokenKind::RBrace)?;
         self.skip_spaces();
         Ok(ast::Struct {
             id,
             keyword,
             name,
-            fields,
+            members,
         })
     }
 
-    fn parse_struct_fields(&mut self) -> Result<ast::Fields> {
-        let mut fields = ast::Fields::new();
+    fn parse_struct_members(&mut self) -> Result<ast::Members> {
+        let mut members = ast::Members::new();
         while let Some(peek) = self.peek() {
             if !is_ident(peek) {
                 break;
             }
-            fields.push(self.parse_field()?);
+            members.push(self.parse_member()?);
             self.skip_spaces();
             if self.bump_if_kind(token::TokenKind::Comma).is_none() {
                 break;
             }
             self.skip_spaces();
         }
-        Ok(fields)
+        Ok(members)
     }
 
-    fn parse_field(&mut self) -> Result<ast::Field> {
+    fn parse_member(&mut self) -> Result<ast::Member> {
         let id = self.gen_id();
         let keyword = self.bump_if_mut_or_let();
         self.skip_spaces();
@@ -169,7 +169,7 @@ impl Parser {
         self.skip_spaces();
         let ty = self.parse_ty()?;
         self.skip_spaces();
-        Ok(ast::Field {
+        Ok(ast::Member {
             id,
             keyword,
             name,

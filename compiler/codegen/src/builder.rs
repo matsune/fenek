@@ -33,19 +33,19 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
     pub fn build_fun(mut self, fun: &hir::Fun) {
         self.build_fun_args(&fun);
         self.build_block(&fun.block);
-        if fun.def.ty.as_fun().ret.is_void() && !fun.block.is_terminated() {
+        if fun.def.ty().as_fun().ret.is_void() && !fun.block.is_terminated() {
             self.builder().build_return(None);
         }
     }
 
     fn build_fun_args(&mut self, fun: &hir::Fun) {
-        for (idx, ty) in fun.def.ty.as_fun().args.iter().enumerate() {
+        for (idx, ty) in fun.def.ty().as_fun().args.iter().enumerate() {
             let name = fun.args[idx].raw.clone();
             let param = self.fn_value().get_nth_param(idx as u32).unwrap();
             let ptr = self.builder().build_alloca(param.get_type(), &name);
             self.builder().build_store(ptr, param);
             self.function.var_map.insert(
-                fun.args[idx].def.id,
+                fun.args[idx].def.id(),
                 Variable::new(name, ty.clone(), true, ptr),
             );
         }
@@ -64,11 +64,11 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
                 let val = self.build_expr(&var_decl.init).unwrap();
                 let ptr = self
                     .builder()
-                    .build_alloca(llvm_basic_ty(&self.ctx.context, &var_decl.def.ty), &name);
+                    .build_alloca(llvm_basic_ty(&self.ctx.context, &var_decl.def.ty()), &name);
                 self.builder().build_store(ptr, val);
                 self.function.var_map.insert(
-                    var_decl.def.id,
-                    Variable::new(name.clone(), var_decl.def.ty.clone(), false, ptr),
+                    var_decl.def.id(),
+                    Variable::new(name.clone(), var_decl.def.ty().clone(), false, ptr),
                 );
             }
             hir::Stmt::Ret(ret) => match &ret.expr {
@@ -147,7 +147,7 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
             hir::Expr::Path(path) => self
                 .function
                 .var_map
-                .get(&path.def.id)
+                .get(&path.def.id())
                 .expect(&format!(
                     "expr id {:?} \n>>>>{:?}",
                     expr, self.function.var_map
@@ -199,7 +199,7 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
                 }
             }
             hir::Expr::Path(ident) => {
-                let ptr = self.function.var_map.get(&ident.def.id).unwrap().ptr;
+                let ptr = self.function.var_map.get(&ident.def.id()).unwrap().ptr;
                 self.builder().build_load(ptr, &ident.raw)
             }
             hir::Expr::Call(call) => {
@@ -207,7 +207,7 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
                 for arg in &call.args {
                     args.push(self.build_expr(&arg).unwrap());
                 }
-                let fn_value = self.ctx.def_fn_value_map.get(&call.path.def.id).unwrap();
+                let fn_value = self.ctx.def_fn_value_map.get(&call.path.def.id()).unwrap();
                 self.builder()
                     .build_call(*fn_value, &args, "")
                     .try_as_basic_value()

@@ -1,5 +1,4 @@
 use super::analyze::{NodeMap, TyAnalyzer};
-use super::arena::*;
 use ast::Node;
 use error::{CompileError, Result, TypeCkError};
 use hir::def::*;
@@ -8,8 +7,9 @@ use num_traits::Num;
 use pos::Pos;
 use std::ops::Deref;
 use std::str::FromStr;
+use typed_arena::Arena;
 use types::infer::InferTyArena;
-use types::solve::Solver;
+use types::solver::Solver;
 use types::ty;
 
 fn compile_error(pos: Pos, typeck_err: TypeCkError) -> CompileError {
@@ -57,12 +57,12 @@ pub fn lower(module: ast::Module) -> Result<hir::Module> {
     // lifetime 'lower is this block scope
     let ty_arena = InferTyArena::default();
     let solver = Solver::new(&ty_arena);
-    let def_arena = DefArena::new();
+    let def_arena = Arena::new();
 
     let mut lower = {
         // 1. analyze AST and make hash maps to infer types of each nodes
         let (node_infer_ty_map, node_infer_def_map) =
-            TyAnalyzer::new(&solver, &def_arena).analyze_module(&module)?;
+            TyAnalyzer::new(&def_arena, &solver).analyze_module(&module)?;
 
         // 2. finalize inferring type into concrete ty::Type
         let (node_ty_map, node_def_map) = {
@@ -77,8 +77,23 @@ pub fn lower(module: ast::Module) -> Result<hir::Module> {
 
             let mut node_def_map = NodeMap::with_capacity(node_infer_def_map.len());
             for (node_id, def) in node_infer_def_map.iter() {
-                let ty = solver.solve_type(def.ty).unwrap();
-                node_def_map.insert(*node_id, Def::new(def.id, ty, def.kind.clone()));
+                let ty = solver.solve_type(def.ty()).unwrap();
+                node_def_map.insert(
+                    *node_id,
+                    match def {
+                        Def::Fun(fun_def) => Def::Fun(DefFun {
+                            id: fun_def.id,
+                            ty,
+                            arg_muts: fun_def.arg_muts.clone(),
+                            ret_mut: fun_def.ret_mut,
+                        }),
+                        Def::Var(var_def) => Def::Var(DefVar {
+                            id: var_def.id,
+                            ty,
+                            is_mut: var_def.is_mut,
+                        }),
+                    },
+                );
             }
 
             (node_ty_map, node_def_map)
@@ -170,7 +185,7 @@ impl Lower {
     fn is_returning_local_var(&self, expr: &hir::Expr) -> bool {
         match expr {
             // TODO: check scope level if introduced global variable, struct and etc.
-            hir::Expr::Path(path) => !path.def.ty.is_ptr(),
+            hir::Expr::Path(path) => !path.def.ty().is_ptr(),
             hir::Expr::Call(_) => false,
             hir::Expr::RefExpr(ref_expr) => self.is_returning_local_var(&ref_expr.expr),
             hir::Expr::DerefExpr(deref_expr) => self.is_returning_local_var(&deref_expr.expr),
@@ -191,10 +206,10 @@ impl Lower {
                 let name = var_decl.name.raw.clone();
                 let expr = self.lower_expr(&var_decl.init)?;
                 let def = self.node_def_map.get(&id).unwrap().clone();
-                if matches!(def.ty, ty::Type::Fun(_) | ty::Type::Void) {
+                if matches!(def.ty(), ty::Type::Fun(_) | ty::Type::Void) {
                     return Err((id, TypeCkError::NonBasicVar));
                 }
-                if var_decl.is_mut() && def.ty.is_ptr() && !expr.is_mutable() {
+                if var_decl.is_mut() && def.ty().is_ptr() && !expr.is_mutable() {
                     return Err((id, TypeCkError::RequiresMut));
                 }
                 hir::VarDecl::new(id, name, expr, def).into()
@@ -417,21 +432,18 @@ impl Lower {
 
     fn lower_call(&self, call: &ast::Call) -> LowerResult<hir::Call> {
         let path = self.lower_path(&call.path);
-        let fn_type = path.def.ty.as_fun();
-        let (arg_muts, ret_mut) = path.def.as_fn();
+        let fn_type = path.def.ty().as_fun();
+        let fun_def = path.def.as_fun();
         let mut args = Vec::new();
         for (idx, arg) in call.args.iter().enumerate() {
             let expr = self.lower_expr(&arg)?;
-            if arg_muts[idx] && fn_type.args[idx].is_ptr() && !expr.is_mutable() {
+            if fun_def.arg_muts[idx] && fn_type.args[idx].is_ptr() && !expr.is_mutable() {
                 return Err((arg.id(), TypeCkError::RequiresMut));
             }
             args.push(expr);
         }
-        Ok(hir::Call {
-            path,
-            args,
-            is_mut: ret_mut,
-        })
+        let is_mut = fun_def.ret_mut;
+        Ok(hir::Call { path, args, is_mut })
     }
 
     fn lower_expr(&self, expr: &ast::Expr) -> LowerResult<hir::Expr> {
