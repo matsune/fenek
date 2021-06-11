@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 pub type StructID = usize;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -137,7 +139,17 @@ impl std::fmt::Display for FunType {
 pub struct StructType {
     pub id: StructID,
     pub name: String,
-    pub members: Vec<StructMember>,
+    pub members: RefCell<Vec<StructMember>>,
+}
+
+impl StructType {
+    pub fn new<S: ToString>(id: StructID, name: S) -> Self {
+        Self {
+            id,
+            name: name.to_string(),
+            members: RefCell::new(vec![]),
+        }
+    }
 }
 
 impl std::fmt::Display for StructType {
@@ -147,6 +159,7 @@ impl std::fmt::Display for StructType {
             "struct {} {{{}}}",
             self.name,
             self.members
+                .borrow()
                 .iter()
                 .map(ToString::to_string)
                 .collect::<Vec<_>>()

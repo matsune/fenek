@@ -21,8 +21,8 @@ pub struct TyAnalyzer<'lower> {
     def_arena: &'lower Arena<Def<'lower>>,
     node_ty_map: NodeMap<&'lower InferTy<'lower>>,
     node_def_map: NodeMap<Def<'lower>>,
-    node_struct_map: NodeMap<ty::StructID>,
-    struct_map: HashMap<String, ty::StructID>,
+    node_struct_map: NodeMap<&'lower ty::StructType>,
+    struct_map: HashMap<String, &'lower ty::StructType>,
     scopes: Scopes<'lower>,
     solver: &'lower Solver<'lower>,
 }
@@ -43,23 +43,23 @@ impl<'lower> TyAnalyzer<'lower> {
     fn get_infer_type(&self, ty: &ast::Ty) -> Result<&'lower InferTy<'lower>> {
         let ty = match &ty.kind {
             ast::TyKind::Raw(tok) => match tok.raw.as_str() {
-                "i8" => self.solver.arena.alloc_i8(),
-                "i16" => self.solver.arena.alloc_i16(),
-                "i32" => self.solver.arena.alloc_i32(),
-                "i64" => self.solver.arena.alloc_i64(),
-                "f32" => self.solver.arena.alloc_f32(),
-                "f64" => self.solver.arena.alloc_f64(),
-                "bool" => self.solver.arena.alloc_bool(),
-                // "string" => self.solver.arena.alloc_string(),
-                "void" => self.solver.arena.alloc_void(),
+                "i8" => self.solver.ty_arena.alloc_i8(),
+                "i16" => self.solver.ty_arena.alloc_i16(),
+                "i32" => self.solver.ty_arena.alloc_i32(),
+                "i64" => self.solver.ty_arena.alloc_i64(),
+                "f32" => self.solver.ty_arena.alloc_f32(),
+                "f64" => self.solver.ty_arena.alloc_f64(),
+                "bool" => self.solver.ty_arena.alloc_bool(),
+                // "string" => self.solver.ty_arena.alloc_string(),
+                "void" => self.solver.ty_arena.alloc_void(),
                 _ => {
                     let struct_id = self.struct_map.get(&tok.raw).ok_or_else(|| {
                         compile_error(tok.pos, TypeCkError::UndefinedType(tok.raw.clone()))
                     })?;
-                    self.solver.arena.alloc_struct(*struct_id)
+                    self.solver.ty_arena.alloc_struct(*struct_id)
                 }
             },
-            ast::TyKind::Ptr(ty) => self.solver.arena.alloc_ptr(self.get_infer_type(ty)?),
+            ast::TyKind::Ptr(ty) => self.solver.ty_arena.alloc_ptr(self.get_infer_type(ty)?),
         };
         Ok(ty)
     }
@@ -100,10 +100,10 @@ impl<'lower> TyAnalyzer<'lower> {
                 "bool" => ty::Type::Bool,
                 "void" => ty::Type::Void,
                 _ => {
-                    let struct_id = self.struct_map.get(&ident.raw).ok_or_else(|| {
+                    let strukt = self.struct_map.get(&ident.raw).ok_or_else(|| {
                         compile_error(ident.pos, TypeCkError::UndefinedType(ident.raw.clone()))
                     })?;
-                    ty::Type::Struct(self.solver.structs.borrow()[*struct_id].clone())
+                    ty::Type::Struct((*strukt).clone())
                 }
             },
             ast::TyKind::Ptr(ty) => ty::Type::Ptr(Box::new(self.get_type(&ty)?)),
@@ -125,7 +125,7 @@ impl<'lower> TyAnalyzer<'lower> {
         }
 
         for strukt in structs {
-            let struct_id = self.node_struct_map[&strukt.id];
+            let struct_ty = self.node_struct_map[&strukt.id];
             let mut members = Vec::new();
             for member in &strukt.members {
                 let is_mut = member.is_mut();
@@ -134,7 +134,7 @@ impl<'lower> TyAnalyzer<'lower> {
                 let ty = self.get_type(&member.ty)?;
                 members.push(ty::StructMember { is_mut, name, ty });
             }
-            self.solver.structs.borrow_mut()[struct_id].members = members;
+            struct_ty.members.replace(members);
         }
         Ok(())
     }
@@ -172,9 +172,9 @@ impl<'lower> TyAnalyzer<'lower> {
                 self.node_ty_map.insert(ret_ty_id, ty);
                 (ret_ty.is_mut(), ty)
             }
-            None => (false, self.solver.arena.alloc_void()),
+            None => (false, self.solver.ty_arena.alloc_void()),
         };
-        let fun_ty = self.solver.arena.alloc_fun(arg_tys, ret_ty);
+        let fun_ty = self.solver.ty_arena.alloc_fun(arg_tys, ret_ty);
 
         Ok(self.alloc_def_fun(fun_ty, arg_muts, ret_mut))
     }
@@ -256,7 +256,7 @@ impl<'lower> TyAnalyzer<'lower> {
                 // }
                 ty
             }
-            None => self.solver.arena.alloc_any(),
+            None => self.solver.ty_arena.alloc_any(),
         };
         self.solver
             .bind(var_ty, init_ty)
@@ -274,7 +274,7 @@ impl<'lower> TyAnalyzer<'lower> {
     ) -> Result<()> {
         let ty = match &ret_stmt.expr {
             Some(expr) => self.analyze_expr(&expr)?,
-            None => self.solver.arena.alloc_void(),
+            None => self.solver.ty_arena.alloc_void(),
         };
         let pos = ret_stmt
             .expr
@@ -303,7 +303,7 @@ impl<'lower> TyAnalyzer<'lower> {
     ) -> Result<()> {
         let expr_ty = self.analyze_expr(&if_stmt.expr.as_ref().unwrap())?;
         self.solver
-            .bind(expr_ty, self.solver.arena.alloc_bool())
+            .bind(expr_ty, self.solver.ty_arena.alloc_bool())
             .map_err(|err| CompileError::new(if_stmt.expr.as_ref().unwrap().pos(), err.into()))?;
         self.analyze_block(&if_stmt.block, &current_fn_ret_ty)?;
         if let Some(else_if) = &if_stmt.else_if {
@@ -320,7 +320,7 @@ impl<'lower> TyAnalyzer<'lower> {
         if let Some(expr) = &else_stmt.expr {
             let expr_ty = self.analyze_expr(&expr)?;
             self.solver
-                .bind(expr_ty, self.solver.arena.alloc_bool())
+                .bind(expr_ty, self.solver.ty_arena.alloc_bool())
                 .map_err(|err| CompileError::new(expr.pos(), err.into()))?;
         }
         self.analyze_block(&else_stmt.block, &current_fn_ret_ty)?;
@@ -345,9 +345,9 @@ impl<'lower> TyAnalyzer<'lower> {
 
     fn analyze_lit(&mut self, lit: &ast::Lit) -> &'lower InferTy<'lower> {
         match lit.kind {
-            ast::LitKind::Int { base: _ } => self.solver.arena.alloc_int_lit(),
-            ast::LitKind::Float => self.solver.arena.alloc_float_lit(),
-            ast::LitKind::Bool => self.solver.arena.alloc_bool(),
+            ast::LitKind::Int { base: _ } => self.solver.ty_arena.alloc_int_lit(),
+            ast::LitKind::Float => self.solver.ty_arena.alloc_float_lit(),
+            ast::LitKind::Bool => self.solver.ty_arena.alloc_bool(),
             ast::LitKind::String => unimplemented!(),
         }
     }
@@ -381,7 +381,7 @@ impl<'lower> TyAnalyzer<'lower> {
         if def.ty.as_fun().args.len() != call.args.len() {
             return Err(compile_error(call.pos(), TypeCkError::InvalidArgsCount));
         }
-        let ty = self.solver.arena.alloc_any();
+        let ty = self.solver.ty_arena.alloc_any();
         let arg_tys = &def.ty.as_fun().args;
         for (idx, arg) in call.args.iter().enumerate() {
             let ty = arg_tys[idx];
@@ -404,7 +404,7 @@ impl<'lower> TyAnalyzer<'lower> {
                 self.solver
                     .bind(lhs_ty, rhs_ty)
                     .map_err(|err| CompileError::new(binary.lhs.pos(), err.into()))?;
-                self.solver.arena.alloc_bool()
+                self.solver.ty_arena.alloc_bool()
             }
             _ => self
                 .solver
@@ -417,17 +417,17 @@ impl<'lower> TyAnalyzer<'lower> {
     fn analyze_unary(&mut self, unary: &ast::Unary) -> Result<&'lower InferTy<'lower>> {
         let expr_ty = self.analyze_expr(&unary.expr)?;
         let ty = match unary.op.kind {
-            ast::UnOpKind::Ref => self.solver.arena.alloc_ptr(expr_ty),
+            ast::UnOpKind::Ref => self.solver.ty_arena.alloc_ptr(expr_ty),
             ast::UnOpKind::Deref => {
-                let elem = self.solver.arena.alloc_any();
-                let ptr = self.solver.arena.alloc_ptr(elem);
+                let elem = self.solver.ty_arena.alloc_any();
+                let ptr = self.solver.ty_arena.alloc_ptr(elem);
                 self.solver
                     .bind(ptr, expr_ty)
                     .map_err(|err| CompileError::new(unary.expr.pos(), err.into()))?;
                 elem
             }
             _ => {
-                let ty = self.solver.arena.alloc_any();
+                let ty = self.solver.ty_arena.alloc_any();
                 self.solver
                     .bind(ty, expr_ty)
                     .map_err(|err| CompileError::new(unary.expr.pos(), err.into()))?

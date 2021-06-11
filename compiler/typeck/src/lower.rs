@@ -56,7 +56,8 @@ type LowerResult<T> = Result<T, (ast::NodeId, TypeCkError)>;
 pub fn lower(module: ast::Module) -> Result<hir::Module> {
     // lifetime 'lower is this block scope
     let ty_arena = InferTyArena::default();
-    let solver = Solver::new(&ty_arena);
+    let struct_arena = Arena::new();
+    let solver = Solver::new(&ty_arena, &struct_arena);
     let def_arena = Arena::new();
 
     let mut lower = {

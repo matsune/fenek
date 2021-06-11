@@ -2,33 +2,27 @@ use super::infer::{InferTy, InferTyArena};
 use super::result::Result;
 use super::ty::*;
 use error::TypeError;
-use std::cell::RefCell;
+use typed_arena::Arena;
 
 #[cfg(test)]
 mod tests;
 
 pub struct Solver<'a> {
-    pub arena: &'a InferTyArena<'a>,
-    pub structs: RefCell<Vec<StructType>>,
+    pub ty_arena: &'a InferTyArena<'a>,
+    pub struct_arena: &'a Arena<StructType>,
 }
 
 impl<'a> Solver<'a> {
-    pub fn new(arena: &'a InferTyArena<'a>) -> Self {
+    pub fn new(ty_arena: &'a InferTyArena<'a>, struct_arena: &'a Arena<StructType>) -> Self {
         Self {
-            arena,
-            structs: RefCell::new(Vec::new()),
+            ty_arena,
+            struct_arena,
         }
     }
 
-    pub fn add_struct<S: ToString>(&self, name: S) -> StructID {
-        let id = self.structs.borrow().len();
-        let name = name.to_string();
-        self.structs.borrow_mut().push(StructType {
-            id,
-            name,
-            members: Vec::new(),
-        });
-        id
+    pub fn add_struct<S: ToString>(&self, name: S) -> &'a StructType {
+        let id = self.struct_arena.len();
+        self.struct_arena.alloc(StructType::new(id, name))
     }
 
     /// get the most tip node from this node.
@@ -41,14 +35,14 @@ impl<'a> Solver<'a> {
                     .map(|next| self.prune(next))
                     .unwrap_or(ty)
             }
-            InferTy::Ptr(elem) => self.arena.alloc_ptr(self.prune(elem)),
+            InferTy::Ptr(elem) => self.ty_arena.alloc_ptr(self.prune(elem)),
             InferTy::Fun(fun) => {
                 let mut args = Vec::with_capacity(fun.args.len());
                 for arg in fun.args.iter() {
                     args.push(self.prune(arg));
                 }
                 let ret = self.prune(fun.ret);
-                self.arena.alloc_fun(args, ret)
+                self.ty_arena.alloc_fun(args, ret)
             }
             _ => ty,
         }
@@ -84,7 +78,7 @@ impl<'a> Solver<'a> {
 
             (InferTy::Ptr(elem_a), InferTy::Ptr(elem_b)) => {
                 let elem = self.bind(elem_a, elem_b)?;
-                self.arena.alloc_ptr(elem)
+                self.ty_arena.alloc_ptr(elem)
             }
 
             (InferTy::Fun(fun_a), InferTy::Fun(fun_b)) => {
@@ -98,8 +92,10 @@ impl<'a> Solver<'a> {
                     arg_tys.push(self.bind(arg_a, arg_b)?);
                 }
                 let ret_ty = self.bind(fun_a.ret, fun_b.ret)?;
-                self.arena.alloc_fun(arg_tys, ret_ty)
+                self.ty_arena.alloc_fun(arg_tys, ret_ty)
             }
+
+            (InferTy::Struct(s_a), InferTy::Struct(s_b)) if s_a.id == s_b.id => a,
 
             _ => {
                 return Err(TypeError::ConflictTypes(a.to_string(), b.to_string()));
@@ -121,7 +117,7 @@ impl<'a> Solver<'a> {
 
     pub fn solve_type(&self, ty: &'a InferTy<'a>) -> Result<Type> {
         let ty = self.prune(ty);
-        match &ty {
+        match ty {
             InferTy::Any(_) => Err(TypeError::UnresolvedType),
             InferTy::IntLit(_) => Ok(Type::Int(IntType::I64)),
             InferTy::FloatLit(_) => Ok(Type::Float(FloatType::F64)),
@@ -129,7 +125,7 @@ impl<'a> Solver<'a> {
             InferTy::Float(inner) => Ok(Type::Float(*inner)),
             InferTy::Bool => Ok(Type::Bool),
             InferTy::Void => Ok(Type::Void),
-            InferTy::Struct(id) => Ok(Type::Struct(self.structs.borrow()[*id].clone())),
+            InferTy::Struct(strukt) => Ok(Type::Struct((*strukt).clone())),
             InferTy::Ptr(elem) => Ok(Type::Ptr(Box::new(self.solve_type(elem)?))),
             InferTy::Fun(fun) => {
                 let mut args = Vec::with_capacity(fun.args.len());

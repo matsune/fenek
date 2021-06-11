@@ -1,4 +1,4 @@
-use hir::def::{Def, DefFun, DefStruct, DefVar};
+use hir::def::{Def, DefFun, DefVar};
 use std::collections::HashMap;
 use types::infer::InferTy;
 
@@ -56,17 +56,6 @@ impl<'lower> Scopes<'lower> {
         self.iterate_scope(|scope_table| scope_table.lookup_var(name))
     }
 
-    // pub fn lookup_struct(
-    //     &self,
-    //     name: &str,
-    //     only_this: bool,
-    // ) -> Option<&'lower DefStruct<&'lower InferTy<'lower>>> {
-    //     if only_this {
-    //         return self.scopes[self.scope_idx].lookup_struct(name);
-    //     }
-    //     self.iterate_scope(|scope_table| scope_table.lookup_struct(name))
-    // }
-
     fn iterate_scope<T, F>(&self, f: F) -> Option<T>
     where
         F: Fn(&ScopeTable<'lower>) -> Option<T>,
@@ -119,14 +108,4 @@ impl<'lower> ScopeTable<'lower> {
             _ => None,
         }
     }
-
-    // pub fn lookup_struct(
-    //     &self,
-    //     symbol: &str,
-    // ) -> Option<&'lower DefStruct<&'lower InferTy<'lower>>> {
-    //     match self.table.get(symbol) {
-    //         Some(Def::Struct(inner)) => Some(inner),
-    //         _ => None,
-    //     }
-    // }
 }

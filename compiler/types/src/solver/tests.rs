@@ -2,12 +2,13 @@ use super::*;
 
 #[test]
 fn test_solve() {
-    let arena = InferTyArena::default();
-    let mut solver = Solver::new(&arena);
+    let ty_arena = InferTyArena::default();
+    let struct_arena = Arena::new();
+    let solver = Solver::new(&ty_arena, &struct_arena);
 
     macro_rules! alloc_fun {
             ($name: ident: ($($arg:ident),*) -> $ret:ident) => {
-                let $name = arena.alloc_fun([$($arg,)*].into(), $ret);
+                let $name = ty_arena.alloc_fun([$($arg,)*].into(), $ret);
             }
         }
 
@@ -15,7 +16,7 @@ fn test_solve() {
             ($($name:ident),*: $ty:ident) => {
                 $(
                     paste::expr! {
-                        let $name = arena.[<alloc_ $ty>]();
+                        let $name = ty_arena.[<alloc_ $ty>]();
                     }
                 )*
             }
@@ -115,7 +116,7 @@ fn test_solve() {
     // b = *i8
     {
         alloc!(a: any);
-        let b = arena.alloc_ptr(a);
+        let b = ty_arena.alloc_ptr(a);
         alloc!(c: i8);
         bind!(a, c);
         test_type!("i8" => a, c);
@@ -132,8 +133,8 @@ fn test_solve() {
     //
     {
         alloc!(a: any);
-        let ref_a = arena.alloc_ptr(a);
-        let b = arena.alloc_ptr(arena.alloc_i8());
+        let ref_a = ty_arena.alloc_ptr(a);
+        let b = ty_arena.alloc_ptr(ty_arena.alloc_i8());
         bind!(b, ref_a);
         test_type!("i8" => a);
         test_type!("*i8" => b);
@@ -155,10 +156,10 @@ fn test_solve() {
     {
         alloc!(a, b, c: any);
         alloc!(d: i8);
-        bind!(b, arena.alloc_ptr(a));
-        bind!(c, arena.alloc_ptr(b));
+        bind!(b, ty_arena.alloc_ptr(a));
+        bind!(c, ty_arena.alloc_ptr(b));
         // ('bind `d` with derefed `b`' means 'bind `b` with pointer of `d`')
-        bind!(b, arena.alloc_ptr(d));
+        bind!(b, ty_arena.alloc_ptr(d));
         test_type!("i8" => a, d);
         test_type!("*i8" => b);
         test_type!("**i8" => c);
@@ -174,9 +175,9 @@ fn test_solve() {
     // b: error
     {
         alloc!(a, b: any);
-        bind!(a, arena.alloc_i8());
+        bind!(a, ty_arena.alloc_i8());
         // cannot bind i8 with pointer of any because i8 is not pointer
-        assert!(solver.bind(a, arena.alloc_ptr(b)).is_err());
+        assert!(solver.bind(a, ty_arena.alloc_ptr(b)).is_err());
     }
 
     // a: A
@@ -184,11 +185,18 @@ fn test_solve() {
     // a: A
     // b: *A
     {
-        let A = solver.add_struct("A", Vec::new());
-        let a = arena.alloc_struct(A);
+        let a = ty_arena.alloc_struct(solver.add_struct("A"));
         alloc!(b: any);
-        bind!(b, arena.alloc_ptr(a));
+        bind!(b, ty_arena.alloc_ptr(a));
         test_type!("struct A {}" => a);
         test_type!("*struct A {}" => b);
+    }
+
+    {
+        let struct_A = solver.add_struct("A");
+        let a = ty_arena.alloc_struct(struct_A);
+        let b = ty_arena.alloc_struct(struct_A);
+        bind!(a, b);
+        test_type!("struct A {}" => a, b);
     }
 }

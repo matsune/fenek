@@ -68,8 +68,8 @@ impl<'a> InferTyArena<'a> {
         self.inner.alloc(InferTy::Void)
     }
 
-    pub fn alloc_struct(&'a self, struct_id: StructID) -> &'a InferTy<'a> {
-        self.inner.alloc(InferTy::Struct(struct_id))
+    pub fn alloc_struct(&'a self, strukt: &'a StructType) -> &'a InferTy<'a> {
+        self.inner.alloc(InferTy::Struct(strukt))
     }
 }
 
@@ -86,7 +86,7 @@ pub enum InferTy<'a> {
     Float(FloatType),
     Bool,
     Void,
-    Struct(StructID),
+    Struct(&'a StructType),
 }
 
 impl<'a> std::fmt::Display for InferTy<'a> {
@@ -101,7 +101,7 @@ impl<'a> std::fmt::Display for InferTy<'a> {
             Self::Float(inner) => inner.fmt(f),
             Self::Bool => write!(f, "bool"),
             Self::Void => write!(f, "void"),
-            Self::Struct(id) => write!(f, "struct {}", id),
+            Self::Struct(inner) => inner.fmt(f),
         }
     }
 }

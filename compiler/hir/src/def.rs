@@ -13,7 +13,6 @@ pub type DefId = usize;
 pub enum Def<Ty> {
     Var(DefVar<Ty>),
     Fun(DefFun<Ty>),
-    // Struct(DefStruct<Ty>),
 }
 
 impl<Ty> Def<Ty> {
@@ -21,7 +20,6 @@ impl<Ty> Def<Ty> {
         match self {
             Self::Fun(inner) => inner.id,
             Self::Var(inner) => inner.id,
-            // Self::Struct(inner) => &inner.ty,
         }
     }
 
@@ -29,7 +27,6 @@ impl<Ty> Def<Ty> {
         match self {
             Self::Fun(inner) => &inner.ty,
             Self::Var(inner) => &inner.ty,
-            // Self::Struct(inner) => &inner.ty,
         }
     }
 
@@ -40,10 +37,6 @@ impl<Ty> Def<Ty> {
     pub fn is_fun(&self) -> bool {
         matches!(self, Def::Fun(_))
     }
-
-    // pub fn is_struct(&self) -> bool {
-    //     matches!(self, Def::Struct(_))
-    // }
 
     pub fn is_mutable(&self) -> bool {
         matches!(&self, Def::Var(var) if var.is_mut)
@@ -82,23 +75,4 @@ impl<Ty> Into<Def<Ty>> for DefFun<Ty> {
     fn into(self) -> Def<Ty> {
         Def::Fun(self)
     }
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct DefStruct<Ty> {
-    pub id: DefId,
-    pub ty: Ty,
-    pub fields: Vec<Field<Ty>>,
-}
-
-// impl<Ty> Into<Def<Ty>> for DefStruct<Ty> {
-//     fn into(self) -> Def<Ty> {
-//         Def::Struct(self)
-//     }
-// }
-
-#[derive(Debug, Clone, Serialize)]
-pub struct Field<Ty> {
-    pub is_mut: bool,
-    pub ty: Ty,
 }
