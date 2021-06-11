@@ -54,18 +54,21 @@ fn parse_int_literal<T: Num>(base: token::IntBase, literal: &str) -> Result<T, T
 type LowerResult<T> = Result<T, (ast::NodeId, TypeCkError)>;
 
 pub fn lower(module: ast::Module) -> Result<hir::Module> {
-    // lifetime 'lower is this block scope
-    let ty_arena = InferTyArena::default();
-    let struct_arena = Arena::new();
-    let solver = Solver::new(&ty_arena, &struct_arena);
-    let def_arena = Arena::new();
-
     let mut lower = {
-        // 1. analyze AST and make hash maps to infer types of each nodes
-        let (node_infer_ty_map, node_infer_def_map) =
-            TyAnalyzer::new(&def_arena, &solver).analyze_module(&module)?;
+        // lifetime 'infer is this block scope
+        let struct_arena = Arena::new();
+        let def_arena = Arena::new();
+        let ty_arena = InferTyArena::default();
+        let solver = Solver::new(&ty_arena, &struct_arena);
 
-        // 2. finalize inferring type into concrete ty::Type
+        // 1. analyze AST and make HashMaps that
+        // indicates infer type and def of each node
+        let (node_infer_ty_map, node_infer_def_map) = {
+            let analyzer = TyAnalyzer::new(&def_arena, &solver);
+            analyzer.analyze_module(&module)?
+        };
+
+        // 2. finalize inferred types into concrete ty::Type
         let (node_ty_map, node_def_map) = {
             let mut node_ty_map = NodeMap::with_capacity(node_infer_ty_map.len());
             for (node_id, infer_ty) in node_infer_ty_map.iter() {

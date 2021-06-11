@@ -4,12 +4,12 @@ use types::infer::InferTy;
 
 pub type ArenaIdx = usize;
 
-pub struct Scopes<'lower> {
-    scopes: Vec<ScopeTable<'lower>>,
+pub struct Scopes<'infer> {
+    scopes: Vec<ScopeTable<'infer>>,
     scope_idx: ArenaIdx,
 }
 
-impl<'lower> Default for Scopes<'lower> {
+impl<'infer> Default for Scopes<'infer> {
     fn default() -> Self {
         let mut scopes = Vec::new();
         let scope_idx = scopes.len();
@@ -19,7 +19,7 @@ impl<'lower> Default for Scopes<'lower> {
     }
 }
 
-impl<'lower> Scopes<'lower> {
+impl<'infer> Scopes<'infer> {
     pub fn push_scope(&mut self) {
         let idx = self.scopes.len();
         self.scopes.push(ScopeTable::new(idx, Some(self.scope_idx)));
@@ -30,7 +30,7 @@ impl<'lower> Scopes<'lower> {
         self.scope_idx = self.scopes[self.scope_idx].parent.unwrap();
     }
 
-    pub fn insert(&mut self, key: String, value: &'lower Def<&'lower InferTy<'lower>>) {
+    pub fn insert(&mut self, key: String, value: &'infer Def<&'infer InferTy<'infer>>) {
         self.scopes[self.scope_idx].insert(key, value)
     }
 
@@ -38,7 +38,7 @@ impl<'lower> Scopes<'lower> {
         &self,
         name: &str,
         only_this: bool,
-    ) -> Option<&'lower DefFun<&'lower InferTy<'lower>>> {
+    ) -> Option<&'infer DefFun<&'infer InferTy<'infer>>> {
         if only_this {
             return self.scopes[self.scope_idx].lookup_fun(name);
         }
@@ -49,7 +49,7 @@ impl<'lower> Scopes<'lower> {
         &self,
         name: &str,
         only_this: bool,
-    ) -> Option<&'lower DefVar<&'lower InferTy<'lower>>> {
+    ) -> Option<&'infer DefVar<&'infer InferTy<'infer>>> {
         if only_this {
             return self.scopes[self.scope_idx].lookup_var(name);
         }
@@ -58,7 +58,7 @@ impl<'lower> Scopes<'lower> {
 
     fn iterate_scope<T, F>(&self, f: F) -> Option<T>
     where
-        F: Fn(&ScopeTable<'lower>) -> Option<T>,
+        F: Fn(&ScopeTable<'infer>) -> Option<T>,
     {
         let scopes = &self.scopes;
         let mut tmp_idx = self.scope_idx;
@@ -76,13 +76,13 @@ impl<'lower> Scopes<'lower> {
 }
 
 #[derive(Debug)]
-pub struct ScopeTable<'lower> {
+pub struct ScopeTable<'infer> {
     pub idx: ArenaIdx,
-    pub table: HashMap<String, &'lower Def<&'lower InferTy<'lower>>>,
+    pub table: HashMap<String, &'infer Def<&'infer InferTy<'infer>>>,
     pub parent: Option<ArenaIdx>,
 }
 
-impl<'lower> ScopeTable<'lower> {
+impl<'infer> ScopeTable<'infer> {
     pub fn new(idx: ArenaIdx, parent: Option<ArenaIdx>) -> Self {
         Self {
             idx,
@@ -91,18 +91,18 @@ impl<'lower> ScopeTable<'lower> {
         }
     }
 
-    pub fn insert(&mut self, key: String, value: &'lower Def<&'lower InferTy<'lower>>) {
+    pub fn insert(&mut self, key: String, value: &'infer Def<&'infer InferTy<'infer>>) {
         self.table.insert(key, value);
     }
 
-    pub fn lookup_fun(&self, symbol: &str) -> Option<&'lower DefFun<&'lower InferTy<'lower>>> {
+    pub fn lookup_fun(&self, symbol: &str) -> Option<&'infer DefFun<&'infer InferTy<'infer>>> {
         match self.table.get(symbol) {
             Some(Def::Fun(inner)) => Some(inner),
             _ => None,
         }
     }
 
-    pub fn lookup_var(&self, symbol: &str) -> Option<&'lower DefVar<&'lower InferTy<'lower>>> {
+    pub fn lookup_var(&self, symbol: &str) -> Option<&'infer DefVar<&'infer InferTy<'infer>>> {
         match self.table.get(symbol) {
             Some(Def::Var(inner)) => Some(inner),
             _ => None,
