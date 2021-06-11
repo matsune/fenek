@@ -12,5 +12,6 @@ struct B {
 }
 
 fun main() -> i8 {
-  ret 2;
+  let n: *i8 = null;
+  ret *n;
 }

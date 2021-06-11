@@ -206,6 +206,7 @@ where
         Expr::Path(inner) => visit_path(inner, f),
         Expr::Call(inner) => visit_call(inner, f),
         Expr::Lit(inner) => visit_lit(inner, f),
+        Expr::Null(inner) => visit_null(inner, f),
         Expr::Binary(inner) => visit_binary(inner, f),
         Expr::Unary(inner) => visit_unary(inner, f),
     }
@@ -229,6 +230,15 @@ where
     for arg in call.args.iter() {
         return_some!(visit_expr(&arg, f));
     }
+    None
+}
+
+fn visit_null<'a, F>(null: &'a Null, f: &F) -> Option<&'a dyn Node>
+where
+    F: Fn(&'a dyn Node) -> Option<&'a dyn Node>,
+{
+    return_some!(f(null));
+    return_some!(f(&null.keyword));
     None
 }
 

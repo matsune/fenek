@@ -148,10 +148,7 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
                 .function
                 .var_map
                 .get(&path.def.id())
-                .expect(&format!(
-                    "expr id {:?} \n>>>>{:?}",
-                    expr, self.function.var_map
-                ))
+                .unwrap()
                 .ptr
                 .into(),
             hir::Expr::DerefExpr(deref_expr) => {
@@ -196,6 +193,7 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
                     // ast::LitKind::String(v) => {
                     //     unimplemented!()
                     // }
+                    hir::LitKind::Null => basic_ty.into_pointer_type().const_null().into(),
                 }
             }
             hir::Expr::Path(ident) => {

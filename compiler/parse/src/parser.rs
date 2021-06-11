@@ -396,6 +396,7 @@ impl Parser {
                     token::Keyword::Fun | token::Keyword::Else | token::Keyword::Struct => {
                         return Err(self.compile_error(ParseError::InvalidStmt))
                     }
+                    token::Keyword::Null => Stmt::Expr(self.parse_expr()?),
                 }
             }
             _ => {
@@ -632,7 +633,15 @@ impl Parser {
             }
             token::TokenKind::Ident => {
                 if let Some(keyword) = peek.try_as_keyword() {
-                    Err(self.compile_error(ParseError::FoundKeyword(keyword.to_string())))
+                    if keyword == token::Keyword::Null {
+                        let keyword = self.bump_keyword(token::Keyword::Null)?;
+                        Ok(Expr::Null(Null {
+                            id: self.gen_id(),
+                            keyword,
+                        }))
+                    } else {
+                        Err(self.compile_error(ParseError::FoundKeyword(keyword.to_string())))
+                    }
                 } else {
                     let ident = self.parse_ident()?;
                     Ok(Expr::Path(Path {

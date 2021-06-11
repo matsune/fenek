@@ -452,6 +452,15 @@ impl Lower {
 
     fn lower_expr(&self, expr: &ast::Expr) -> LowerResult<hir::Expr> {
         match &expr {
+            ast::Expr::Null(null) => {
+                let ty = self.ty_map[&null.id].clone();
+                Ok(hir::Lit {
+                    id: null.id,
+                    kind: hir::LitKind::Null,
+                    ty,
+                }
+                .into())
+            }
             ast::Expr::Lit(lit) => self.lower_lit(lit).map(|v| v.into()),
             ast::Expr::Path(path) => Ok(self.lower_path(path).into()),
             ast::Expr::Call(call) => self.lower_call(call).map(|v| v.into()),

@@ -351,6 +351,10 @@ impl<'infer> TyAnalyzer<'infer> {
 
     fn analyze_expr(&mut self, expr: &ast::Expr) -> Result<&'infer InferTy<'infer>> {
         let ty = match &expr {
+            ast::Expr::Null(_) => self
+                .solver
+                .ty_arena
+                .alloc_ptr(self.solver.ty_arena.alloc_any()),
             ast::Expr::Lit(lit) => self.analyze_lit(lit),
             ast::Expr::Path(path) => self.analyze_path(path)?,
             ast::Expr::Call(call) => self.analyze_call(call)?,

@@ -403,6 +403,7 @@ pub enum Expr {
     Path(Path),
     Call(Call),
     Lit(Lit),
+    Null(Null),
     Binary(Binary),
     Unary(Unary),
 }
@@ -413,6 +414,7 @@ impl Node for Expr {
             Self::Path(inner) => inner.id,
             Self::Call(inner) => inner.id,
             Self::Lit(inner) => inner.id,
+            Self::Null(inner) => inner.id,
             Self::Binary(inner) => inner.id,
             Self::Unary(inner) => inner.id,
         }
@@ -423,9 +425,26 @@ impl Node for Expr {
             Self::Path(inner) => inner.pos(),
             Self::Call(inner) => inner.pos(),
             Self::Lit(inner) => inner.pos(),
+            Self::Null(inner) => inner.pos(),
             Self::Binary(inner) => inner.pos(),
             Self::Unary(inner) => inner.pos(),
         }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct Null {
+    pub id: NodeId,
+    pub keyword: KwIdent,
+}
+
+impl Node for Null {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
+        self.keyword.pos
     }
 }
 

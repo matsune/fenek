@@ -200,6 +200,7 @@ pub enum LitKind {
     F32(f32),
     F64(f64),
     Bool(bool),
+    Null,
 }
 
 impl LitKind {
