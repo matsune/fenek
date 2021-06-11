@@ -119,9 +119,9 @@ impl<'lower> TyAnalyzer<'lower> {
                     TypeCkError::AlreadyDefinedStruct(strukt.name.raw.clone()),
                 ));
             }
-            let struct_id = self.solver.add_struct(&strukt.name.raw);
-            self.struct_map.insert(strukt.name.raw.clone(), struct_id);
-            self.node_struct_map.insert(strukt.id, struct_id);
+            let struct_ty = self.solver.add_struct(&strukt.name.raw);
+            self.struct_map.insert(strukt.name.raw.clone(), struct_ty);
+            self.node_struct_map.insert(strukt.id, struct_ty);
         }
 
         for strukt in structs {
@@ -130,11 +130,29 @@ impl<'lower> TyAnalyzer<'lower> {
             for member in &strukt.members {
                 let is_mut = member.is_mut();
                 let name = member.name.raw.clone();
-                // TODO: check recursive type reference
                 let ty = self.get_type(&member.ty)?;
+                self.validate_struct_member_ty(struct_ty, &ty)
+                    .map_err(|err| compile_error(member.ty.pos(), err))?;
                 members.push(ty::StructMember { is_mut, name, ty });
             }
             struct_ty.members.replace(members);
+        }
+
+        Ok(())
+    }
+
+    fn validate_struct_member_ty(
+        &self,
+        strukt: &ty::StructType,
+        member_ty: &ty::Type,
+    ) -> std::result::Result<(), TypeCkError> {
+        if let ty::Type::Struct(ty) = member_ty {
+            if strukt.id == ty.id {
+                return Err(TypeCkError::RecursiveType(strukt.name.clone()));
+            }
+            for member in ty.members.borrow().iter() {
+                self.validate_struct_member_ty(strukt, &member.ty)?;
+            }
         }
         Ok(())
     }

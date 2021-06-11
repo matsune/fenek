@@ -1,6 +1,14 @@
-struct a {
+struct A {
   mut m: i8,
-  n: i32
+  n: i32,
+  B: B,
+}
+
+struct B {
+  // error: infinite size
+  // a: A,
+  a: *A,
+  b: i8,
 }
 
 fun main() -> i8 {

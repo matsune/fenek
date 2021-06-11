@@ -102,6 +102,8 @@ pub enum TypeCkError {
     AlreadyDefinedFun(String),
     #[error("already defined variable `{0}`")]
     AlreadyDefinedVariable(String),
+    #[error("recursive type `{0}` has infinite size")]
+    RecursiveType(String),
     #[error("invalid type")]
     InvalidType,
     #[error("undefined type `{0}`")]
