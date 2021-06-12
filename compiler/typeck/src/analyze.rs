@@ -15,6 +15,12 @@ fn compile_error(pos: Pos, typeck_err: TypeCkError) -> CompileError {
     CompileError::new(pos, Box::new(typeck_err))
 }
 
+fn map_compile_err<E: Into<Box<dyn std::error::Error>>>(
+    pos: Pos,
+) -> Box<dyn FnOnce(E) -> CompileError> {
+    Box::new(move |err| CompileError::new(pos, err.into()))
+}
+
 type Def<'infer> = def::Def<&'infer InferTy<'infer>>;
 
 pub struct TyAnalyzer<'infer> {
@@ -132,7 +138,7 @@ impl<'infer> TyAnalyzer<'infer> {
                 let name = member.name.raw.clone();
                 let ty = self.get_type(&member.ty)?;
                 self.check_infinite_size_struct(struct_ty, &ty)
-                    .map_err(|err| compile_error(member.ty.pos(), err))?;
+                    .map_err(map_compile_err(member.ty.pos()))?;
                 members.push(ty::StructMember { is_mut, name, ty });
             }
             struct_ty.members.replace(members);
@@ -176,9 +182,6 @@ impl<'infer> TyAnalyzer<'infer> {
             }
             arg_names.insert(arg_name);
             let arg_ty = self.get_infer_type(&arg.ty)?;
-            // if !arg_ty.is_variable() {
-            //     return Err(compile_error(pos, TypeCkError::InvalidType));
-            // }
             arg_tys.push(arg_ty);
             self.node_ty_map.insert(arg.id, arg_ty);
         }
@@ -266,19 +269,12 @@ impl<'infer> TyAnalyzer<'infer> {
         }
         let init_ty = self.analyze_expr(&var_decl.init)?;
         let var_ty = match &var_decl.ty {
-            Some(ty) => {
-                let pos = ty.pos();
-                let ty = self.get_infer_type(&ty)?;
-                // if !ty.kind.is_variable() {
-                //     return Err(compile_error(pos, TypeCkError::InvalidType));
-                // }
-                ty
-            }
+            Some(ty) => self.get_infer_type(&ty)?,
             None => self.solver.ty_arena.alloc_any(),
         };
         self.solver
             .bind(var_ty, init_ty)
-            .map_err(|err| CompileError::new(var_decl.name.pos, err.into()))?;
+            .map_err(map_compile_err(var_decl.name.pos))?;
         let def = self.alloc_def_var(init_ty, var_decl.is_mut());
         self.scopes.insert(var_decl.name.raw.clone(), def);
         self.node_def_map.insert(var_decl.id, def.clone());
@@ -298,10 +294,10 @@ impl<'infer> TyAnalyzer<'infer> {
             .expr
             .as_ref()
             .map(|e| e.pos())
-            .unwrap_or(ret_stmt.pos());
+            .unwrap_or_else(|| ret_stmt.pos());
         self.solver
             .bind(ty, current_fn_ret_ty)
-            .map_err(|err| CompileError::new(pos, err.into()))?;
+            .map_err(map_compile_err(pos))?;
         Ok(())
     }
 
@@ -310,7 +306,7 @@ impl<'infer> TyAnalyzer<'infer> {
         let right_ty = self.analyze_expr(&assign.right)?;
         self.solver
             .bind(left_ty, right_ty)
-            .map_err(|err| CompileError::new(assign.pos(), err.into()))?;
+            .map_err(map_compile_err(assign.pos()))?;
         Ok(())
     }
 
@@ -322,7 +318,7 @@ impl<'infer> TyAnalyzer<'infer> {
         let expr_ty = self.analyze_expr(&if_stmt.expr.as_ref().unwrap())?;
         self.solver
             .bind(expr_ty, self.solver.ty_arena.alloc_bool())
-            .map_err(|err| CompileError::new(if_stmt.expr.as_ref().unwrap().pos(), err.into()))?;
+            .map_err(map_compile_err(if_stmt.expr.as_ref().unwrap().pos()))?;
         self.analyze_block(&if_stmt.block, &current_fn_ret_ty)?;
         if let Some(else_if) = &if_stmt.else_if {
             self.analyze_else(&else_if, &current_fn_ret_ty)?;
@@ -339,7 +335,7 @@ impl<'infer> TyAnalyzer<'infer> {
             let expr_ty = self.analyze_expr(&expr)?;
             self.solver
                 .bind(expr_ty, self.solver.ty_arena.alloc_bool())
-                .map_err(|err| CompileError::new(expr.pos(), err.into()))?;
+                .map_err(map_compile_err(expr.pos()))?;
         }
         self.analyze_block(&else_stmt.block, &current_fn_ret_ty)?;
         match &else_stmt.else_if {
@@ -410,11 +406,11 @@ impl<'infer> TyAnalyzer<'infer> {
             let arg_ty = self.analyze_expr(&arg)?;
             self.solver
                 .bind(arg_ty, ty)
-                .map_err(|err| CompileError::new(arg.pos(), err.into()))?;
+                .map_err(map_compile_err(arg.pos()))?;
         }
         self.solver
             .bind(ty, &def.ty.as_fun().ret)
-            .map_err(|err| CompileError::new(call.pos(), err.into()))?;
+            .map_err(map_compile_err(call.pos()))?;
         Ok(ty)
     }
 
@@ -425,13 +421,13 @@ impl<'infer> TyAnalyzer<'infer> {
             ast::BinOpKind::Lt | ast::BinOpKind::Gt | ast::BinOpKind::Le | ast::BinOpKind::Ge => {
                 self.solver
                     .bind(lhs_ty, rhs_ty)
-                    .map_err(|err| CompileError::new(binary.lhs.pos(), err.into()))?;
+                    .map_err(map_compile_err(binary.lhs.pos()))?;
                 self.solver.ty_arena.alloc_bool()
             }
             _ => self
                 .solver
                 .bind(lhs_ty, rhs_ty)
-                .map_err(|err| CompileError::new(binary.lhs.pos(), err.into()))?,
+                .map_err(map_compile_err(binary.lhs.pos()))?,
         };
         Ok(ty)
     }
@@ -445,14 +441,14 @@ impl<'infer> TyAnalyzer<'infer> {
                 let ptr = self.solver.ty_arena.alloc_ptr(elem);
                 self.solver
                     .bind(ptr, expr_ty)
-                    .map_err(|err| CompileError::new(unary.expr.pos(), err.into()))?;
+                    .map_err(map_compile_err(unary.expr.pos()))?;
                 elem
             }
             _ => {
                 let ty = self.solver.ty_arena.alloc_any();
                 self.solver
                     .bind(ty, expr_ty)
-                    .map_err(|err| CompileError::new(unary.expr.pos(), err.into()))?
+                    .map_err(map_compile_err(unary.expr.pos()))?
             }
         };
         Ok(ty)

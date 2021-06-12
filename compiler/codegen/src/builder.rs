@@ -313,8 +313,23 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
             }
             hir::Expr::RefExpr(ref_expr) => self.build_expr_left(&ref_expr.expr),
             hir::Expr::DerefExpr(ref_expr) => {
-                let value = self.build_expr(&ref_expr.expr).unwrap();
-                self.builder().build_load(value.into_pointer_value(), "")
+                let ptr_value = self
+                    .build_expr(&ref_expr.expr)
+                    .unwrap()
+                    .into_pointer_value();
+
+                let is_null = self.builder().build_is_null(ptr_value, "");
+
+                self.build_conditional(
+                    is_null,
+                    |this| {
+                        this.intrinsic_puts(&this.builder(), "null pointer dereference");
+                        this.intrinsic_exit(&this.builder(), 1);
+                    },
+                    |_| (),
+                );
+
+                self.builder().build_load(ptr_value, "")
             }
         };
         Some(v)
