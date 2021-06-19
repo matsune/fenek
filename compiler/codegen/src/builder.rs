@@ -189,32 +189,6 @@ impl<'ctx, 'module> FnBuilder<'ctx, 'module> {
         }
     }
 
-    // fn build_expr_left(&self, expr: &hir::Expr) -> Option<BasicValueEnum<'ctx>> {
-    //     match expr {
-    //         hir::Expr::Path(path) => {
-    //             let ptr = self
-    //                 .function
-    //                 .var_map
-    //                 .get(&path.def.id())
-    //                 .unwrap()
-    //                 .ptr
-    //                 .into();
-    //             Some(ptr)
-    //         }
-    //         hir::Expr::DerefExpr(deref_expr) => {
-    //             let ptr = self.build_expr_left(&deref_expr.expr)?.into_pointer_value();
-    //             Some(self.builder().build_load(ptr, ""))
-    //         }
-    //         hir::Expr::RefExpr(ref_expr) => {
-    //             let expr = self.build_expr_left(&ref_expr.expr)?;
-    //             let ptr = self.builder().build_alloca(expr.get_type(), "");
-    //             self.builder().build_store(ptr, expr);
-    //             Some(ptr.into())
-    //         }
-    //         _ => None,
-    //     }
-    // }
-
     fn build_expr(&mut self, expr: &hir::Expr, load_ptr: bool) -> BasicValueEnum<'ctx> {
         match expr {
             hir::Expr::Lit(lit) => {
@@ -389,9 +363,6 @@ impl<'ctx, 'module> FnBuilder<'ctx, 'module> {
                 let alloca = self.builder().build_alloca(struct_ty, &struct_init.name);
                 for (idx, member) in struct_init.members.iter().enumerate() {
                     let val = self.build_expr(&struct_init.members[idx].expr, false);
-                    // .unwrap_or_else(|| {
-                    //     self.build_expr(&struct_init.members[idx].expr).unwrap()
-                    // });
                     let ptr = unsafe {
                         self.builder().build_in_bounds_gep(
                             alloca,

@@ -185,7 +185,7 @@ fn test_solve() {
     // a: A
     // b: *A
     {
-        let a = ty_arena.alloc_struct(solver.add_struct("A"));
+        let a = ty_arena.alloc_struct(solver.add_struct("A").clone());
         alloc!(b: any);
         bind!(b, ty_arena.alloc_ptr(a));
         test_type!("struct A {}" => a);
@@ -194,8 +194,8 @@ fn test_solve() {
 
     {
         let struct_A = solver.add_struct("A");
-        let a = ty_arena.alloc_struct(struct_A);
-        let b = ty_arena.alloc_struct(struct_A);
+        let a = ty_arena.alloc_struct(struct_A.clone());
+        let b = ty_arena.alloc_struct(struct_A.clone());
         bind!(a, b);
         test_type!("struct A {}" => a, b);
     }
