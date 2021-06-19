@@ -1,5 +1,5 @@
 use clap::Clap;
-use codegen::Codegen;
+use codegen::ModuleBuilder;
 use error::Result;
 use inkwell::context::Context;
 use opts::Opts;
@@ -43,34 +43,33 @@ fn run_main() -> Result<(), Box<dyn Error>> {
     }
 
     let ctx = Context::create();
-    let mut codegen = Codegen::new(&ctx);
-    codegen.build_module(module);
-    codegen.verify()?;
+    let mut builder = ModuleBuilder::new(&ctx, "fenec");
+    builder.build_module(module)?;
     if opts.emit.contains(&opts::Emit::LlvmIr) {
         let mut out = src.path.clone();
         out.set_extension("ll");
-        codegen.emit_llvm_ir(out)?;
+        builder.emit_llvm_ir(out)?;
     }
     if opts.emit.contains(&opts::Emit::LlvmBc) {
         let mut out = src.path.clone();
         out.set_extension("bc");
-        codegen.emit_llvm_bc(out);
+        builder.emit_llvm_bc(out);
     }
     if opts.emit.contains(&opts::Emit::Asm) {
         let mut out = src.path.clone();
         out.set_extension("s");
-        codegen.emit_asm(out)?;
+        builder.emit_asm(out)?;
     }
     if opts.emit.contains(&opts::Emit::Obj) {
         let mut out = src.path.clone();
         out.set_extension("o");
-        codegen.emit_obj(out)?;
+        builder.emit_obj(out)?;
     }
     if opts.emit.contains(&opts::Emit::Link) {
         let mut obj_path = src.path.clone();
         obj_path.set_extension("o");
         if !opts.emit.contains(&opts::Emit::Obj) {
-            codegen.emit_obj(obj_path.clone())?;
+            builder.emit_obj(obj_path.clone())?;
         }
         let mut out = src.path;
         out.set_extension("");

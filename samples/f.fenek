@@ -1,0 +1,26 @@
+struct A {
+  mut m: i8,
+  n: i32,
+  B: B,
+}
+
+struct B {
+  // error: infinite size
+  // a: A,
+  a: *A,
+  b: i8,
+}
+
+fun main() -> i8 {
+  let b = B { a: null, b: 3 };
+  let a_1 = A { m: 0, n: 1, B: b };
+  let a_2 = A { 
+    m: 0, 
+    n: 1, 
+    B: B {
+      a: &a_1,
+      b: 0
+    }
+  };
+  ret 0;
+}

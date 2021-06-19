@@ -5,11 +5,12 @@ use hir::def;
 use pos::Pos;
 use std::collections::{HashMap, HashSet};
 use typed_arena::Arena;
-use types::infer::InferTy;
 use types::solver::Solver;
 use types::ty;
 
 pub type NodeMap<T> = HashMap<ast::NodeId, T>;
+type InferTyRef<'infer> = &'infer types::infer::InferTy<'infer>;
+type InferDef<'infer> = def::Def<InferTyRef<'infer>>;
 
 fn compile_error(pos: Pos, typeck_err: TypeCkError) -> CompileError {
     CompileError::new(pos, Box::new(typeck_err))
@@ -21,12 +22,10 @@ fn map_compile_err<E: Into<Box<dyn std::error::Error>>>(
     Box::new(move |err| CompileError::new(pos, err.into()))
 }
 
-type Def<'infer> = def::Def<&'infer InferTy<'infer>>;
-
 pub struct TyAnalyzer<'infer> {
-    def_arena: &'infer Arena<Def<'infer>>,
-    node_ty_map: NodeMap<&'infer InferTy<'infer>>,
-    node_def_map: NodeMap<Def<'infer>>,
+    def_arena: &'infer Arena<InferDef<'infer>>,
+    node_ty_map: NodeMap<InferTyRef<'infer>>,
+    node_def_map: NodeMap<InferDef<'infer>>,
     node_struct_map: NodeMap<&'infer ty::StructType>,
     struct_map: HashMap<String, &'infer ty::StructType>,
     scopes: Scopes<'infer>,
@@ -34,7 +33,7 @@ pub struct TyAnalyzer<'infer> {
 }
 
 impl<'infer> TyAnalyzer<'infer> {
-    pub fn new(def_arena: &'infer Arena<Def<'infer>>, solver: &'infer Solver<'infer>) -> Self {
+    pub fn new(def_arena: &'infer Arena<InferDef<'infer>>, solver: &'infer Solver<'infer>) -> Self {
         TyAnalyzer {
             def_arena,
             node_ty_map: NodeMap::new(),
@@ -46,7 +45,14 @@ impl<'infer> TyAnalyzer<'infer> {
         }
     }
 
-    fn get_infer_type(&self, ty: &ast::Ty) -> Result<&'infer InferTy<'infer>> {
+    fn get_struct_type(&self, name: &ast::Ident) -> Result<&'infer ty::StructType> {
+        self.struct_map
+            .get(&name.raw)
+            .copied()
+            .ok_or_else(|| compile_error(name.pos, TypeCkError::UndefinedType(name.raw.clone())))
+    }
+
+    fn get_infer_type(&self, ty: &ast::Ty) -> Result<InferTyRef<'infer>> {
         let ty = match &ty.kind {
             ast::TyKind::Raw(tok) => match tok.raw.as_str() {
                 "i8" => self.solver.ty_arena.alloc_i8(),
@@ -58,12 +64,9 @@ impl<'infer> TyAnalyzer<'infer> {
                 "bool" => self.solver.ty_arena.alloc_bool(),
                 // "string" => self.solver.ty_arena.alloc_string(),
                 "void" => self.solver.ty_arena.alloc_void(),
-                _ => {
-                    let struct_id = self.struct_map.get(&tok.raw).ok_or_else(|| {
-                        compile_error(tok.pos, TypeCkError::UndefinedType(tok.raw.clone()))
-                    })?;
-                    self.solver.ty_arena.alloc_struct(*struct_id)
-                }
+                _ => self
+                    .get_struct_type(tok)
+                    .map(|strukt| self.solver.ty_arena.alloc_struct(strukt.clone()))?,
             },
             ast::TyKind::Ptr(ty) => self.solver.ty_arena.alloc_ptr(self.get_infer_type(ty)?),
         };
@@ -73,7 +76,7 @@ impl<'infer> TyAnalyzer<'infer> {
     pub fn analyze_module(
         mut self,
         module: &ast::Module,
-    ) -> Result<(NodeMap<&'infer InferTy<'infer>>, NodeMap<Def<'infer>>)> {
+    ) -> Result<(NodeMap<InferTyRef<'infer>>, NodeMap<InferDef<'infer>>)> {
         self.analyze_structs(&module.structs)?;
 
         for fun in &module.funs {
@@ -163,10 +166,7 @@ impl<'infer> TyAnalyzer<'infer> {
         Ok(())
     }
 
-    fn make_fun_def(
-        &mut self,
-        fun: &ast::Fun,
-    ) -> Result<&'infer def::Def<&'infer InferTy<'infer>>> {
+    fn make_fun_def(&mut self, fun: &ast::Fun) -> Result<&'infer def::Def<InferTyRef<'infer>>> {
         let mut arg_muts = Vec::new();
         let mut arg_tys = Vec::new();
         let mut arg_names = HashSet::new();
@@ -202,10 +202,10 @@ impl<'infer> TyAnalyzer<'infer> {
 
     fn alloc_def_fun(
         &self,
-        ty: &'infer InferTy<'infer>,
+        ty: InferTyRef<'infer>,
         arg_muts: Vec<bool>,
         ret_mut: bool,
-    ) -> &'infer Def<'infer> {
+    ) -> &'infer InferDef<'infer> {
         let id = self.def_arena.len();
         self.def_arena.alloc(def::Def::Fun(def::DefFun {
             id,
@@ -215,7 +215,7 @@ impl<'infer> TyAnalyzer<'infer> {
         }))
     }
 
-    fn alloc_def_var(&self, ty: &'infer InferTy<'infer>, is_mut: bool) -> &'infer Def<'infer> {
+    fn alloc_def_var(&self, ty: InferTyRef<'infer>, is_mut: bool) -> &'infer InferDef<'infer> {
         let id = self.def_arena.len();
         self.def_arena
             .alloc(def::Def::Var(def::DefVar { id, ty, is_mut }))
@@ -238,7 +238,7 @@ impl<'infer> TyAnalyzer<'infer> {
         Ok(())
     }
 
-    fn analyze_block(&mut self, block: &ast::Block, ret_ty: &'infer InferTy<'infer>) -> Result<()> {
+    fn analyze_block(&mut self, block: &ast::Block, ret_ty: InferTyRef<'infer>) -> Result<()> {
         for stmt in &block.stmts {
             self.analyze_stmt(&stmt, &ret_ty)?;
         }
@@ -248,7 +248,7 @@ impl<'infer> TyAnalyzer<'infer> {
     fn analyze_stmt(
         &mut self,
         stmt: &ast::Stmt,
-        current_fn_ret_ty: &'infer InferTy<'infer>,
+        current_fn_ret_ty: InferTyRef<'infer>,
     ) -> Result<()> {
         match &stmt {
             ast::Stmt::Empty(_) => Ok(()),
@@ -284,7 +284,7 @@ impl<'infer> TyAnalyzer<'infer> {
     fn analyze_ret_stmt(
         &mut self,
         ret_stmt: &ast::RetStmt,
-        current_fn_ret_ty: &'infer InferTy<'infer>,
+        current_fn_ret_ty: InferTyRef<'infer>,
     ) -> Result<()> {
         let ty = match &ret_stmt.expr {
             Some(expr) => self.analyze_expr(&expr)?,
@@ -313,7 +313,7 @@ impl<'infer> TyAnalyzer<'infer> {
     fn analyze_if_stmt(
         &mut self,
         if_stmt: &ast::IfStmt,
-        current_fn_ret_ty: &'infer InferTy<'infer>,
+        current_fn_ret_ty: InferTyRef<'infer>,
     ) -> Result<()> {
         let expr_ty = self.analyze_expr(&if_stmt.expr.as_ref().unwrap())?;
         self.solver
@@ -329,7 +329,7 @@ impl<'infer> TyAnalyzer<'infer> {
     fn analyze_else(
         &mut self,
         else_stmt: &ast::IfStmt,
-        current_fn_ret_ty: &'infer InferTy<'infer>,
+        current_fn_ret_ty: InferTyRef<'infer>,
     ) -> Result<()> {
         if let Some(expr) = &else_stmt.expr {
             let expr_ty = self.analyze_expr(&expr)?;
@@ -345,7 +345,7 @@ impl<'infer> TyAnalyzer<'infer> {
         Ok(())
     }
 
-    fn analyze_expr(&mut self, expr: &ast::Expr) -> Result<&'infer InferTy<'infer>> {
+    fn analyze_expr(&mut self, expr: &ast::Expr) -> Result<InferTyRef<'infer>> {
         let ty = match &expr {
             ast::Expr::Null(_) => self
                 .solver
@@ -356,12 +356,13 @@ impl<'infer> TyAnalyzer<'infer> {
             ast::Expr::Call(call) => self.analyze_call(call)?,
             ast::Expr::Binary(binary) => self.analyze_binary(binary)?,
             ast::Expr::Unary(unary) => self.analyze_unary(unary)?,
+            ast::Expr::StructInit(struct_init) => self.analyze_struct_init(struct_init)?,
         };
         self.node_ty_map.insert(expr.id(), ty);
         Ok(ty)
     }
 
-    fn analyze_lit(&mut self, lit: &ast::Lit) -> &'infer InferTy<'infer> {
+    fn analyze_lit(&mut self, lit: &ast::Lit) -> InferTyRef<'infer> {
         match lit.kind {
             ast::LitKind::Int { base: _ } => self.solver.ty_arena.alloc_int_lit(),
             ast::LitKind::Float => self.solver.ty_arena.alloc_float_lit(),
@@ -370,7 +371,7 @@ impl<'infer> TyAnalyzer<'infer> {
         }
     }
 
-    fn analyze_path(&mut self, path: &ast::Path) -> Result<&'infer InferTy<'infer>> {
+    fn analyze_path(&mut self, path: &ast::Path) -> Result<InferTyRef<'infer>> {
         let def = self
             .scopes
             .lookup_var(&path.ident.raw, false)
@@ -380,11 +381,12 @@ impl<'infer> TyAnalyzer<'infer> {
                     TypeCkError::UndefinedVariable(path.ident.raw.clone()),
                 )
             })?;
-        self.node_def_map.insert(path.id, Def::Var(def.clone()));
+        self.node_def_map
+            .insert(path.id, InferDef::Var(def.clone()));
         Ok(def.ty)
     }
 
-    fn analyze_call(&mut self, call: &ast::Call) -> Result<&'infer InferTy<'infer>> {
+    fn analyze_call(&mut self, call: &ast::Call) -> Result<InferTyRef<'infer>> {
         let def = self
             .scopes
             .lookup_fun(&call.path.ident.raw, false)
@@ -395,7 +397,7 @@ impl<'infer> TyAnalyzer<'infer> {
                 )
             })?;
         self.node_def_map
-            .insert(call.path.id, Def::Fun(def.clone()));
+            .insert(call.path.id, InferDef::Fun(def.clone()));
         if def.ty.as_fun().args.len() != call.args.len() {
             return Err(compile_error(call.pos(), TypeCkError::InvalidArgsCount));
         }
@@ -414,7 +416,7 @@ impl<'infer> TyAnalyzer<'infer> {
         Ok(ty)
     }
 
-    fn analyze_binary(&mut self, binary: &ast::Binary) -> Result<&'infer InferTy<'infer>> {
+    fn analyze_binary(&mut self, binary: &ast::Binary) -> Result<InferTyRef<'infer>> {
         let lhs_ty = self.analyze_expr(&binary.lhs)?;
         let rhs_ty = self.analyze_expr(&binary.rhs)?;
         let ty = match binary.op.kind {
@@ -432,7 +434,7 @@ impl<'infer> TyAnalyzer<'infer> {
         Ok(ty)
     }
 
-    fn analyze_unary(&mut self, unary: &ast::Unary) -> Result<&'infer InferTy<'infer>> {
+    fn analyze_unary(&mut self, unary: &ast::Unary) -> Result<InferTyRef<'infer>> {
         let expr_ty = self.analyze_expr(&unary.expr)?;
         let ty = match unary.op.kind {
             ast::UnOpKind::Ref => self.solver.ty_arena.alloc_ptr(expr_ty),
@@ -452,5 +454,43 @@ impl<'infer> TyAnalyzer<'infer> {
             }
         };
         Ok(ty)
+    }
+
+    fn analyze_struct_init(&mut self, struct_init: &ast::StructInit) -> Result<InferTyRef<'infer>> {
+        let struct_ty = self.get_struct_type(&struct_init.name)?;
+        let mut member_names = HashMap::with_capacity(struct_ty.members.borrow().len());
+        for member in struct_ty.members.borrow().iter() {
+            member_names.insert(member.name.clone(), false);
+        }
+
+        for member in struct_init.members.iter() {
+            let is_used = member_names.get(&member.name.raw).ok_or_else(|| {
+                compile_error(
+                    member.name.pos(),
+                    TypeCkError::NoStructField(struct_ty.name.clone(), member.name.raw.clone()),
+                )
+            })?;
+            if *is_used {
+                return Err(compile_error(
+                    member.name.pos(),
+                    TypeCkError::StructFieldSpecifiedMoreThanOnce(member.name.raw.clone()),
+                ));
+            }
+            member_names.insert(member.name.raw.clone(), true);
+            let expr = self.analyze_expr(&member.expr)?;
+            let member_ty = struct_ty
+                .members
+                .borrow()
+                .iter()
+                .find(|m| m.name == member.name.raw)
+                .map(|m| m.ty.clone())
+                .unwrap();
+            let member_ty = self.solver.infer_ty_from_type(member_ty);
+            self.solver
+                .bind(expr, member_ty)
+                .map_err(map_compile_err(member.expr.pos()))?;
+        }
+
+        Ok(self.solver.ty_arena.alloc_struct(struct_ty.clone()))
     }
 }

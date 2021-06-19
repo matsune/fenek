@@ -644,10 +644,15 @@ impl Parser {
                     }
                 } else {
                     let ident = self.parse_ident()?;
-                    Ok(Expr::Path(Path {
-                        id: self.gen_id(),
-                        ident,
-                    }))
+                    self.skip_spaces();
+                    if self.is_next_kind(token::TokenKind::LBrace) {
+                        self.parse_struct_init(ident)
+                    } else {
+                        Ok(Expr::Path(Path {
+                            id: self.gen_id(),
+                            ident,
+                        }))
+                    }
                 }
             }
             token::TokenKind::LParen => {
@@ -663,5 +668,50 @@ impl Parser {
             }
             _ => Err(self.compile_error(ParseError::InvalidExpr)),
         }
+    }
+
+    fn parse_struct_init(&mut self, ident: Ident) -> Result<Expr> {
+        self.bump_kind(token::TokenKind::LBrace)?;
+        self.skip_spaces();
+        let mut members = Vec::new();
+        if self.is_next_kind(token::TokenKind::RBrace) {
+            // empty members
+            self.bump_kind(token::TokenKind::RBrace)?;
+            return Ok(Expr::StructInit(StructInit {
+                id: self.gen_id(),
+                name: ident,
+                members,
+            }));
+        }
+
+        loop {
+            let member = self.parse_struct_init_member()?;
+            members.push(member);
+            self.skip_spaces();
+            if self.bump_if_kind(token::TokenKind::Comma).is_none() {
+                break;
+            }
+            self.skip_spaces();
+        }
+        self.bump_kind(token::TokenKind::RBrace)?;
+        Ok(Expr::StructInit(StructInit {
+            id: self.gen_id(),
+            name: ident,
+            members,
+        }))
+    }
+
+    fn parse_struct_init_member(&mut self) -> Result<StructInitMember> {
+        let id = self.gen_id();
+        let name = self.parse_ident()?;
+        self.skip_spaces();
+        self.bump_kind(token::TokenKind::Colon)?;
+        self.skip_spaces();
+        let expr = self.parse_expr()?;
+        Ok(StructInitMember {
+            id,
+            name,
+            expr: Box::new(expr),
+        })
     }
 }

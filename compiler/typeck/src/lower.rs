@@ -5,6 +5,7 @@ use hir::def::*;
 use lex::token;
 use num_traits::Num;
 use pos::Pos;
+use std::collections::HashMap;
 use std::ops::Deref;
 use std::str::FromStr;
 use typed_arena::Arena;
@@ -461,12 +462,46 @@ impl Lower {
                 }
                 .into())
             }
-            ast::Expr::Lit(lit) => self.lower_lit(lit).map(|v| v.into()),
+            ast::Expr::Lit(lit) => self.lower_lit(lit).map(Into::into),
             ast::Expr::Path(path) => Ok(self.lower_path(path).into()),
-            ast::Expr::Call(call) => self.lower_call(call).map(|v| v.into()),
-            ast::Expr::Binary(binary) => self.lower_binary(binary).map(|v| v.into()),
+            ast::Expr::Call(call) => self.lower_call(call).map(Into::into),
+            ast::Expr::Binary(binary) => self.lower_binary(binary).map(Into::into),
             ast::Expr::Unary(unary) => self.lower_unary(unary),
+            ast::Expr::StructInit(struct_init) => {
+                self.lower_struct_init(struct_init).map(Into::into)
+            }
         }
+    }
+
+    fn lower_struct_init(&self, struct_init: &ast::StructInit) -> LowerResult<hir::StructInit> {
+        let id = struct_init.id;
+        let name = struct_init.name.raw.clone();
+        let mut members_map = HashMap::with_capacity(struct_init.members.len());
+        for member in struct_init.members.iter() {
+            let id = member.id;
+            let expr = Box::new(self.lower_expr(&member.expr)?);
+            members_map.insert(
+                member.name.raw.clone(),
+                hir::StructInitMember {
+                    id,
+                    name: member.name.raw.clone(),
+                    expr,
+                },
+            );
+        }
+        let ty = &self.ty_map[&id];
+        let member_tys = ty.as_struct().members.borrow();
+        let mut members = Vec::with_capacity(member_tys.len());
+        // reorder members
+        for member_ty in member_tys.iter() {
+            members.push(members_map.remove(&member_ty.name).unwrap());
+        }
+        Ok(hir::StructInit {
+            id,
+            name,
+            members,
+            ty: ty.clone(),
+        })
     }
 
     fn lower_binary(&self, binary: &ast::Binary) -> LowerResult<hir::Binary> {

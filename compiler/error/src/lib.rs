@@ -106,6 +106,12 @@ pub enum TypeCkError {
     RecursiveType(String),
     #[error("invalid type")]
     InvalidType,
+    #[error("missing struct field `{0}`")]
+    MissingStructField(String),
+    #[error("struct `{0}` has no field named `{0}`")]
+    NoStructField(String, String),
+    #[error("field `{0}` specified more than once")]
+    StructFieldSpecifiedMoreThanOnce(String),
     #[error("undefined type `{0}`")]
     UndefinedType(String),
     #[error("undefined function `{0}`")]

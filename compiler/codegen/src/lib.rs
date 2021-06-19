@@ -1,6 +1,6 @@
 mod builder;
-mod ctx;
-mod gen;
+mod llvm;
+mod module;
 mod wrap;
 
-pub use gen::Codegen;
+pub use module::ModuleBuilder;

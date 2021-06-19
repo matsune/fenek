@@ -1,21 +1,22 @@
-use crate::ctx::*;
+use super::llvm;
+use super::module::ModuleBuilder;
 use crate::wrap::*;
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::types::BasicType;
-use inkwell::values::{BasicValueEnum, FunctionValue, IntMathValue, IntValue};
+use inkwell::values::{BasicValueEnum, FunctionValue, IntMathValue, IntValue, PointerValue};
 use inkwell::AddressSpace;
 use inkwell::{FloatPredicate, IntPredicate};
 use types::ty;
 
-pub struct FnBuilder<'ctx, 'codegen> {
-    ctx: ModuleCtx<'ctx, 'codegen>,
+pub struct FnBuilder<'ctx, 'module> {
+    module: &'module mut ModuleBuilder<'ctx>,
     function: Function<'ctx>,
 }
 
-impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
-    pub fn new(ctx: ModuleCtx<'ctx, 'codegen>, function: Function<'ctx>) -> Self {
-        Self { ctx, function }
+impl<'ctx, 'module> FnBuilder<'ctx, 'module> {
+    pub fn new(module: &'module mut ModuleBuilder<'ctx>, function: Function<'ctx>) -> Self {
+        Self { module, function }
     }
 
     fn fn_value(&self) -> &FunctionValue<'ctx> {
@@ -57,15 +58,60 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
         }
     }
 
+    fn store(&mut self, dest: PointerValue<'ctx>, val: BasicValueEnum<'ctx>) {
+        if dest.get_type().get_element_type().is_struct_type() {
+            let ptr = self
+                .builder()
+                .build_bitcast(
+                    dest,
+                    self.module
+                        .context
+                        .i8_type()
+                        .ptr_type(AddressSpace::Generic),
+                    "",
+                )
+                .into_pointer_value();
+            let val = self
+                .builder()
+                .build_bitcast(
+                    val,
+                    self.module
+                        .context
+                        .i8_type()
+                        .ptr_type(AddressSpace::Generic),
+                    "",
+                )
+                .into_pointer_value();
+            self.builder()
+                .build_memcpy(
+                    ptr,
+                    1,
+                    val,
+                    1,
+                    self.module.context.i32_type().const_int(
+                        u64::from(
+                            self.module
+                                .machine
+                                .get_target_data()
+                                .get_pointer_byte_size(None),
+                        ),
+                        true,
+                    ),
+                )
+                .unwrap();
+        } else {
+            self.builder().build_store(dest, val);
+        }
+    }
+
     fn build_stmt(&mut self, stmt: &hir::Stmt) {
         match stmt {
             hir::Stmt::VarDecl(var_decl) => {
                 let name = &var_decl.name;
-                let val = self.build_expr(&var_decl.init).unwrap();
-                let ptr = self
-                    .builder()
-                    .build_alloca(llvm_basic_ty(&self.ctx.context, &var_decl.def.ty()), &name);
-                self.builder().build_store(ptr, val);
+                let val = self.build_expr(&var_decl.init, true);
+                let ty = self.module.llvm_basic_type(&var_decl.def.ty());
+                let ptr = self.builder().build_alloca(ty, &name);
+                self.store(ptr, val);
                 self.function.var_map.insert(
                     var_decl.def.id(),
                     Variable::new(name.clone(), var_decl.def.ty().clone(), false, ptr),
@@ -73,7 +119,7 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
             }
             hir::Stmt::Ret(ret) => match &ret.expr {
                 Some(expr) => {
-                    let val = self.build_expr(&expr).unwrap();
+                    let val = self.build_expr(&expr, true);
                     self.builder().build_return(Some(match &val {
                         BasicValueEnum::ArrayValue(value) => value,
                         BasicValueEnum::IntValue(value) => value,
@@ -88,12 +134,13 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
                 }
             },
             hir::Stmt::Assign(assign) => {
-                let left = self.build_expr_left(&assign.left);
-                let right = self.build_expr(&assign.right).unwrap();
-                self.builder().build_store(left.into_pointer_value(), right);
+                let left = self.build_expr(&assign.left, false);
+                let right = self.build_expr(&assign.right, true);
+                self.store(left.into_pointer_value(), right);
+                // self.builder().build_store(left.into_pointer_value(), right);
             }
             hir::Stmt::Expr(expr) => {
-                self.build_expr(&expr);
+                self.build_expr(&expr, true);
             }
             hir::Stmt::IfStmt(if_stmt) => {
                 self.build_if(&if_stmt);
@@ -104,7 +151,7 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
     fn build_if(&mut self, if_stmt: &hir::IfStmt) {
         match &if_stmt.expr {
             Some(expr) => {
-                let cond_value = self.build_expr(&expr).unwrap().into_int_value();
+                let cond_value = self.build_expr(&expr, true).into_int_value();
                 match &if_stmt.else_if {
                     Some(else_if) => {
                         self.build_conditional(
@@ -142,33 +189,36 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
         }
     }
 
-    fn build_expr_left(&self, expr: &hir::Expr) -> BasicValueEnum<'ctx> {
-        match expr {
-            hir::Expr::Path(path) => self
-                .function
-                .var_map
-                .get(&path.def.id())
-                .unwrap()
-                .ptr
-                .into(),
-            hir::Expr::DerefExpr(deref_expr) => {
-                let ptr = self.build_expr_left(&deref_expr.expr).into_pointer_value();
-                self.builder().build_load(ptr, "")
-            }
-            hir::Expr::RefExpr(ref_expr) => {
-                let expr = self.build_expr_left(&ref_expr.expr);
-                let ptr = self.builder().build_alloca(expr.get_type(), "");
-                self.builder().build_store(ptr, expr);
-                ptr.into()
-            }
-            _ => unreachable!(),
-        }
-    }
+    // fn build_expr_left(&self, expr: &hir::Expr) -> Option<BasicValueEnum<'ctx>> {
+    //     match expr {
+    //         hir::Expr::Path(path) => {
+    //             let ptr = self
+    //                 .function
+    //                 .var_map
+    //                 .get(&path.def.id())
+    //                 .unwrap()
+    //                 .ptr
+    //                 .into();
+    //             Some(ptr)
+    //         }
+    //         hir::Expr::DerefExpr(deref_expr) => {
+    //             let ptr = self.build_expr_left(&deref_expr.expr)?.into_pointer_value();
+    //             Some(self.builder().build_load(ptr, ""))
+    //         }
+    //         hir::Expr::RefExpr(ref_expr) => {
+    //             let expr = self.build_expr_left(&ref_expr.expr)?;
+    //             let ptr = self.builder().build_alloca(expr.get_type(), "");
+    //             self.builder().build_store(ptr, expr);
+    //             Some(ptr.into())
+    //         }
+    //         _ => None,
+    //     }
+    // }
 
-    fn build_expr(&mut self, expr: &hir::Expr) -> Option<BasicValueEnum<'ctx>> {
-        let v = match expr {
+    fn build_expr(&mut self, expr: &hir::Expr, load_ptr: bool) -> BasicValueEnum<'ctx> {
+        match expr {
             hir::Expr::Lit(lit) => {
-                let basic_ty = llvm_basic_ty(&self.ctx.context, &lit.ty);
+                let basic_ty = self.module.llvm_basic_type(&lit.ty);
                 match &lit.kind {
                     hir::LitKind::I8(v) => {
                         basic_ty.into_int_type().const_int(*v as u64, true).into()
@@ -198,23 +248,32 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
             }
             hir::Expr::Path(ident) => {
                 let ptr = self.function.var_map.get(&ident.def.id()).unwrap().ptr;
-                self.builder().build_load(ptr, &ident.raw)
+                if load_ptr {
+                    self.builder().build_load(ptr, &ident.raw)
+                } else {
+                    ptr.into()
+                }
             }
             hir::Expr::Call(call) => {
                 let mut args = Vec::new();
                 for arg in &call.args {
-                    args.push(self.build_expr(&arg).unwrap());
+                    args.push(self.build_expr(&arg, true));
                 }
-                let fn_value = self.ctx.def_fn_value_map.get(&call.path.def.id()).unwrap();
+                let fn_value = self
+                    .module
+                    .def_fn_value_map
+                    .get(&call.path.def.id())
+                    .unwrap();
                 self.builder()
                     .build_call(*fn_value, &args, "")
                     .try_as_basic_value()
-                    .left()?
+                    .left()
+                    .unwrap()
             }
             hir::Expr::Binary(binary) => {
                 let lhs_ty = binary.lhs.get_type();
-                let lhs = self.build_expr(&binary.lhs).unwrap();
-                let rhs = self.build_expr(&binary.rhs).unwrap();
+                let lhs = self.build_expr(&binary.lhs, true);
+                let rhs = self.build_expr(&binary.rhs, true);
                 match lhs_ty {
                     ty::Type::Int(_) => {
                         let lhs = lhs.into_int_value();
@@ -288,7 +347,7 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
                 }
             }
             hir::Expr::NegExpr(neg_expr) => {
-                let expr = self.build_expr(&neg_expr.expr).unwrap();
+                let expr = self.build_expr(&neg_expr.expr, true);
                 match neg_expr.get_type() {
                     ty::Type::Int(_) => self
                         .builder()
@@ -302,7 +361,7 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
                 }
             }
             hir::Expr::NotExpr(not_expr) => {
-                let expr = self.build_expr(&not_expr.expr).unwrap();
+                let expr = self.build_expr(&not_expr.expr, true);
                 match not_expr.get_type() {
                     ty::Type::Bool => self
                         .builder()
@@ -311,15 +370,10 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
                     _ => unreachable!(),
                 }
             }
-            hir::Expr::RefExpr(ref_expr) => self.build_expr_left(&ref_expr.expr),
+            hir::Expr::RefExpr(ref_expr) => self.build_expr(&ref_expr.expr, false),
             hir::Expr::DerefExpr(ref_expr) => {
-                let ptr_value = self
-                    .build_expr(&ref_expr.expr)
-                    .unwrap()
-                    .into_pointer_value();
-
+                let ptr_value = self.build_expr(&ref_expr.expr, true).into_pointer_value();
                 let is_null = self.builder().build_is_null(ptr_value, "");
-
                 self.build_conditional(
                     is_null,
                     |this| {
@@ -328,11 +382,31 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
                     },
                     |_| (),
                 );
-
                 self.builder().build_load(ptr_value, "")
             }
-        };
-        Some(v)
+            hir::Expr::StructInit(struct_init) => {
+                let struct_ty = self.module.llvm_basic_type(&struct_init.ty);
+                let alloca = self.builder().build_alloca(struct_ty, &struct_init.name);
+                for (idx, member) in struct_init.members.iter().enumerate() {
+                    let val = self.build_expr(&struct_init.members[idx].expr, false);
+                    // .unwrap_or_else(|| {
+                    //     self.build_expr(&struct_init.members[idx].expr).unwrap()
+                    // });
+                    let ptr = unsafe {
+                        self.builder().build_in_bounds_gep(
+                            alloca,
+                            &[
+                                self.module.context.i32_type().const_int(0, true),
+                                self.module.context.i32_type().const_int(idx as u64, true),
+                            ],
+                            &member.name,
+                        )
+                    };
+                    self.store(ptr, val);
+                }
+                alloca.into()
+            }
+        }
     }
 
     fn build_checked_int_arithmetic<T: IntMathValue<'ctx>>(
@@ -346,22 +420,27 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
         let intrinsic_name = format!(
             "llvm.{}.with.overflow.{}",
             name,
-            llvm_intrinsic_type_name(arg_type)
+            llvm::intrinsic_type_name(arg_type)
         );
         let bool_type;
         if arg_type.is_vector_type() {
             bool_type = self
-                .ctx
+                .module
                 .context
                 .bool_type()
                 .vec_type(arg_type.into_vector_type().get_size())
                 .into();
         } else {
-            bool_type = self.ctx.context.bool_type().into();
+            bool_type = self.module.context.bool_type().into();
         }
-        let intrinsic_return_type = self.ctx.context.struct_type(&[arg_type, bool_type], false);
+        let intrinsic_return_type = self
+            .module
+            .context
+            .struct_type(&[arg_type, bool_type], false);
         let intrinsic_fn_type = intrinsic_return_type.fn_type(&[arg_type; 2], false);
-        let intrinsic_fn = get_llvm_intrinsic(&self.ctx.module, &intrinsic_name, intrinsic_fn_type);
+        let intrinsic_fn = self
+            .module
+            .llvm_intrinsic(&intrinsic_name, intrinsic_fn_type);
         let intrinsic_args = &[lhs.as_basic_value_enum(), rhs.as_basic_value_enum()];
 
         let return_value = self
@@ -400,12 +479,11 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
     }
 
     fn intrinsic_puts(&self, builder: &Builder<'ctx>, msg: &str) {
-        let puts = get_llvm_intrinsic(
-            self.ctx.module,
+        let puts = self.module.llvm_intrinsic(
             "puts",
-            self.ctx.context.i32_type().fn_type(
+            self.module.context.i32_type().fn_type(
                 &[self
-                    .ctx
+                    .module
                     .context
                     .i8_type()
                     .ptr_type(AddressSpace::Generic)
@@ -424,17 +502,21 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
     }
 
     fn intrinsic_exit(&self, builder: &Builder<'ctx>, status: u64) {
-        let exit = get_llvm_intrinsic(
-            self.ctx.module,
+        let exit = self.module.llvm_intrinsic(
             "exit",
-            self.ctx
+            self.module
                 .context
                 .void_type()
-                .fn_type(&[self.ctx.context.i32_type().into()], false),
+                .fn_type(&[self.module.context.i32_type().into()], false),
         );
         builder.build_call(
             exit,
-            &[self.ctx.context.i32_type().const_int(status, true).into()],
+            &[self
+                .module
+                .context
+                .i32_type()
+                .const_int(status, true)
+                .into()],
             "exit",
         );
     }
@@ -451,12 +533,11 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
                     .get_type()
                     .get_element_type()
                     .fn_type(&[value.get_type()], false);
-                let reduce_fn = get_llvm_intrinsic(
-                    self.ctx.module,
+                let reduce_fn = self.module.llvm_intrinsic(
                     &format!(
                         "llvm.vector.reduce.{}.{}",
                         op,
-                        llvm_intrinsic_type_name(value.get_type())
+                        llvm::intrinsic_type_name(value.get_type())
                     ),
                     fn_type,
                 );
@@ -471,7 +552,9 @@ impl<'ctx, 'codegen> FnBuilder<'ctx, 'codegen> {
     }
 
     fn append_basic_block(&self, name: &str) -> BasicBlock<'ctx> {
-        self.ctx.context.append_basic_block(*self.fn_value(), name)
+        self.module
+            .context
+            .append_basic_block(*self.fn_value(), name)
     }
 
     fn build_conditional<V: PhiMergeable<'ctx>>(

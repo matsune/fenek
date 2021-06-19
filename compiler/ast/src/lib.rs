@@ -406,6 +406,7 @@ pub enum Expr {
     Null(Null),
     Binary(Binary),
     Unary(Unary),
+    StructInit(StructInit),
 }
 
 impl Node for Expr {
@@ -417,6 +418,7 @@ impl Node for Expr {
             Self::Null(inner) => inner.id,
             Self::Binary(inner) => inner.id,
             Self::Unary(inner) => inner.id,
+            Self::StructInit(inner) => inner.id,
         }
     }
 
@@ -428,6 +430,7 @@ impl Node for Expr {
             Self::Null(inner) => inner.pos(),
             Self::Binary(inner) => inner.pos(),
             Self::Unary(inner) => inner.pos(),
+            Self::StructInit(inner) => inner.pos(),
         }
     }
 }
@@ -707,3 +710,37 @@ macro_rules! impl_Serialize_for_ToString {
 }
 
 impl_Serialize_for_ToString!(TyKind, BinOpKind, UnOpKind);
+
+#[derive(Debug, Serialize)]
+pub struct StructInit {
+    pub id: NodeId,
+    pub name: Ident,
+    pub members: Vec<StructInitMember>,
+}
+
+impl Node for StructInit {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
+        self.name.pos
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct StructInitMember {
+    pub id: NodeId,
+    pub name: Ident,
+    pub expr: Box<Expr>,
+}
+
+impl Node for StructInitMember {
+    fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn pos(&self) -> Pos {
+        self.name.pos
+    }
+}

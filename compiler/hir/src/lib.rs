@@ -156,7 +156,7 @@ macro_rules! expr_enum {
     }
 }
 
-expr_enum!(Lit, Path, Call, Binary, RefExpr, DerefExpr, NegExpr, NotExpr);
+expr_enum!(Lit, Path, Call, Binary, RefExpr, DerefExpr, NegExpr, NotExpr, StructInit);
 
 impl Expr {
     pub fn is_lvalue(&self) -> bool {
@@ -311,4 +311,25 @@ impl NotExpr {
     pub fn get_type(&self) -> ty::Type {
         self.expr.get_type()
     }
+}
+
+#[derive(Debug, Serialize)]
+pub struct StructInit {
+    pub id: ast::NodeId,
+    pub name: String,
+    pub members: Vec<StructInitMember>,
+    pub ty: ty::Type,
+}
+
+impl StructInit {
+    pub fn get_type(&self) -> ty::Type {
+        self.ty.clone()
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct StructInitMember {
+    pub id: ast::NodeId,
+    pub name: String,
+    pub expr: Box<Expr>,
 }

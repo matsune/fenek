@@ -53,16 +53,27 @@ impl Type {
         matches!(self, Type::Ptr(_))
     }
 
+    pub fn is_struct(&self) -> bool {
+        matches!(self, Type::Struct(_))
+    }
+
     pub fn into_fun(self) -> FunType {
         match self {
-            Self::Fun(f) => f,
+            Self::Fun(inner) => inner,
             _ => panic!(),
         }
     }
 
     pub fn as_fun(&self) -> &FunType {
         match self {
-            Self::Fun(f) => f,
+            Self::Fun(inner) => inner,
+            _ => panic!(),
+        }
+    }
+
+    pub fn as_struct(&self) -> &StructType {
+        match self {
+            Self::Struct(inner) => inner,
             _ => panic!(),
         }
     }

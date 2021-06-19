@@ -25,6 +25,34 @@ impl<'a> Solver<'a> {
         self.struct_arena.alloc(StructType::new(id, name))
     }
 
+    pub fn infer_ty_from_type(&self, ty: Type) -> &'a InferTy<'a> {
+        match ty {
+            Type::Int(ty) => match ty {
+                IntType::I8 => self.ty_arena.alloc_i8(),
+                IntType::I16 => self.ty_arena.alloc_i16(),
+                IntType::I32 => self.ty_arena.alloc_i32(),
+                IntType::I64 => self.ty_arena.alloc_i64(),
+            },
+            Type::Float(ty) => match ty {
+                FloatType::F32 => self.ty_arena.alloc_f32(),
+                FloatType::F64 => self.ty_arena.alloc_f64(),
+            },
+            Type::Bool => self.ty_arena.alloc_bool(),
+            Type::Ptr(elem) => self.ty_arena.alloc_ptr(self.infer_ty_from_type(*elem)),
+            Type::Void => self.ty_arena.alloc_void(),
+            Type::Fun(fun_ty) => {
+                let args = fun_ty
+                    .args
+                    .iter()
+                    .map(|ty| self.infer_ty_from_type(ty.clone()))
+                    .collect::<Vec<_>>();
+                let ret = self.infer_ty_from_type(*fun_ty.ret);
+                self.ty_arena.alloc_fun(args, ret)
+            }
+            Type::Struct(struct_ty) => self.ty_arena.alloc_struct(struct_ty),
+        }
+    }
+
     /// get the most tip node from this node.
     pub fn prune(&self, ty: &'a InferTy<'a>) -> &'a InferTy<'a> {
         match ty {

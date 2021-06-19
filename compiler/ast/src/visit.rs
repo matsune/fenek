@@ -209,6 +209,7 @@ where
         Expr::Null(inner) => visit_null(inner, f),
         Expr::Binary(inner) => visit_binary(inner, f),
         Expr::Unary(inner) => visit_unary(inner, f),
+        Expr::StructInit(inner) => visit_struct_init(inner, f),
     }
 }
 
@@ -267,5 +268,27 @@ where
 {
     return_some!(f(unary));
     return_some!(f(&unary.op));
+    None
+}
+
+fn visit_struct_init<'a, F>(struct_init: &'a StructInit, f: &F) -> Option<&'a dyn Node>
+where
+    F: Fn(&'a dyn Node) -> Option<&'a dyn Node>,
+{
+    return_some!(f(struct_init));
+    return_some!(f(&struct_init.name));
+    for member in struct_init.members.iter() {
+        return_some!(visit_struct_init_member(&member, f));
+    }
+    None
+}
+
+fn visit_struct_init_member<'a, F>(member: &'a StructInitMember, f: &F) -> Option<&'a dyn Node>
+where
+    F: Fn(&'a dyn Node) -> Option<&'a dyn Node>,
+{
+    return_some!(f(member));
+    return_some!(f(&member.name));
+    return_some!(visit_expr(&member.expr, f));
     None
 }
