@@ -120,14 +120,7 @@ impl<'ctx, 'module> FnBuilder<'ctx, 'module> {
             hir::Stmt::Ret(ret) => match &ret.expr {
                 Some(expr) => {
                     let val = self.build_expr(&expr, true);
-                    self.builder().build_return(Some(match &val {
-                        BasicValueEnum::ArrayValue(value) => value,
-                        BasicValueEnum::IntValue(value) => value,
-                        BasicValueEnum::FloatValue(value) => value,
-                        BasicValueEnum::PointerValue(value) => value,
-                        BasicValueEnum::StructValue(value) => value,
-                        BasicValueEnum::VectorValue(value) => value,
-                    }));
+                    self.builder().build_return(Some(&val));
                 }
                 None => {
                     self.builder().build_return(None);
@@ -137,7 +130,6 @@ impl<'ctx, 'module> FnBuilder<'ctx, 'module> {
                 let left = self.build_expr(&assign.left, false);
                 let right = self.build_expr(&assign.right, true);
                 self.store(left.into_pointer_value(), right);
-                // self.builder().build_store(left.into_pointer_value(), right);
             }
             hir::Stmt::Expr(expr) => {
                 self.build_expr(&expr, true);
@@ -154,7 +146,8 @@ impl<'ctx, 'module> FnBuilder<'ctx, 'module> {
                 let cond_value = self.build_expr(&expr, true).into_int_value();
                 match &if_stmt.else_if {
                     Some(else_if) => {
-                        self.build_conditional(
+                        // have next else block
+                        self.build_then_else_cond(
                             cond_value,
                             |this| {
                                 this.build_block(&if_stmt.block);
@@ -165,25 +158,13 @@ impl<'ctx, 'module> FnBuilder<'ctx, 'module> {
                         );
                     }
                     None => {
-                        let then_bb = self.append_basic_block("then");
-                        let end_bb = self.append_basic_block("endif");
-
-                        self.builder()
-                            .build_conditional_branch(cond_value, then_bb, end_bb);
-
-                        self.builder().position_at_end(then_bb);
-                        self.build_block(&if_stmt.block);
-                        let then_end_bb = self.current_block();
-                        let then_needs_terminator = then_end_bb.get_terminator().is_none();
-                        if then_needs_terminator {
-                            self.builder().build_unconditional_branch(end_bb);
-                        }
-
-                        self.builder().position_at_end(end_bb);
+                        // no-else if statement
+                        self.build_then_cond(cond_value, |this| this.build_block(&if_stmt.block));
                     }
                 }
             }
             None => {
+                // last else block
                 self.build_block(&if_stmt.block);
             }
         }
@@ -348,14 +329,11 @@ impl<'ctx, 'module> FnBuilder<'ctx, 'module> {
             hir::Expr::DerefExpr(ref_expr) => {
                 let ptr_value = self.build_expr(&ref_expr.expr, true).into_pointer_value();
                 let is_null = self.builder().build_is_null(ptr_value, "");
-                self.build_conditional(
-                    is_null,
-                    |this| {
-                        this.intrinsic_puts(&this.builder(), "null pointer dereference");
-                        this.intrinsic_exit(&this.builder(), 1);
-                    },
-                    |_| (),
-                );
+                self.build_then_cond(is_null, |this| {
+                    this.intrinsic_puts(&this.builder(), "null pointer dereference");
+                    this.intrinsic_exit(&this.builder(), 1);
+                    this.builder().build_unreachable();
+                });
                 self.builder().build_load(ptr_value, "")
             }
             hir::Expr::StructInit(struct_init) => {
@@ -432,7 +410,7 @@ impl<'ctx, 'module> FnBuilder<'ctx, 'module> {
             .unwrap();
         let is_overflow = self.build_reduce("or", is_overflow_vec);
 
-        self.build_conditional(
+        self.build_then_cond(
             is_overflow,
             // Return an error if there is overflow.
             |this| {
@@ -441,9 +419,8 @@ impl<'ctx, 'module> FnBuilder<'ctx, 'module> {
                     &format!("attempt to {} with overflow", name),
                 );
                 this.intrinsic_exit(&this.builder(), 1);
+                this.builder().build_unreachable();
             },
-            // Otherwise proceed.
-            |_| (),
         );
 
         result_value
@@ -528,55 +505,59 @@ impl<'ctx, 'module> FnBuilder<'ctx, 'module> {
             .append_basic_block(*self.fn_value(), name)
     }
 
-    fn build_conditional<V: PhiMergeable<'ctx>>(
+    // build one way branch
+    fn build_then_cond(&mut self, cond_value: IntValue<'ctx>, build_then: impl FnOnce(&mut Self)) {
+        let then_bb = self.append_basic_block("then");
+        let end_bb = self.append_basic_block("endif");
+
+        self.builder()
+            .build_conditional_branch(cond_value, then_bb, end_bb);
+
+        self.builder().position_at_end(then_bb);
+        build_then(self);
+        let then_end_bb = self.current_block();
+        let then_needs_terminator = then_end_bb.get_terminator().is_none();
+        if then_needs_terminator {
+            self.builder().build_unconditional_branch(end_bb);
+        }
+
+        self.builder().position_at_end(end_bb);
+    }
+
+    // build two ways branch
+    fn build_then_else_cond(
         &mut self,
         cond_value: IntValue<'ctx>,
-        build_then: impl FnOnce(&mut Self) -> V,
-        build_else: impl FnOnce(&mut Self) -> V,
-    ) -> V {
+        build_then: impl FnOnce(&mut Self),
+        build_else: impl FnOnce(&mut Self),
+    ) {
         let then_bb = self.append_basic_block("then");
         let else_bb = self.append_basic_block("else");
-        let mut merge_bb: Option<BasicBlock<'ctx>> = None;
 
         self.builder()
             .build_conditional_branch(cond_value, then_bb, else_bb);
 
         self.builder().position_at_end(then_bb);
-        let value_then = build_then(self);
+        build_then(self);
         let then_end_bb = self.current_block();
-        let then_needs_terminator = then_end_bb.get_terminator().is_none();
-        if then_needs_terminator {
-            if merge_bb.is_none() {
-                merge_bb = Some(self.append_basic_block("endif"));
-            }
-            self.builder().build_unconditional_branch(merge_bb.unwrap());
-        }
+        let then_has_terminator = then_end_bb.get_terminator().is_some();
 
         self.builder().position_at_end(else_bb);
-        let value_else = build_else(self);
+        build_else(self);
         let else_end_bb = self.current_block();
-        let else_needs_terminator = else_end_bb.get_terminator().is_none();
-        if else_needs_terminator {
-            if merge_bb.is_none() {
-                merge_bb = Some(self.append_basic_block("endif"));
-            }
-            self.builder().build_unconditional_branch(merge_bb.unwrap());
-        }
+        let else_has_terminator = else_end_bb.get_terminator().is_some();
 
-        if let Some(merge_bb) = merge_bb {
-            self.builder().position_at_end(merge_bb);
+        if then_has_terminator && else_has_terminator {
+            return;
         }
-        let ret = match (then_needs_terminator, else_needs_terminator) {
-            (true, false) => value_then,
-            (false, true) => value_else,
-            _ => PhiMergeable::merge(
-                value_then,
-                value_else,
-                then_end_bb,
-                else_end_bb,
-                self.builder(),
-            ),
-        };
-        ret
+        let merge_bb = self.append_basic_block("endif");
+        if !then_has_terminator {
+            self.builder().position_at_end(then_end_bb);
+            self.builder().build_unconditional_branch(merge_bb);
+        }
+        if !else_has_terminator {
+            self.builder().position_at_end(else_end_bb);
+            self.builder().build_unconditional_branch(merge_bb);
+        }
     }
 }

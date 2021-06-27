@@ -132,7 +132,7 @@ impl<'ctx> ModuleBuilder<'ctx> {
         for fun in module.funs {
             self.build_fun(fun);
         }
-
+        // self.module.print_to_stderr();
         self.verify()
     }
 

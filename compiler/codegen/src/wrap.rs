@@ -1,7 +1,5 @@
 use hir::def::DefId;
-use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
-use inkwell::values::BasicValueEnum;
 use inkwell::values::{FunctionValue, PointerValue};
 use std::collections::HashMap;
 use types::ty;
@@ -39,40 +37,5 @@ impl<'ctx> Variable<'ctx> {
             is_arg,
             ptr,
         }
-    }
-}
-
-pub trait PhiMergeable<'ctx>: Sized {
-    fn merge(
-        self,
-        other: Self,
-        this_bb: BasicBlock<'ctx>,
-        other_bb: BasicBlock<'ctx>,
-        builder: &Builder<'ctx>,
-    ) -> Self;
-}
-
-impl<'ctx> PhiMergeable<'ctx> for () {
-    fn merge(
-        self,
-        other: Self,
-        this_bb: BasicBlock<'ctx>,
-        other_bb: BasicBlock<'ctx>,
-        builder: &Builder<'ctx>,
-    ) -> Self {
-    }
-}
-
-impl<'ctx> PhiMergeable<'ctx> for BasicValueEnum<'ctx> {
-    fn merge(
-        self,
-        other: Self,
-        this_bb: BasicBlock<'ctx>,
-        other_bb: BasicBlock<'ctx>,
-        builder: &Builder<'ctx>,
-    ) -> Self {
-        let phi = builder.build_phi(self.get_type(), "mergeValuesEndIf");
-        phi.add_incoming(&[(&self, this_bb), (&other, other_bb)]);
-        phi.as_basic_value()
     }
 }
