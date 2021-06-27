@@ -392,7 +392,7 @@ impl Parser {
                 match tok.try_as_keyword().unwrap() {
                     token::Keyword::Ret => self.parse_ret()?,
                     token::Keyword::Mut | token::Keyword::Let => self.parse_var_decl()?,
-                    token::Keyword::If => return self.parse_if(),
+                    token::Keyword::If => return Ok(Stmt::If(self.parse_if()?)),
                     token::Keyword::Fun | token::Keyword::Else | token::Keyword::Struct => {
                         return Err(self.compile_error(ParseError::InvalidStmt))
                     }
@@ -421,7 +421,7 @@ impl Parser {
         Ok(stmt)
     }
 
-    fn parse_if(&mut self) -> Result<Stmt> {
+    fn parse_if(&mut self) -> Result<IfStmt> {
         let id = self.gen_id();
         let keyword = self.bump_keyword(token::Keyword::If)?;
         self.skip_spaces();
@@ -435,35 +435,6 @@ impl Parser {
             }
             _ => None,
         };
-        Ok(Stmt::If(IfStmt {
-            id,
-            keyword,
-            expr,
-            block,
-            else_if,
-        }))
-    }
-
-    fn parse_else(&mut self) -> Result<IfStmt> {
-        let id = self.gen_id();
-        let keyword = self.bump_keyword(token::Keyword::Else)?;
-        self.skip_spaces();
-        let expr = if self.is_next_kind(token::TokenKind::LBrace) {
-            None
-        } else {
-            Some(self.parse_expr()?)
-        };
-        let block = self.parse_block()?;
-        let else_if = match self.peek() {
-            Some(tok) if matches!(tok.try_as_keyword(), Some(token::Keyword::Else)) => {
-                if expr.is_some() {
-                    Some(Box::new(self.parse_else()?))
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        };
         Ok(IfStmt {
             id,
             keyword,
@@ -471,6 +442,24 @@ impl Parser {
             block,
             else_if,
         })
+    }
+
+    fn parse_else(&mut self) -> Result<IfStmt> {
+        let keyword = self.bump_keyword(token::Keyword::Else)?;
+        self.skip_spaces();
+
+        if self.is_next_kind(token::TokenKind::LBrace) {
+            let id = self.gen_id();
+            let block = self.parse_block()?;
+            return Ok(IfStmt {
+                id,
+                keyword,
+                expr: None,
+                block,
+                else_if: None,
+            });
+        }
+        self.parse_if()
     }
 
     fn parse_expr(&mut self) -> Result<Expr> {
